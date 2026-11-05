@@ -1,0 +1,301 @@
+# Sandswap K8s ConfigMaps — YAML config files for hot-reload support.
+#
+# Each ConfigMap contains a YAML config file mounted into the pod.
+# The gateway/sandlot --config flag reads this file on startup and
+# watches it for changes. Hot-reloadable fields (lease, exec, pool,
+# recycle, template auth) take effect without pod restart.
+#
+# CLI flags in the pod spec override config file values (for paths
+# that vary per-pod, like TLS cert paths and volume mounts).
+#
+# To change a hot-reloadable value:
+#   kubectl edit configmap gateway-config -n sandswap
+#   # Changes to lease.*, exec.* take effect in ~1s
+#
+# To change a restart-required value:
+#   kubectl edit configmap gateway-config -n sandswap
+#   kubectl rollout restart deployment gateway -n sandswap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: sandswap
+data:
+  gateway.yaml: |
+    # Gateway exec-mode configuration.
+    # Hot-reloadable: lease.*, exec.*, selfload.*
+    # Restart-required: everything else (mode, etcd, listeners, vol_root)
+    mode: exec
+    vol_root: /sandswap/volumes
+    etcd: https://etcd-0.etcd.sandswap.svc.cluster.local:2379
+    agent:
+      addr: "0.0.0.0:3000"
+    stream:
+      addr: "0.0.0.0:9998"
+    lease:
+      sticky_ms: 100
+      max_sticky_sec: 5
+    exec:
+      default_timeout_sec: 30
+      max_timeout_sec: 180
+    # Self-pressure gate: sustained gateway-PROCESS resource pressure removes
+    # this gateway from DNS routing candidacy (published self_pressured in the
+    # load record). Process-scoped signals — CPU is % of GOMAXPROCS (cgroup
+    # quota-aware on Go 1.25), memory is managed-mem / soft limit (needs
+    # GOMEMLIMIT/-gomemlimit to be active). <= 0 disables a signal.
+    selfload:
+      cpu_hard: 85
+      mem_hard: 0.90
+      sat_sec: 10
+    # MCP agent guide: served on initialize + the sandswap_guide tool. The
+    # file lives in the gateway-mcp-instructions ConfigMap (seeded by the
+    # deploy from the gateway binary's compiled-in default); ops edits THAT
+    # ConfigMap and kubelet's atomic symlink swap triggers the gateway's file
+    # watcher (~200ms) — no restart. The {{max_exec_timeout_sec}} placeholder
+    # / {{sticky_ms}} placeholders render the live sync-exec cap / sticky
+    # idleness window at serve time.
+    mcp:
+      instructions_file: /etc/sandswap/mcp-instructions.md
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: human-config
+  namespace: sandswap
+data:
+  human.yaml: |
+    # Gateway human-mode configuration.
+    # Hot-reloadable: lease.*, exec.*
+    # Restart-required: everything else
+    mode: human
+    vol_root: /sandswap/volumes
+    etcd: https://etcd-0.etcd.sandswap.svc.cluster.local:2379
+    human:
+      addr: "0.0.0.0:3100"
+    # Stream listener for the PROVISION instances: the human gateway holds no
+    # storage of its own — every sandfs/template op routes over this stream to
+    # a prov-role sandlot pod (sandlot-prov Deployment). Per-pod netns, so
+    # 9998 does not collide with the exec gateway's stream Service.
+    stream:
+      addr: "0.0.0.0:9998"
+    lease:
+      sticky_ms: 100
+      max_sticky_sec: 5
+    exec:
+      default_timeout_sec: 30
+      max_timeout_sec: 180
+    # Staleness thresholds (plain health key judged by last_healthy_ts, refreshed
+    # every 5s). route_stale_sec must stay >= the DNS's threshold (20) — a lower
+    # value here would let the human gateway judge an owner dead while the DNS
+    # still routes to it. Both-dead recovery is the on-demand Claim path plus
+    # POST /human/ownership/reap-stuck — there is no scanning reaper config.
+    staleness:
+      route_stale_sec: 20
+      claim_dead_guard_sec: 45
+      alert_stale_sec: 30
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandlot-config
+  namespace: sandswap
+data:
+  sandlot.yaml: |
+    # Sandlot configuration (shared by embedded and boxout modes).
+    # Hot-reloadable: pool, microvm.*, recycle.*
+    # Restart-required: gateway_addr, network.*, tls.*, vm_mode, boxout_socket
+    # The headless gateway Service (both agent 3000 + stream 9998). On first
+    # connect kube-proxy picks one gateway pod; the sandlot remembers its last
+    # gateway and re-dials that pod's stream FQDN on reconnect.
+    gateway_addr: gateway-exec.sandswap.svc.cluster.local:9998
+    vmm_binary: /sandvmm
+    microvm:
+      volumes_dir: /sandswap/volumes
+      kernel: /sandswap-host/vmlinux.bin
+      initramfs: /sandswap-host/initramfs.cpio.gz
+      default_vcpus: 2
+      default_memory_mb: 512
+      overlayfs_templates: /sandswap/overlay-templates
+      # Dedicated sandvmm identity (uid-pinned 987, contract): the VMM + FUSE
+      # passthrough daemon run SEPARATE from the warden-trusted sandlot pod
+      # uid, spawned through a setpriv wrapper holding ZERO capabilities. The
+      # network provider (boxout) creates the persistent TAP owned by this uid
+      # and pre-configures it; the VMM attaches by owner match (no CAP_NET_ADMIN).
+      # vmm_groups: __KVM_GID__ is host-injected by deploy-lib (the host kvm
+      # gid varies: Ubuntu=104, cloud=108, GCP=992 — the child needs it for
+      # /dev/kvm + /dev/vhost-vsock, because setpriv REPLACES the group list,
+      # dropping the pod's supplementalGroups); 65536 = the pod fsGroup, so
+      # the boxout-mode sandlot (uid 65536) can connect to the 0660 API
+      # sockets. api_gid must stay a member of vmm_groups (chgrp without
+      # CAP_CHOWN requires membership).
+      #
+      # THE RESERVED SANDBOX IDENTITY (uid+gid 65536, ): 65536 is
+      # deliberately OUTSIDE every range the node allocates on its own —
+      # humans/software default to 1000..UID_MAX(60000), nobody is 65534, and
+      # common userns subuid ranges start at 100000 — so no default tooling
+      # claims it. These ids are HOST-IDENTITY GATES, not just pod cosmetics:
+      # vsockguard admits exactly this uid to the warden port, boxout.sock is
+      # chowned to it (+ SO_PEERCRED), and api_gid is the group on every
+      # sandvmm API socket. Any OTHER workload on the node running as this
+      # uid/gid is inside the fence — the deploy tooling (e2e/deploy-tree-pins
+      # .sh) pins this value across every manifest and refuses a revert to a
+      # collidable uid. Do NOT pick a value a human, a package or a chart
+      # could land on (the bare-metal fleet learned this with uid 1001, which
+      # is the first human user on Ubuntu).
+      vmm_uid: __SANDVMM_UID__
+      vmm_gid: __SANDVMM_GID__
+      # v28 per-thread allow-lists in AUDIT mode. Keep log: an audit found the
+      # filters incomplete for the in-process virtiofsd/--api-gid shape (true
+      # traps chmod/chown, umask(0), getrandom/tgkill, readlinkat and kills the
+      # VM thread). Do not promote without a fresh complete audit; see
+      # docs/testing/e2e.md §8.1b.
+      vmm_seccomp: log
+      vmm_groups: "__KVM_GID__,65536"
+      api_gid: 65536
+    specs:
+      small:
+        vcpus: 1
+        # 256 (not 128): with recycle.mem_abs_mb=100 a 128 MB guest trips the
+        # absolute recycle threshold on nearly every unmount, so every exec
+        # pays a full VM destroy+rebuild (clean=0 window → NO_AVAILABLE_SANDBOX
+        # under load). 256 MB guests idle under the threshold.
+        memory_mb: 256
+        exec_slots: 1
+      medium:
+        vcpus: 2
+        memory_mb: 512
+    pool: "small:2"
+    recycle:
+      mem_percent: 10
+      mem_abs_mb: 100
+    network:
+      backend: bridge
+      bridge: br-sandswap
+      subnet: 10.188.0.0/16
+      gateway: 10.188.0.1
+      dns: "1.1.1.1,8.8.8.8"
+      # ── Egress identity enabler (docs/how-it-works/egress-enabler.md) ──
+      # All keys default off — uncomment to enable. Both processes in the pod
+      # read this same file (boxout owns the privileged network ops; sandlot
+      # opens the binding region unprivileged).
+      #   egress_baseline: on        # per-tap anti-spoof + VM-to-VM posture
+      #                              # (default on; boxout image ships nftables)
+      #   vm_to_vm: deny             # guest↔guest posture: deny (default) | allow
+      #   bind_backend: shm          # binding region: off (default) | shm | bpf
+      #                              # in k8s use bpf: /dev/shm is pod-local,
+      #                              # bpffs (/sys/fs/bpf, mounted) is node-wide.
+      #                              # bpf(2) IS in sandlot's seccomp
+      #                              # allowlist (sandlot-seccomp.json); the
+      #                              # enabler deploy scripts exercise this.
+      #   backend: routed-ipv6       # identity-in-address backend
+      #   v6_prefix: fd00:5341:4e44::/48
+      #   iid_template: "agent:32,sandfs:32"   # enables mount stamping
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandlot-prov-config
+  namespace: sandswap
+data:
+  sandlot-prov.yaml: |
+    # Provision plane: sandfs + template lifecycle on shared storage. No KVM,
+    # no VMs, no vsockguard — this pod's only duties are the storage PVCs and
+    # the stream to the human gateway. Scale replicas with provisioning load
+    # (ops are idempotent; any replica can serve any op).
+    gateway_addr: gateway-human.sandswap.svc.cluster.local:9998
+    roles: [prov]
+    microvm:
+      # Path convention for the volumes tree (shared with the compute pods);
+      # no kernel/initramfs needed — this instance never creates a VM.
+      volumes_dir: /sandswap/volumes
+    provision:
+      # Template store: the same PVC the compute pods read lowerdirs from.
+      templates_dir: /sandswap/overlay-templates
+      # Flat template scan: a PVC subdir (NOT a node hostPath — prov replicas
+      # may land on any node, so the source must be shared). Drop flat
+      # template trees under <templates PVC>/flat/ to register them.
+      flat_templates_dir: /sandswap/overlay-templates/flat
+      # OCI registry for pull/push/auto-pull; empty = local templates only.
+      # Credentials (provision.registry_username/password/token/cert/key/ca)
+      # do NOT go here — a ConfigMap must not carry secrets. Supply them as
+      # --registry-* args backed by a Secret (see sandlot-prov.yaml), or as
+      # file paths for cert/key/ca from a Secret volume.
+      oci_registry: ""
+      # Volume-name seed (sandlot/provision/volname): derives every sandfs
+      # directory name on the shared root. The SECRET never lives in a
+      # ConfigMap — the deploy tooling creates the sandswap-volume-seed
+      # Secret ONCE (never regenerated: a different seed would orphan every
+      # existing volume name) and this path points at its mounted file
+      # (see sandlot-prov.yaml's volume).
+      #
+      # ONE KEY PER GENERATION: the Secret key (here "volume-seed", legacy
+      # name; "gen-3"-style names are the convention for new generations) is
+      # the generation FILE, and these two keys are the POINTER. A rotation
+      # adds a key, names it as volume_seed_next_file, runs the rename, then
+      # re-points volume_seed_file at it and drops the staged key — the pod
+      # hot-reloads each pointer move (kubelet syncs a mounted ConfigMap
+      # within ~1min; the instance re-reads on fsnotify), so NO rollout
+      # restart is needed. Never rewrite the file the current generation
+      # points at, and never delete a generation key (re-staging the same key
+      # is the supported recovery from an aborted window).
+      # The instance refuses to promote while any volume still carries the
+      # pre-promote generation, and records what it adopted in
+      # /run/sandswap/volume-seed-state.json — the assertion the runbook tells
+      # you to wait for before turning maintenance off
+      # (docs/deployment/install-kubernetes.md §7 "Volume-name seed rotation").
+      volume_seed_file: /sandswap-seed/volume-seed
+      max_concurrent_ops: 2
+      # Key name must match config.ProvisionConfig's yaml tag
+      # (default_deadline_sec) — the strict decoder rejects unknown fields
+      # and the prov container exits at startup (it once said deadline_sec).
+      default_deadline_sec: 300
+      reconnect_sec: 300
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandns-config
+  namespace: sandswap
+data:
+  sandns.yaml: |
+    # Owner-aware DNS configuration.
+    # The per-sandfs zone <sandfs_id>.sandfs.<zone> resolves to the OWNER
+    # gateway (CNAME to its headless FQDN). CoreDNS forwards the zone to this
+    # Service and chases the CNAME back into the cluster.
+    listen_addr: "0.0.0.0:53"
+    # Sandbox guest ranges: a foreign-zone query from these sources is REFUSED
+    # (no open recursive relay behind the host egress identity). Update if the
+    # sandlot subnet is not the default.
+    guest_cidrs: ["10.188.0.0/16"]
+    domains:
+      agent: sandswap.local
+      stream: sandswap-stream.local
+      sandfs: sandfs.sandswap.local
+    # No static gateway list: the candidate set is built entirely from etcd
+    # self-registration — each gateway writes /sandswap/gateway/{id}
+    # (gateway_url + stream_addr) at startup; health records mark liveness and
+    # load records mark score. The shared agent/stream domains are not used by
+    # in-cluster clients.
+    etcd: https://etcd-0.etcd.sandswap.svc.cluster.local:2379
+    etcd_ca: /etcd-certs/ca.crt
+    etcd_cert: /etcd-certs/client.crt
+    etcd_key: /etcd-certs/client.key
+    ttl: 10
+    sticky_expire: 1800
+    sticky_sync_interval: 5
+    sticky_sync_batch: 256
+    # Gateway routing policy (hot-reloadable — edit the ConfigMap + the DNS
+    # picks it up live; the reload watcher understands kubelet's ..data swap):
+    #   binpack (default) — new/unowned sandfs land on the busiest healthy gateway
+    #                       so work packs onto fewer gateways (node scaling is
+    #                       external: k8s/ops removes the idle ones).
+    #   spread            — new/unowned sandfs land on the most idle gateway.
+    # duty_hard: gateway agg_duty_long cap (0..1); gateways at/above it are
+    # excluded from routing in both policies. 0 disables.
+    scheduling:
+      policy: binpack
+      duty_hard: 0.85
+    forwarders:
+      - 1.1.1.1:53
+      - 8.8.8.8:53

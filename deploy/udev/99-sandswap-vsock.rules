@@ -1,0 +1,28 @@
+# Sandswap vsock access control — per-OWNER isolation (exactly one process
+# identity per device; no shared groups, because sandvmm legitimately joins
+# the sandlot shared group for storage and would regain group-granted
+# devices).
+#
+# /dev/vhost-vsock: used by sandvmm to register guest CIDs with the kernel
+#   vhost-vsock data-plane. Only the VMM process needs this — a
+#   non-privileged user who can open this device can register arbitrary
+#   CIDs, which would let them inject vsock traffic or trigger a kernel
+#   Oops. OWNER=sandvmm (the dedicated VMM identity, uid-pinned 987); the
+#   sandlot identity loses it entirely.
+#
+# /dev/vsock: legacy VMCI-style vsock device. AF_VSOCK is the primary
+#   transport and does NOT go through this device node (AF_VSOCK uses
+#   socket(2) directly), but we lock it down to the sandlot owner as
+#   defense-in-depth — the sandvmm identity must never hold ANY vsock
+#   device (vsockguard denies its warden-port connects by uid; this closes
+#   the device door too).
+
+KERNEL=="vhost-vsock", MODE="0600", OWNER="sandvmm"
+KERNEL=="vsock", MODE="0600", OWNER="sandlot"
+
+# /dev/kvm and /dev/net/tun: the sandvmm identity opens both (KVM control and
+# TAP creation/attachment). Pin the standard device-group mode so a host with
+# looser defaults (or a bare-metal suite that widened /dev/net/tun) cannot
+# leave them world-accessible. The sandlot/sandvmm user is in the kvm group.
+KERNEL=="kvm", SUBSYSTEM=="misc", MODE="0660", GROUP="kvm"
+KERNEL=="tun", SUBSYSTEM=="net", MODE="0660", GROUP="kvm"

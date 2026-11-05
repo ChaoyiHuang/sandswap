@@ -1,0 +1,52 @@
+[package]
+name = "warden-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+warden = { path = ".." }
+
+# Prevent this from interfering with the warden package.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "frame_fields"
+path = "fuzz_targets/frame_fields.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "config_toml"
+path = "fuzz_targets/config_toml.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "path_component"
+path = "fuzz_targets/path_component.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sysvipc_table"
+path = "fuzz_targets/sysvipc_table.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "netlink_diag"
+path = "fuzz_targets/netlink_diag.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "resolv_conf"
+path = "fuzz_targets/resolv_conf.rs"
+test = false
+doc = false

@@ -1,0 +1,36 @@
+[Unit]
+# Sandswap vsock device re-tune — closes the boot-ordering gap behind the
+# udev ownership rule (deploy/udev/99-sandswap-vsock.rules).
+#
+# The rule itself is correct (a manual `udevadm trigger` applies it), but at
+# boot the vhost-vsock/vsock nodes can be created before the root
+# filesystem's rule set is in effect; udevd never re-processes an existing
+# node, so ownership stays root and every exec sandlot crash-loops with
+# "/dev/vhost-vsock owned by uid 0" (observed on every reboot of the
+# one-machine stack — R3-024's recurring symptom, root-caused here).
+#
+# This oneshot re-triggers exactly the two devices after udev is up and
+# BEFORE any sandlot instance starts, then VERIFIES the ownership landed
+# (a trigger that silently no-ops would resurrect the crash loop).
+Description=Sandswap vsock device ownership re-tune (udev boot-ordering gap)
+After=systemd-udevd.service systemd-udevd-trigger.service
+Before=sandswap-sandlot-instance@.service sandswap-sandlot.service sandswap-sandlot-prov.service
+
+[Service]
+Type=oneshot
+# Trigger, then ASSERT both devices landed with their per-OWNER shape:
+#   /dev/vhost-vsock  sandvmm 0600  (only the VMM may open it)
+#   /dev/vsock        sandlot 0600  (only the warden client may open it)
+# The old script only re-triggered and returned sleep's status, so a udev rule
+# that never applied exited 0 and the sandlot crash-looped on the ownership
+# check at its own startup. A mismatch fails this unit (which is ordered
+# Before= the sandlot units).
+ExecStart=/bin/sh -c 'udevadm trigger --name-match=vhost-vsock --name-match=vsock 2>/dev/null || udevadm trigger /dev/vhost-vsock /dev/vsock; sleep 0.2; \
+    got="$(stat -c "%%U:%%a" /dev/vhost-vsock 2>/dev/null || echo missing)"; \
+    if [ "$got" != "sandvmm:600" ]; then echo "vsock-retune: /dev/vhost-vsock is $got, want sandvmm:600" >&2; exit 1; fi; \
+    got="$(stat -c "%%U:%%a" /dev/vsock 2>/dev/null || echo missing)"; \
+    if [ "$got" != "sandlot:600" ]; then echo "vsock-retune: /dev/vsock is $got, want sandlot:600" >&2; exit 1; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

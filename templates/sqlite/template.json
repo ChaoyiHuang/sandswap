@@ -1,0 +1,15 @@
+{
+    "name": "sqlite",
+    "version": "1.0.0",
+    "description": "SQLite serverless template - lightweight embedded database with auto-vacuum and connection management",
+    "workspace_path": "/workspace",
+    "default_timeout": 30,
+    "is_serverless": true,
+    "idle_timeout": 300,
+    "entrypoint": [],
+    "env": {
+        "SQLITE_DB_PATH": "/workspace/data.db",
+        "SQLITE_JOURNAL_MODE": "WAL",
+        "SQLITE_BUSY_TIMEOUT": "5000"
+    }
+}

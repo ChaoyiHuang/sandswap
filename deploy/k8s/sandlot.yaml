@@ -1,0 +1,386 @@
+# Sandlot DaemonSet — embedded mode (one pod per KVM-capable node).
+#
+# Connects to the gateway-exec-stream Service for gRPC stream (mTLS).
+# Image: sandswap/sandlot:latest (ubuntu:22.04 + iproute2 + sandvmm + vsockguard)
+#
+# VM Mode: embedded (default) — sandlot runs as UID 0 and owns all privileged
+# operations (sandvmm lifecycle, network provisioning, OverlayFS mounts).
+# This is the simplest deployment mode and the current default.
+#
+# Network: uses --network-backend=bridge for microVM outbound connectivity.
+# The host bridge (br-sandswap) is set up by deploy/setup-network.sh.
+#
+# Security (minimal privilege):
+#   - hostPID: needed for re-adopting sandvmm PIDs + /proc/<pid>/cmdline reads
+#     (same-UID sandvmm allows signal+proc reads; hostPID provides namespace
+#     visibility — a namespace boundary, not a UID permission issue)
+#   - hostNetwork: needed for TAP/bridge management and vsock CID routing
+#   - runAsUser: 0 (root — REQUIRED because Linux capabilities are only
+#     effective for UID 0; sandlot needs CAP_SYS_ADMIN for mount/umount and
+#     CAP_NET_ADMIN for ip tuntap/bridge commands. With a non-root UID,
+#     these capabilities remain in the permitted set but never become effective.)
+#   - supplementalGroups: [kvm-gid] — grants /dev/kvm + /dev/vhost-vsock access
+#     KVM GID varies by distro (Ubuntu server=104, cloud=108, GCP=992, RHEL=36)
+#     — deploy script auto-detects.
+#   - privileged: REQUIRED for cgroup v2 device access. On cgroup v2 kernels,
+#     k8s uses eBPF for device management; non-privileged containers cannot
+#     access hostPath CharDevice volumes (e.g., /dev/kvm, /dev/vhost-vsock)
+#     regardless of file permissions or supplementalGroups. This is a kernel/
+#     runtime limitation, not a k8s policy. The historical alternative was a
+#     KVM device plugin, but the device plugin API is in maintenance mode:
+#     its replacement is DRA (Dynamic Resource Allocation) on top of CDI
+#     (Container Device Interface), which containerd ≥1.6 and CRI-O already
+#     implement natively. For STATIC devices like /dev/kvm, /dev/vhost-vsock,
+#     /dev/net/tun and /dev/fuse a plain CDI spec (a JSON the runtime reads)
+#     is enough — no plugin, no DRA driver. That is the path to drop
+#     privileged/root here: CDI device injection + runAsUser aligned with the
+#     bare-metal sandlot identity + explicit capabilities, at which point the
+#     vsockguard pin moves off uid 0 as well (deploy/k8s/k8s-host-setup.sh).
+#   - Capabilities: drop ALL + add SYS_ADMIN, NET_ADMIN (documenting the 2
+#     capabilities actually used; note: privileged=true overrides drop/add,
+#     so these serve as documentation of intent, not enforcement)
+#   - ip(8) inherits CAP_NET_ADMIN from the container's capability set
+#   - /dev/net/tun: required for `ip tuntap add` (TUNSETIFF ioctl)
+#
+# vsockguard:
+#   The init container attaches the BPF LSM program that blocks all UIDs
+#   except 0 from connecting to the warden vsock port (CID:1024). Since
+#   sandlot runs as UID 0, vsockguard allows root on the host — the
+#   primary defense is that /dev/kvm and /dev/vhost-vsock are restricted
+#   to the kvm group (supplementalGroups), and the warden vsock port is
+#   only reachable from the host's vsock transport.
+# ACKNOWLEDGED LIMIT: the embedded shape runs as root, so the
+#   vsock fence is the threat model's documented root limit, NOT a uid
+#   reservation. The boxout shape is the hardened one: it pins the RESERVED
+#   sandbox uid (65536, outside the node's human/pod allocation ranges — see
+#   the sandlot-config ConfigMap's api_gid block) for vsockguard, boxout.sock
+#   and the sandvmm API group alike, so no unrelated workload on the node
+#   lands inside that fence by default.
+#
+# Volumes:
+#   - sandswap-volumes PVC: SandFS data (virtio-fs shared_dir, shared with gateway)
+#   - sandswap-templates PVC: Overlay template layers/refs (shared with admin)
+#   - sandswap-host hostPath: kernel, initramfs, flat-templates (node-local)
+#   - dev-kvm, dev-vhost-vsock, dev-net-tun: device nodes
+#   - run-sandswap: per-VM state directory
+#   - sandlot-stream-certs hostPath /etc/sandswap/stream-certs: THIS node's
+#     mTLS client pair (materialized per node by deploy/k8s/k8s-host-setup.sh
+#     from the per-node Secret sandlot-certs-<node>)
+#
+# One sandlot per NODE is the shape: the pod declares node_id = its node name
+# (`fieldRef: spec.nodeName`), and the gateway binds a stream hello's node_id
+# to the client certificate's CN by EXACT match
+# (gateway/stream/server.go verifyNodeIdentity) — the per-node Secret carries
+# a pair with CN=<node>. A shared cluster-wide certificate is refused by name,
+# and a node_id that changed per pod restart (the pod name) could never match
+# a certificate at all.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sandlot
+  namespace: sandswap
+  labels:
+    app: sandlot
+spec:
+  selector:
+    matchLabels:
+      app: sandlot
+  template:
+    metadata:
+      labels:
+        app: sandlot
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsUser: 0
+        supplementalGroups:
+          - 992  # /dev/kvm GID — auto-detected by deploy-k8s-embedded.sh (Ubuntu=104, GCP=992, RHEL=36)
+          - 992  # /dev/vhost-vsock GID — auto-detected by deploy-k8s-embedded.sh (usually same as /dev/kvm)
+          - 982  # sandtmpl: template-store metadata group (refs/); NOT granted to sandvmm
+      initContainers:
+        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §4;
+        # storage contract row 10b): the SHARE ROOT must be writable only by
+        # the provision plane. The FUSE daemon runs as uid 987 with
+        # supplementary gid 65536 (microvm.vmm_groups + api_gid in the sandlot
+        # ConfigMap) — the same group that owns the volume tree — so without
+        # this step the root is exactly as writable as the volumes themselves,
+        # and a guest-driven escape could create/remove/rename entries BESIDE
+        # the allowed directory (the class the in-daemon root gate also
+        # refuses; this is the kernel-enforced backstop for it).
+        # owner = provision plane (1000, see sandlot-prov.yaml), group = shared
+        # (65536) with x ONLY at the root (no list, no write), setgid kept so
+        # volumes created inside inherit the shared group. Reaching a volume
+        # needs traverse, never read or write — guest read/write inside a
+        # sandfs is untouched. The template store is prov-owned read-only.
+        # Re-asserted on every pod start: the local-path provisioner creates
+        # the node-side directory world-writable (measured 2777).
+        - name: prep-share-root
+          image: sandswap/sandlot:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              chown 1000:65536 /sandswap/volumes
+              chmod 2710 /sandswap/volumes
+              chown 1000:65536 /sandswap/overlay-templates
+              chmod 2750 /sandswap/overlay-templates
+              echo "share root: $(stat -c '%a %u:%g' /sandswap/volumes)  templates: $(stat -c '%a %u:%g' /sandswap/overlay-templates)"
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+        # Re-materialize the mTLS certs with ENFORCED modes (see the
+        # sandlot-stream-certs volume comment): the client key must be
+        # owner-only — this pod's sandvmm child (uid 987) is the exact reader
+        # it must be kept from. The source is the hostPath materialized by
+        # k8s-host-setup.sh (0600 on the node filesystem), so the mode is
+        # real on the way in too; the copy re-asserts it in an emptyDir.
+        - name: certs-copy
+          image: sandswap/sandlot:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ ! -s /certs-src/client.crt ] || [ ! -s /certs-src/client.key ]; then
+                echo "FATAL: this node's stream client certificate is missing from the hostPath"
+                echo "  /etc/sandswap/stream-certs — the gateway binds node_id == the client"
+                echo "  certificate's CN, so the sandlot cannot connect without its own pair."
+                echo "  Fix (on this node): sudo bash deploy/k8s/k8s-host-setup.sh --stream-certs-only"
+                exit 1
+              fi
+              cp /certs-src/client.crt /certs/client.crt
+              cp /certs-src/ca.crt /certs/ca.crt
+              cp /certs-src/client.key /certs/client.key
+              chmod 0644 /certs/client.crt /certs/ca.crt
+              chmod 0400 /certs/client.key
+              echo "certs: key=$(stat -c '%a %u:%g' /certs/client.key) crt=$(stat -c '%a' /certs/client.crt)"
+          volumeMounts:
+            - name: sandlot-stream-certs
+              mountPath: /certs-src
+              readOnly: true
+            - name: sandlot-certs
+              mountPath: /certs
+        # Attach vsockguard BPF LSM — blocks all UIDs except 0 from
+        # connecting to the warden vsock port (CID:1024). Fails the pod
+        # if vsockguard cannot enforce (BPF LSM missing or attach failed)
+        # — without it, any local user can impersonate sandlot to the warden.
+        # Set SANDSWAP_SKIP_VSOCKGUARD=1 to skip enforcement (kernels without
+        # the bpf LSM; the deploy script auto-sets this when the host LSM list
+        # lacks bpf — TEST environments only, weakens the vsock isolation).
+        - name: attach-vsockguard
+          image: sandswap/sandlot:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+            privileged: true  # BPF LSM attach requires CAP_BPF + CAP_SYS_ADMIN
+          env:
+            - name: SANDSWAP_SKIP_VSOCKGUARD
+              value: "0"
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ "${SANDSWAP_SKIP_VSOCKGUARD:-}" = "1" ]; then
+                echo "WARNING: vsockguard SKIPPED (SANDSWAP_SKIP_VSOCKGUARD=1) — no BPF LSM enforcement"
+                exit 0
+              fi
+              if [ ! -e /sandswap/vsockguard.bpf.o ] || [ ! -x /sandswap/vsockguardctl ]; then
+                echo "FATAL: vsockguard binaries not found"
+                exit 1
+              fi
+              if ! grep -qE '(^|,)bpf(,|$)' /sys/kernel/security/lsm 2>/dev/null; then
+                echo "FATAL: BPF LSM not active in kernel — vsockguard cannot enforce"
+                echo "  Fix: sudo bash deploy/k8s/k8s-host-setup.sh && reboot"
+                exit 1
+              fi
+              if [ -e /sys/fs/bpf/vsockguard/link ]; then
+                # allowed_uid is a PINNED BPF MAP — `cat` prints the kernel
+                # debug banner plus "key: value" lines; take the first value.
+                pinned="$(cat /sys/fs/bpf/vsockguard/allowed_uid 2>/dev/null | grep -E '^[0-9]+:' | head -1 | sed 's/^[0-9]*:[[:space:]]*//')"
+                if [ -z "$pinned" ]; then pinned="unreadable"; fi
+                if [ "$pinned" = "0" ]; then
+                  echo "vsockguard already attached (allowed_uid=0)"
+                  exit 0
+                fi
+                echo "FATAL: vsockguard pinned for UID $pinned but this pod runs as UID 0"
+                echo "  Fix: bash deploy/k8s/k8s-cleanup.sh (step 3 detaches), then re-deploy"
+                exit 1
+              fi
+              echo "Attaching vsockguard BPF LSM (allowed UID=0)..."
+              mkdir -p /sys/fs/bpf/vsockguard && \
+              /sandswap/vsockguardctl attach /sandswap/vsockguard.bpf.o 0 /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/allowed_uid && \
+                echo "vsockguard attached successfully" || \
+                (echo "FATAL: vsockguard attach failed"; exit 1)
+          volumeMounts:
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+            - name: sys-kernel-security
+              mountPath: /sys/kernel/security
+              readOnly: true
+      containers:
+        - name: sandlot
+          image: sandswap/sandlot:latest
+          imagePullPolicy: Never
+          securityContext:
+            privileged: true  # REQUIRED: cgroup v2 device access for /dev/kvm, /dev/vhost-vsock
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SYS_ADMIN   # mount/umount for OverlayFS (sandlot/core/overlay.go)
+                - NET_ADMIN   # ip tuntap/bridge (sandlot/network/bridge_nat.go)
+                # NOTE: privileged=true overrides drop/add — these document
+                # the 2 capabilities sandlot actually uses. To enforce this
+                # list, CDI device injection (see the security block above)
+                # would allow removing privileged and running as the
+                # bare-metal sandlot identity with ambient capabilities.
+          args:
+            - --vm-mode=embedded
+            - --config=/config/sandlot.yaml
+            # The node identity: the KUBERNETES NODE name, stable across pod
+            # restarts (the old default — the pod name — changed every restart
+            # and could never match a certificate). One sandlot per node is
+            # the shape; the per-node Secret sandlot-certs-<node> carries the
+            # matching CN, mounted at /certs.
+            - --node-id=$(SANDSWAP_NODE_NAME)
+            # TLS paths (volume-mounted, must be CLI overrides)
+            - --tls-cert=/certs/client.crt
+            - --tls-key=/certs/client.key
+            - --tls-ca=/certs/ca.crt
+          env:
+            - name: HOME
+              value: /tmp
+            - name: SANDSWAP_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # Template-store metadata group (numeric: the pod has no /etc/group
+            # entry). Must match the supplementalGroups GID above; refs/ is
+            # chgrp'd to it so the FUSE daemon cannot enumerate refs.
+            - name: SANDSWAP_TPL_GROUP
+              value: "982"
+            # The host's RESOLVED sandvmm uid (numeric: the pod has no
+            # /etc/passwd entry). The /dev/vhost-vsock owner check compares the
+            # device's owner against this; provisioning may have auto-picked a
+            # free uid when the contract slot was occupied, so deploy-lib
+            # injects the actual value alongside the device GIDs.
+            - name: SANDSWAP_VMM_UID
+              value: "987"  # /dev/sandvmm UID placeholder
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+              readOnly: true  # sandlot only reads overlay templates (the prov Deployment writes)
+            - name: sandswap-host
+              mountPath: /sandswap-host
+            - name: dev-kvm
+              mountPath: /dev/kvm
+            - name: dev-vhost-vsock
+              mountPath: /dev/vhost-vsock
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+            - name: run-sandswap
+              mountPath: /run/sandswap
+            - name: run-sandswap-state
+              mountPath: /run/sandswap-state
+            - name: sandlot-certs
+              mountPath: /certs
+              readOnly: true
+              # emptyDir re-materialized by the certs-copy init container (see
+              # there): the node's stream client key must be unreadable by the
+              # in-pod sandvmm identity (987) — this pod's own child.
+            - name: sandlot-config
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # bpf binding-region carrier: OBJ_GET the sidecar-pinned map +
+            # mmap-write it (boxout mode), or create/pin it (embedded root).
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: sandswap-volumes
+          persistentVolumeClaim:
+            claimName: sandswap-volumes
+        - name: sandswap-templates
+          persistentVolumeClaim:
+            claimName: sandswap-templates
+        - name: sandswap-host
+          hostPath:
+            path: /var/lib/sandswap
+            type: DirectoryOrCreate
+        - name: dev-kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
+        - name: dev-vhost-vsock
+          hostPath:
+            path: /dev/vhost-vsock
+            type: CharDevice
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: run-sandswap
+          hostPath:
+            path: /run/sandswap
+            type: DirectoryOrCreate
+        - name: run-sandswap-state
+          hostPath:
+            path: /run/sandswap-state
+            type: DirectoryOrCreate
+        - name: sandlot-certs
+          emptyDir: {}
+          # NOT a direct volume mount. defaultMode is the only per-file mode a
+          # Secret volume offers, and it is not dependable: at least k3s's
+          # kubelet writes Secret files 0777 root:fsGroup regardless of
+          # defaultMode (probed live: an explicit 0400 landed as 777). 777 in
+          # this pod means the in-pod sandvmm identity (987 — this pod's own
+          # child) could read the node's stream client key and impersonate the
+          # node to the gateway after a daemon compromise. The certs-copy init
+          # container below re-materializes the certs into this emptyDir with
+          # enforced modes on a plain filesystem — same pattern as the boxout
+          # DaemonSet (which cannot use defaultMode at all: its sandlot
+          # container runs as 65536 and 987 shares that group).
+        - name: sandlot-stream-certs
+          hostPath:
+            # THIS node's stream client pair, materialized by
+            # deploy/k8s/k8s-host-setup.sh (step 2b) from the per-node Secret
+            # sandlot-certs-<node> at 0600 owned by the sandlot identity. A
+            # hostPath — not a Secret — because the pair is per NODE and the
+            # gateway binds node_id == CN: the node must not be able to read
+            # any other node's key, and the pod picks its identity from
+            # spec.nodeName.
+            path: /etc/sandswap/stream-certs
+            type: DirectoryOrCreate
+        - name: sandlot-config
+          configMap:
+            name: sandlot-config
+        - name: sys-fs-bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: sys-kernel-security
+          hostPath:
+            path: /sys/kernel/security
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}

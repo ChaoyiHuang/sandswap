@@ -1,0 +1,65 @@
+# SandFS volume storage — shared between gateway, admin, and sandlot.
+#
+# This PVC holds all SandFS data (per-sandfs directories).
+# It is the virtio-fs shared_dir for the compute sandlot DaemonSets, and the
+# volume-materialization target for the sandlot-prov Deployment — the gateway
+# and human gateway mount NOTHING (every storage op routes over the stream to
+# a prov pod; see docs/how-it-works/sandfs.md).
+#
+# Single-node (k3s): ReadWriteOnce with local-path provisioner.
+# Multi-node:        ReadWriteMany with a shared-filesystem StorageClass
+#                    (e.g. NFS, CephFS) for cross-node failover.
+#
+# The PVC is mounted at /sandswap/volumes in the sandlot DaemonSet and
+# sandlot-prov pods. PVC ownership: prov (uid 1000) materializes volumes;
+# guest writes land through the virtio-fs passthrough as the sandvmm identity
+# (uid 987, supplementary gid 65536).
+#
+# SHARE-ROOT SHAPE (storage contract row 10b, fourth isolation layer): the
+# volume root itself must be `1000:65536 2750` — prov owns it, the shared group
+# gets read+traverse only — so the FUSE daemon (987, in group 65536) can reach
+# the volume it serves but cannot create/remove/rename anything AT the root.
+# The local-path provisioner creates this directory world-writable, so the
+# compute DaemonSets re-assert the shape in a `prep-share-root` init container
+# on every pod start. Guest read/write inside a sandfs is unaffected (reaching
+# a volume needs traverse on the root; volumes stay 0770 + setgid).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sandswap-volumes
+  namespace: sandswap
+spec:
+  accessModes:
+    - ReadWriteOnce  # Multi-node: change to ReadWriteMany + shared-filesystem StorageClass (e.g. NFS, CephFS)
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Overlay template storage — shared between admin and sandlot.
+#
+# Holds the unified template directory (layers/ + refs/ + flat/ subtree).
+# The sandlot-prov Deployment writes it (OCI pull/push, SaveAsTemplate, flat
+# staging); the compute sandlot DaemonSets read it read-only for OverlayFS
+# lazy mount resolution.
+#
+# Single-node (k3s): ReadWriteOnce with local-path provisioner.
+# Multi-node:        ReadWriteMany with a shared-filesystem StorageClass
+#                    (e.g. NFS, CephFS).
+#
+# The PVC is mounted at /sandswap/overlay-templates in the sandlot DaemonSet
+# (readOnly) and sandlot-prov pods (read-write).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sandswap-templates
+  namespace: sandswap
+spec:
+  accessModes:
+    - ReadWriteOnce  # Multi-node: change to ReadWriteMany + shared-filesystem StorageClass (e.g. NFS, CephFS)
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

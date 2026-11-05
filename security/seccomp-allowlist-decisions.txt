@@ -1,0 +1,303 @@
+accept	networking — agent network use (config paths fail on capability in the child, not the filter)
+accept4	networking — agent network use (config paths fail on capability in the child, not the filter)
+access	fs metadata & namespace-internal ops — agent file use inside the chroot
+afs_syscall	reserved/ENOSYS
+alarm	signals — runtime need
+arch_prctl	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+bind	networking — agent network use (config paths fail on capability in the child, not the filter)
+brk	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+cachestat	fs cache query — harmless read-only info
+capget	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+capset	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+chdir	fs metadata & namespace-internal ops — agent file use inside the chroot
+chmod	fs metadata & namespace-internal ops — agent file use inside the chroot
+chown	fs metadata & namespace-internal ops — agent file use inside the chroot
+clock_getres	time — runtime need
+clock_gettime	time — runtime need
+clock_nanosleep	time — runtime need
+clone	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+clone3	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+close	fd/file I/O — core runtime need
+close_range	fd/file I/O — core runtime need
+connect	networking — agent network use (config paths fail on capability in the child, not the filter)
+copy_file_range	fd/file I/O — core runtime need
+creat	fd/file I/O — core runtime need
+dup	fd/file I/O — core runtime need
+dup2	fd/file I/O — core runtime need
+dup3	fd/file I/O — core runtime need
+epoll_create	fd/file I/O — core runtime need
+epoll_create1	fd/file I/O — core runtime need
+epoll_ctl	fd/file I/O — core runtime need
+epoll_ctl_old	fd/file I/O — core runtime need
+epoll_pwait	fd/file I/O — core runtime need
+epoll_pwait2	fd/file I/O — core runtime need
+epoll_wait	fd/file I/O — core runtime need
+epoll_wait_old	legacy alias — superseded
+eventfd	fd/file I/O — core runtime need
+eventfd2	fd/file I/O — core runtime need
+execve	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+execveat	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+exit	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+exit_group	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+faccessat	fs metadata & namespace-internal ops — agent file use inside the chroot
+faccessat2	fs metadata & namespace-internal ops — agent file use inside the chroot
+fadvise64	POSIX fadvise — harmless I/O hint
+fallocate	fd/file I/O — core runtime need
+fanotify_mark	file observation — runtime need (fanotify needs CAP_SYS_ADMIN → inert)
+fchdir	fs metadata & namespace-internal ops — agent file use inside the chroot
+fchmod	fs metadata & namespace-internal ops — agent file use inside the chroot
+fchmodat	fs metadata & namespace-internal ops — agent file use inside the chroot
+fchmodat2	chmod-by-dirfd — same reach as fchmodat (6.13+ API)
+fchown	fs metadata & namespace-internal ops — agent file use inside the chroot
+fchownat	fs metadata & namespace-internal ops — agent file use inside the chroot
+fcntl	fd/file I/O — core runtime need
+fdatasync	fd/file I/O — core runtime need
+fgetxattr	xattr within the chroot — agent file use
+file_getattr	per-fd getattr — same class as fstat (fd-scoped, no name resolution)
+file_setattr	per-fd setattr — same class as fchmod (fd-scoped)
+flistxattr	xattr within the chroot — agent file use
+flock	fd/file I/O — core runtime need
+fork	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+fremovexattr	xattr within the chroot — agent file use
+fsetxattr	xattr within the chroot — agent file use
+fstat	fs metadata & namespace-internal ops — agent file use inside the chroot
+fstatfs	fs metadata & namespace-internal ops — agent file use inside the chroot
+fsync	fd/file I/O — core runtime need
+ftruncate	fd/file I/O — core runtime need
+futex	misc runtime plumbing (futex family, memfd, robust lists, random) — libc/runtimes need
+futex_requeue	futex family (split-futex API, 6.14+)
+futex_wait	futex family (split-futex API, 6.14+)
+futex_waitv	misc runtime plumbing (futex family, memfd, robust lists, random) — libc/runtimes need
+futex_wake	futex family (split-futex API, 6.14+)
+futimesat	utimes-by-dirfd — same reach as utimensat
+get_robust_list	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+get_thread_area	TLS management — per-process
+getcpu	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+getcwd	fs metadata & namespace-internal ops — agent file use inside the chroot
+getdents	fd/file I/O — core runtime need
+getdents64	fd/file I/O — core runtime need
+getegid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+geteuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getgid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getgroups	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getitimer	signals — runtime need
+getpeername	networking — agent network use (config paths fail on capability in the child, not the filter)
+getpgid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+getpgrp	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+getpid	trivial process info
+getpmsg	legacy STREAMS — ENOSYS
+getppid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+getpriority	nice/priority query — read-only
+getrandom	misc runtime plumbing (futex family, memfd, robust lists, random) — libc/runtimes need
+getresgid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getresuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getrlimit	self limits — read-only
+getrusage	self/children resource usage — read-only
+getsid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+getsockname	networking — agent network use (config paths fail on capability in the child, not the filter)
+getsockopt	networking — agent network use (config paths fail on capability in the child, not the filter)
+gettid	trivial process info
+gettimeofday	time — runtime need
+getuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+getxattr	xattr within the chroot — agent file use
+getxattrat	xattr-by-dirfd — same reach as getxattr inside the chroot
+inotify_add_watch	file observation — runtime need (fanotify needs CAP_SYS_ADMIN → inert)
+inotify_init	file observation — runtime need (fanotify needs CAP_SYS_ADMIN → inert)
+inotify_init1	file observation — runtime need (fanotify needs CAP_SYS_ADMIN → inert)
+inotify_rm_watch	file observation — runtime need (fanotify needs CAP_SYS_ADMIN → inert)
+io_cancel	legacy AIO — self
+io_destroy	legacy AIO — self
+io_getevents	legacy AIO — self
+io_pgetevents	legacy AIO — self
+io_setup	legacy POSIX AIO context — self-process
+io_submit	legacy AIO — self
+io_uring_enter	inert: requires an io_uring fd, and io_uring_setup is denied
+io_uring_register	inert: same — no ring fd can exist
+ioctl	broad but load-bearing (termios, socket opts, FD ops). Dangerous sub-families separately closed: BPF_* needs the (denied) bpf syscall; PERF_* the (denied) perf_event_open; TIOCSTI blocked by the kernel default (dev.tty.legacy_tiocsti=0); device ioctls unreachable (masked /dev in the chroot)
+ioprio_get	self/own-file I/O priority query
+kill	signals — runtime need
+landlock_add_rule	Landlock self-sandboxing — restricts only
+landlock_create_ruleset	Landlock self-sandboxing — RESTRICTS the caller, never elevates
+landlock_restrict_self	Landlock self-sandboxing — restricts only
+lchown	fs metadata & namespace-internal ops — agent file use inside the chroot
+lgetxattr	xattr within the chroot — agent file use
+link	fs metadata & namespace-internal ops — agent file use inside the chroot
+linkat	fs metadata & namespace-internal ops — agent file use inside the chroot
+listen	networking — agent network use (config paths fail on capability in the child, not the filter)
+listns	read-only namespace listing — own view
+listxattr	xattr within the chroot — agent file use
+listxattrat	xattr-by-dirfd — same reach as listxattr
+llistxattr	xattr within the chroot — agent file use
+lremovexattr	xattr within the chroot — agent file use
+lseek	fd/file I/O — core runtime need
+lsetxattr	xattr within the chroot — agent file use
+lsm_get_self_attr	LSM self attributes — read-only self info (no LSM policy in the guest)
+lsm_list_modules	read-only module list — info only; loading is capability-gated
+lsm_set_self_attr	LSM self attributes — self-scope
+lstat	fs metadata & namespace-internal ops — agent file use inside the chroot
+madvise	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+map_shadow_stack	CET shadow stack — required by CET-enabled binaries
+membarrier	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+memfd_create	misc runtime plumbing (futex family, memfd, robust lists, random) — libc/runtimes need
+mincore	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mkdir	fs metadata & namespace-internal ops — agent file use inside the chroot
+mkdirat	fs metadata & namespace-internal ops — agent file use inside the chroot
+mlock	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mlock2	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mlockall	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mmap	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mprotect	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mremap	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+mseal	memory sealing (6.10+) — hardens the caller's own mappings; modern glibc needs it
+msgctl	SysV IPC — intra-lease; residue swept at unmount
+msgget	SysV IPC — intra-lease; residue swept at unmount
+msgrcv	SysV IPC — intra-lease
+msgsnd	SysV IPC — intra-lease
+msync	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+munlock	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+munlockall	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+munmap	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+nanosleep	time — runtime need
+newfstatat	fs metadata & namespace-internal ops — agent file use inside the chroot
+open	fd/file I/O — core runtime need
+openat	fd/file I/O — core runtime need
+openat2	open with resolution flags — same reach as openat (RESOLVE_* can only narrow)
+pause	wait for signal — benign
+personality	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+pipe	fd/file I/O — core runtime need
+pipe2	fd/file I/O — core runtime need
+pkey_alloc	memory protection keys — self-process
+pkey_free	memory protection keys — self
+pkey_mprotect	memory protection keys — self
+poll	fd/file I/O — core runtime need
+ppoll	fd/file I/O — core runtime need
+prctl	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+pread64	fd/file I/O — core runtime need
+preadv	fd/file I/O — core runtime need
+preadv2	fd/file I/O — core runtime need
+prlimit64	SELF ONLY (args[0] == 0); any other pid/tid is EPERM — PID 1 and the warden's worker tids included (same owner, uid/gid 0 — lowering RLIMIT_CPU would force a PID-1 group exit); the warden also restores its own rlimits at unmount as a second layer
+pselect6	fd/file I/O — core runtime need
+putpmsg	legacy STREAMS — ENOSYS
+pwrite64	fd/file I/O — core runtime need
+pwritev	fd/file I/O — core runtime need
+pwritev2	fd/file I/O — core runtime need
+read	fd/file I/O — core runtime need
+readahead	file readahead — harmless hint
+readlink	fs metadata & namespace-internal ops — agent file use inside the chroot
+readlinkat	fs metadata & namespace-internal ops — agent file use inside the chroot
+readv	fd/file I/O — core runtime need
+recvfrom	networking — agent network use (config paths fail on capability in the child, not the filter)
+recvmmsg	networking — agent network use (config paths fail on capability in the child, not the filter)
+recvmsg	networking — agent network use (config paths fail on capability in the child, not the filter)
+remap_file_pages	memory management — allocator/runtime need (mlock self-policy bounded by RLIMIT_MEMLOCK; NUMA policy self-scoped)
+removexattr	xattr within the chroot — agent file use
+removexattrat	xattr-by-dirfd — same reach as removexattr
+rename	fs metadata & namespace-internal ops — agent file use inside the chroot
+renameat	fs metadata & namespace-internal ops — agent file use inside the chroot
+renameat2	fs metadata & namespace-internal ops — agent file use inside the chroot
+restart_syscall	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+rmdir	fs metadata & namespace-internal ops — agent file use inside the chroot
+rseq	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+rseq_slice_yield	rseq-adjacent cooperative yield — self-process
+rt_sigaction	signals — runtime need
+rt_sigpending	signals — runtime need
+rt_sigprocmask	signals — runtime need
+rt_sigqueueinfo	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+rt_sigreturn	REQUIRED — the signal-return trampoline every handler uses
+rt_sigsuspend	signals — runtime need
+rt_sigtimedwait	signals — runtime need
+rt_tgsigqueueinfo	directed signal — signals family
+sched_get_priority_max	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_get_priority_min	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_getaffinity	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_getattr	self scheduler attr query
+sched_getparam	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_getscheduler	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_rr_get_interval	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+sched_setaffinity	SELF ONLY (args[0] == 0); any other pid/tid is EPERM, including the warden's worker threads; the warden also restores every thread at unmount as a second layer
+sched_setattr	SELF ONLY (args[0] == 0); any other pid/tid is EPERM, including the warden's worker threads; the warden also restores every thread at unmount
+sched_setparam	SELF ONLY (args[0] == 0); any other pid/tid is EPERM, including the warden's worker threads; the warden also restores every thread at unmount
+sched_setscheduler	SELF ONLY (args[0] == 0); any other pid/tid is EPERM, including the warden's worker threads; the warden also restores every thread at unmount
+sched_yield	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+seccomp	self-restriction only: NO_NEW_PRIVS is already set and this filter inherited — a child filter can only tighten
+security	legacy LSM syscall — ENOSYS
+select	fd/file I/O — core runtime need
+semctl	SysV semaphores — intra-lease
+semget	SysV semaphores — intra-lease; residue swept at unmount
+semop	SysV semaphores — intra-lease
+semtimedop	SysV semaphores — intra-lease
+sendfile	fd/file I/O — core runtime need
+sendmmsg	networking — agent network use (config paths fail on capability in the child, not the filter)
+sendmsg	networking — agent network use (config paths fail on capability in the child, not the filter)
+sendto	networking — agent network use (config paths fail on capability in the child, not the filter)
+set_robust_list	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+set_thread_area	TLS management — per-process
+set_tid_address	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+setfsgid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setfsuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setgid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setgroups	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setitimer	signals — runtime need
+setpgid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+setregid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setresgid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setresuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setreuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setrlimit	self limits — can only lower hard limits without caps
+setsid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+setsockopt	networking — agent network use (config paths fail on capability in the child, not the filter)
+setuid	identity transitions — self-drops (raising privilege needs caps the child lacks)
+setxattr	xattr within the chroot — agent file use
+setxattrat	xattr-by-dirfd — same reach as setxattr
+shmat	SysV shared memory
+shmctl	SysV shared memory (IPC_RMID of own objects)
+shmdt	SysV shared memory
+shmget	SysV shared memory — intra-lease; residue swept at unmount
+shutdown	networking — agent network use (config paths fail on capability in the child, not the filter)
+sigaltstack	alternate signal stack — per-process, handlers need it
+signalfd	signal-as-fd — runtime need
+signalfd4	signal-as-fd — runtime need
+socket	networking — agent network use (config paths fail on capability in the child, not the filter)
+socketpair	networking — agent network use (config paths fail on capability in the child, not the filter)
+splice	fd/file I/O — core runtime need
+stat	fs metadata & namespace-internal ops — agent file use inside the chroot
+statfs	fs metadata & namespace-internal ops — agent file use inside the chroot
+statx	fs metadata & namespace-internal ops — agent file use inside the chroot
+symlink	fs metadata & namespace-internal ops — agent file use inside the chroot
+symlinkat	fs metadata & namespace-internal ops — agent file use inside the chroot
+sync	fd/file I/O — core runtime need
+sync_file_range	fd/file I/O — core runtime need
+syncfs	fd/file I/O — core runtime need
+sysinfo	harmless
+tee	fd/file I/O — core runtime need
+tgkill	signals — runtime need
+time	time — runtime need
+timer_create	signals — runtime need
+timer_delete	signals — runtime need
+timer_getoverrun	signals — runtime need
+timer_gettime	signals — runtime need
+timer_settime	signals — runtime need
+timerfd_create	signals — runtime need
+timerfd_gettime	signals — runtime need
+timerfd_settime	signals — runtime need
+times	harmless process times
+tkill	signals — runtime need
+truncate	fd/file I/O — core runtime need
+tuxcall	legacy — ENOSYS
+umask	fs metadata & namespace-internal ops — agent file use inside the chroot
+uname	harmless
+unlink	fs metadata & namespace-internal ops — agent file use inside the chroot
+unlinkat	fs metadata & namespace-internal ops — agent file use inside the chroot
+uprobe	perf family — the reachable path (perf_event_open) is denied; the standalone syscall is CAP_SYS_ADMIN-gated → inert
+uretprobe	same as uprobe — capability-gated, perf family head denied
+utime	fs metadata & namespace-internal ops — agent file use inside the chroot
+utimensat	fs metadata & namespace-internal ops — agent file use inside the chroot
+utimes	fs metadata & namespace-internal ops — agent file use inside the chroot
+vfork	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+vhangup	CAP_SYS_TTY_CONFIG → inert
+vmsplice	fd/file I/O — core runtime need
+vserver	reserved/ENOSYS
+wait4	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+waitid	process lifecycle — runtime need (NO_NEW_PRIVS set before exec blocks privilege gain)
+write	fd/file I/O — core runtime need
+writev	fd/file I/O — core runtime need

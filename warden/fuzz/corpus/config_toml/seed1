@@ -1,0 +1,2 @@
+log_level = "debug"
+agent_mem_percent = 50

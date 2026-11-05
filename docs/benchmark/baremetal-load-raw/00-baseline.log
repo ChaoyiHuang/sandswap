@@ -1,0 +1,319 @@
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected: systemd-detect-virt=none and no cpuinfo hypervisor flag -> bare-metal KVM host
+    pinning host stack to CPUs 16-23,64-71; VM slices: 13,61:0;14,62:0;15,63:0
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected: systemd-detect-virt=none and no cpuinfo hypervisor flag -> bare-metal KVM host
+    CPU cores: 16    load: load: 0.03, 0.63, 1.01
+    Pinning:   PIN_MODE=1 (16-23,64-71 stack cores, 13,61:0;14,62:0;15,63:0 VM slices)
+[0;32m[✓][0m /dev/kvm available
+[0;32m[✓][0m /dev/vhost-vsock readable
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[✓][0m Prebuilt release package (.release-stamp present) — freshness check skipped
+
+[0;32m═══ Phase 1: Deploy ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /var/lib/sandswap/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via eth0)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> eth0); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[✓][0m bare-metal pinning: stack CPUs 16-23,64-71, VM slices 13,61:0;14,62:0;15,63:0 (VMM shim: /var/lib/sandswap/pinned/sandvmm)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+
+[0;32m═══ Phase 2: Start etcd + gateways (distributed: exec http://localhost:3001, human http://localhost:3100) ═══[0m
+[0;32m[✓][0m etcd binary: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/etcd/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (aiagent-bench, data=/tmp/sandswap-aiagent-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=1442390)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 1442433)
+[0;32m[✓][0m exec gateway ready (http://localhost:3001)
+[0;32m[→][0m Starting human gateway (127.0.0.1:3100, mode=human, shared etcd)...
+[0;32m[✓][0m human gateway ready (http://localhost:3100)
+
+[0;32m═══ Phase 3: Start sandlot (connects to gateway, mTLS) ═══[0m
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap/sandlot-aiagent.yaml
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 1442513)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3001)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+
+[0;32m═══ Phase 4: Create agents A/B (busybox template) ═══[0m
+    CRUD goes through the human gateway (http://localhost:3100/human/*); execution hits the exec gateway (http://localhost:3001/agent/execute)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m agents A/B created (sandfs sandfs-e8fca5f3 / sandfs-cd5af806)
+
+[0;32m═══ Phase 5: Run benchmark (mode=http) ═══[0m
+[0;32m[✓][0m benchmark binary: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/openai-sandswap
+
+[0;32m═══ Benchmark — mode=http ═══[0m
+═══ Sandswap latency benchmark — mode=http ═══
+Gateway: http://localhost:3001   warm_n=100  cold_n=50  warm_gap_ms=5  switch_gap_ms=300  switch_settle_ms=1000
+
+Warmup (excluded)...
+Warm: 100 consecutive calls to agent A (5ms gap)...
+Switch: 50 rounds alternating A<->B (300ms gap, lease expires)...
+
+Warm — sticky lease reuse (leaseHit=true, n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        0.894     0.938     0.979     1.236
+  gateway E2E              0.814     0.836     0.868     1.031
+  sandlot                  0.713     0.725     0.746     0.825
+  exec                     0.628     0.637     0.659     0.724
+
+Switch — cross-agent cold mount_and_exec (leaseHit=false, n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        1.987     2.180     2.488     6.824
+  gateway E2E              1.855     2.036     2.323     6.689
+  sandlot                  1.718     1.893     2.127     6.553
+  exec                     1.522     1.685     1.873     6.343
+
+  per-sample detail (all in ms):
+   idx  class      client   gateway   sandlot     exec  exit
+     1  warm        1.236     1.031     0.825    0.724     0
+     2  warm        1.068     0.940     0.763    0.666     0
+     3  warm        1.028     0.910     0.753    0.660     0
+     4  warm        0.963     0.861     0.738    0.643     0
+     5  warm        0.985     0.858     0.731    0.637     0
+     6  warm        0.945     0.841     0.726    0.636     0
+     7  warm        0.952     0.845     0.722    0.635     0
+     8  warm        0.938     0.839     0.727    0.635     0
+     9  warm        0.966     0.868     0.740    0.647     0
+    10  warm        0.910     0.819     0.725    0.640     0
+    11  warm        0.965     0.858     0.740    0.648     0
+    12  warm        0.915     0.820     0.724    0.640     0
+    13  warm        0.948     0.845     0.729    0.639     0
+    14  warm        0.962     0.840     0.723    0.638     0
+    15  warm        0.974     0.854     0.735    0.642     0
+    16  warm        0.954     0.843     0.720    0.628     0
+    17  warm        0.960     0.860     0.740    0.651     0
+    18  warm        0.956     0.845     0.719    0.631     0
+    19  warm        0.979     0.878     0.738    0.642     0
+    20  warm        0.977     0.868     0.732    0.639     0
+    21  warm        0.955     0.857     0.746    0.654     0
+    22  warm        0.956     0.835     0.724    0.639     0
+    23  warm        0.945     0.843     0.729    0.641     0
+    24  warm        0.934     0.830     0.718    0.634     0
+    25  warm        0.933     0.835     0.735    0.645     0
+    26  warm        0.928     0.827     0.721    0.637     0
+    27  warm        0.916     0.827     0.723    0.634     0
+    28  warm        0.930     0.825     0.722    0.632     0
+    29  warm        0.930     0.825     0.720    0.633     0
+    30  warm        0.940     0.824     0.716    0.631     0
+    31  warm        0.938     0.829     0.725    0.631     0
+    32  warm        0.926     0.819     0.717    0.632     0
+    33  warm        0.959     0.863     0.730    0.638     0
+    34  warm        0.943     0.851     0.735    0.642     0
+    35  warm        0.928     0.824     0.723    0.639     0
+    36  warm        0.935     0.837     0.731    0.645     0
+    37  warm        0.942     0.848     0.731    0.639     0
+    38  warm        0.918     0.819     0.720    0.633     0
+    39  warm        0.937     0.839     0.729    0.635     0
+    40  warm        0.930     0.831     0.724    0.636     0
+    41  warm        0.919     0.827     0.724    0.638     0
+    42  warm        0.911     0.821     0.713    0.632     0
+    43  warm        0.931     0.822     0.720    0.637     0
+    44  warm        0.958     0.859     0.739    0.649     0
+    45  warm        0.920     0.822     0.721    0.631     0
+    46  warm        0.937     0.836     0.726    0.643     0
+    47  warm        0.935     0.827     0.718    0.633     0
+    48  warm        0.940     0.833     0.728    0.638     0
+    49  warm        0.917     0.825     0.728    0.642     0
+    50  warm        0.959     0.855     0.751    0.667     0
+    51  warm        0.919     0.832     0.727    0.639     0
+    52  warm        0.938     0.842     0.740    0.639     0
+    53  warm        0.913     0.833     0.721    0.638     0
+    54  warm        0.929     0.833     0.726    0.641     0
+    55  warm        0.961     0.860     0.723    0.637     0
+    56  warm        0.934     0.844     0.724    0.641     0
+    57  warm        0.935     0.831     0.724    0.640     0
+    58  warm        0.931     0.843     0.728    0.632     0
+    59  warm        0.926     0.836     0.722    0.633     0
+    60  warm        0.944     0.833     0.721    0.632     0
+    61  warm        0.944     0.836     0.721    0.630     0
+    62  warm        0.956     0.852     0.728    0.633     0
+    63  warm        0.954     0.838     0.728    0.643     0
+    64  warm        0.953     0.856     0.736    0.641     0
+    65  warm        0.944     0.827     0.725    0.639     0
+    66  warm        0.947     0.834     0.725    0.634     0
+    67  warm        0.924     0.830     0.723    0.636     0
+    68  warm        0.955     0.851     0.727    0.637     0
+    69  warm        0.934     0.826     0.718    0.631     0
+    70  warm        0.947     0.857     0.736    0.641     0
+    71  warm        0.919     0.842     0.741    0.656     0
+    72  warm        0.963     0.857     0.726    0.631     0
+    73  warm        0.966     0.851     0.740    0.649     0
+    74  warm        0.966     0.862     0.728    0.639     0
+    75  warm        0.952     0.856     0.746    0.657     0
+    76  warm        0.931     0.832     0.728    0.636     0
+    77  warm        0.947     0.854     0.743    0.659     0
+    78  warm        0.938     0.833     0.723    0.637     0
+    79  warm        0.944     0.855     0.729    0.636     0
+    80  warm        0.947     0.846     0.721    0.637     0
+    81  warm        0.943     0.846     0.727    0.636     0
+    82  warm        0.943     0.853     0.729    0.642     0
+    83  warm        0.940     0.834     0.728    0.637     0
+    84  warm        0.944     0.851     0.722    0.633     0
+    85  warm        0.910     0.822     0.717    0.630     0
+    86  warm        0.924     0.828     0.722    0.631     0
+    87  warm        0.912     0.822     0.716    0.630     0
+    88  warm        0.930     0.830     0.722    0.631     0
+    89  warm        0.916     0.827     0.721    0.629     0
+    90  warm        0.916     0.825     0.723    0.641     0
+    91  warm        0.926     0.822     0.717    0.632     0
+    92  warm        0.916     0.826     0.727    0.640     0
+    93  warm        0.933     0.830     0.727    0.640     0
+    94  warm        0.909     0.819     0.724    0.637     0
+    95  warm        0.913     0.829     0.724    0.634     0
+    96  warm        0.911     0.825     0.723    0.638     0
+    97  warm        0.916     0.826     0.724    0.636     0
+    98  warm        0.918     0.816     0.723    0.635     0
+    99  warm        0.926     0.829     0.722    0.636     0
+   100  warm        0.894     0.814     0.720    0.631     0
+   101  cold        2.776     2.562     2.321    2.039     0
+   102  cold        3.302     3.080     2.002    1.720     0
+   103  cold        2.248     2.101     1.961    1.744     0
+   104  cold        2.240     2.100     1.960    1.756     0
+   105  cold        2.396     2.250     2.101    1.768     0
+   106  cold        6.824     6.689     6.553    6.343     0
+   107  cold        2.080     1.948     1.802    1.600     0
+   108  cold        2.222     2.080     1.922    1.711     0
+   109  cold        2.218     2.070     1.939    1.746     0
+   110  cold        2.095     1.981     1.862    1.661     0
+   111  cold        2.193     2.043     1.893    1.684     0
+   112  cold        2.253     2.117     1.974    1.751     0
+   113  cold        2.210     2.075     1.929    1.717     0
+   114  cold        2.228     2.076     1.927    1.713     0
+   115  cold        2.486     2.323     2.138    1.926     0
+   116  cold        2.222     2.066     1.933    1.716     0
+   117  cold        2.330     2.150     1.966    1.743     0
+   118  cold        2.147     2.016     1.865    1.669     0
+   119  cold        2.232     2.087     1.924    1.721     0
+   120  cold        2.135     2.009     1.871    1.662     0
+   121  cold        2.262     2.130     1.976    1.769     0
+   122  cold        2.409     2.223     2.026    1.811     0
+   123  cold        2.169     1.997     1.829    1.618     0
+   124  cold        2.150     1.999     1.843    1.634     0
+   125  cold        2.312     2.144     1.982    1.772     0
+   126  cold        2.199     2.066     1.923    1.713     0
+   127  cold        2.285     2.108     1.933    1.719     0
+   128  cold        2.209     2.057     1.884    1.666     0
+   129  cold        2.312     2.143     1.992    1.773     0
+   130  cold        2.152     2.019     1.882    1.684     0
+   131  cold        2.277     2.112     1.927    1.727     0
+   132  cold        2.366     2.211     2.039    1.825     0
+   133  cold        2.188     2.054     1.925    1.727     0
+   134  cold        2.227     2.079     1.917    1.715     0
+   135  cold        2.248     2.090     1.944    1.732     0
+   136  cold        2.198     2.063     1.916    1.717     0
+   137  cold        2.670     2.476     2.284    2.043     0
+   138  cold        2.184     2.032     1.888    1.681     0
+   139  cold        2.191     2.030     1.885    1.679     0
+   140  cold        2.002     1.864     1.732    1.545     0
+   141  cold        2.077     1.950     1.791    1.590     0
+   142  cold        2.170     2.050     1.904    1.711     0
+   143  cold        2.156     2.032     1.889    1.687     0
+   144  cold        2.141     2.020     1.883    1.674     0
+   145  cold        2.155     2.026     1.894    1.693     0
+   146  cold        2.250     2.097     1.963    1.756     0
+   147  cold        2.239     2.090     1.944    1.726     0
+   148  cold        2.204     2.064     1.909    1.702     0
+   149  cold        2.195     2.026     1.891    1.689     0
+   150  cold        2.159     2.035     1.889    1.686     0
+   151  cold        2.141     1.995     1.871    1.671     0
+   152  cold        2.133     2.012     1.870    1.661     0
+   153  cold        2.156     2.027     1.894    1.700     0
+   154  cold        2.132     2.012     1.891    1.697     0
+   155  cold        2.138     2.012     1.891    1.690     0
+   156  cold        2.175     2.021     1.878    1.655     0
+   157  cold        2.109     1.983     1.829    1.627     0
+   158  cold        2.092     1.955     1.784    1.581     0
+   159  cold        2.204     2.052     1.893    1.682     0
+   160  cold        2.179     2.017     1.872    1.667     0
+   161  cold        2.158     2.008     1.838    1.640     0
+   162  cold        2.298     2.126     1.950    1.725     0
+   163  cold        2.122     1.979     1.850    1.646     0
+   164  cold        2.182     2.030     1.898    1.690     0
+   165  cold        2.171     2.028     1.876    1.677     0
+   166  cold        2.048     1.920     1.801    1.605     0
+   167  cold        2.177     2.044     1.894    1.679     0
+   168  cold        2.159     2.012     1.872    1.675     0
+   169  cold        2.269     2.139     2.006    1.810     0
+   170  cold        2.141     2.019     1.863    1.656     0
+   171  cold        2.058     1.917     1.784    1.593     0
+   172  cold        2.117     1.996     1.853    1.644     0
+   173  cold        2.073     1.962     1.833    1.631     0
+   174  cold        2.010     1.877     1.733    1.535     0
+   175  cold        1.987     1.855     1.718    1.522     0
+   176  cold        2.096     1.976     1.838    1.643     0
+   177  cold        2.164     2.040     1.891    1.682     0
+   178  cold        2.195     2.043     1.894    1.693     0
+   179  cold        2.140     2.009     1.856    1.632     0
+   180  cold        2.316     2.163     1.983    1.745     0
+   181  cold        2.281     2.125     1.968    1.741     0
+   182  cold        2.180     2.043     1.896    1.673     0
+   183  cold        2.208     2.055     1.888    1.669     0
+   184  cold        2.142     2.004     1.852    1.644     0
+   185  cold        2.139     2.005     1.873    1.676     0
+   186  cold        2.118     1.974     1.831    1.633     0
+   187  cold        2.165     2.036     1.900    1.685     0
+   188  cold        2.210     2.068     1.947    1.646     0
+   189  cold        2.488     2.313     2.127    1.873     0
+   190  cold        2.381     2.199     2.036    1.809     0
+   191  cold        2.124     2.000     1.863    1.666     0
+   192  cold        2.062     1.945     1.819    1.618     0
+   193  cold        2.142     2.026     1.882    1.676     0
+   194  cold        2.099     1.976     1.823    1.610     0
+   195  cold        2.212     2.069     1.915    1.692     0
+   196  cold        2.153     2.008     1.853    1.647     0
+   197  cold        2.311     2.151     1.974    1.768     0
+   198  cold        2.109     1.981     1.852    1.646     0
+   199  cold        2.112     1.977     1.833    1.623     0
+   200  cold        2.104     1.981     1.851    1.654     0
+
+
+[0;32m═══ Phase 6: Verdict ═══[0m
+  [0;32m[BARE-METAL] Bare-metal KVM; results reflect true steady-state latency.[0m
+  [0;32m  Expected: warm P50 ~0.7-1ms (tail <3ms), switch P50 ~3-5ms (tail <8ms).[0m
+
+
+[0;32m═══ Summary ═══[0m
+  Environment: bare-metal KVM
+  Mode:       http
+  Topology:   distributed (etcd http://127.0.0.1:2379, exec gw http://localhost:3001, human gw http://localhost:3100)
+  Warm/Cold:  WARM_N=100 COLD_N=50  warm_gap_ms=5  switch_gap_ms=300  settle_ms=1000
+  Gateway:    http://localhost:3001
+  Temp dirs:  deploy=/var/lib/sandswap logs=/tmp/sandswap-logs (all removed on exit)
+{"level":"error","ts":"2026-11-02T11:03:30.566857+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"mux: server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-02T11:03:30.566872+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"http: Server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-02T11:03:37.567873+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2379: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+{"level":"error","ts":"2026-11-02T11:03:37.568268+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2380: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+
+[0;32m═══ Shutdown ═══[0m
+/root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../common/sh/runtime.sh: line 164: 1442708 Killed                  ss_service_exec sandlot -- "$DEPLOY_DIR/sandlot" -gateway-addr "${HUMAN_STREAM_ADDR:-localhost:9999}" -node-id "aiagent-bench-prov" -volumes-dir "$VOL_ROOT" -allow-insecure-volumes -allow-missing-vsockguard -roles prov -volume-seed-file "$DEPLOY_DIR/volume-seed" -flat-templates "${TC_FLAT_TEMPLATES:-$DEPLOY_DIR/flat-templates}" -tls-cert "$(tc_node_cert aiagent-bench-prov prov).crt" -tls-key "$(tc_node_cert aiagent-bench-prov prov).key" -tls-ca "$CERT_DIR/ca.crt" -allow-colocated-instances > "$LOG_DIR/sandlot-prov.log" 2>&1
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+All processes stopped.

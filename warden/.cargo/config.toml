@@ -1,0 +1,20 @@
+# Copyright 2026 Chaoyi Huang. All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Static-linking flags for the musl targets warden ships as (see build.sh):
+# the binaries run as PID 1 in the guest with no host library dependencies.
+
+[target.x86_64-unknown-linux-musl]
+# No custom linker needed: rust's self-contained musl sysroot supplies
+# libc/crt. -lpthread is required because the unwind code references
+# pthread_rwlock_*.
+rustflags = [ "-C", "link-arg=-lpthread" ]
+
+[target.aarch64-unknown-linux-musl]
+# Cross linker; with it the binary links fully static.
+linker = "aarch64-linux-musl-gcc"
+# aarch64-musl references the 128-bit float ABI helpers (__addtf3, __subtf3,
+# __multtf3) that rust's compiler-builtins does not provide for this target;
+# libgcc is the only working source for them today.
+rustflags = [ "-C", "link-arg=-lgcc" ]

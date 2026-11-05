@@ -1,0 +1,11 @@
+{
+    "name": "base",
+    "version": "1.0.0",
+    "description": "Minimal busybox-based rootfs template",
+    "workspace_path": "/workspace",
+    "default_timeout": 30,
+    "is_serverless": false,
+    "idle_timeout": 0,
+    "entrypoint": [],
+    "env": {}
+}

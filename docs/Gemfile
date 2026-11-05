@@ -1,0 +1,16 @@
+# Local preview only — GitHub Pages builds docs/ with its own allowlisted
+# gem set and resolves the theme via `remote_theme` in _config.yml.
+#
+#   bundle install
+#   bundle exec jekyll serve --livereload
+#
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.3"
+
+group :jekyll_plugins do
+  gem "jekyll-remote-theme"
+  gem "jekyll-seo-tag"          # just-the-docs runtime deps;
+  gem "jekyll-include-cache"    # GH Pages allowlists all of them
+  gem "jekyll-relative-links"   # rewrites repo-relative .md links to page URLs
+end

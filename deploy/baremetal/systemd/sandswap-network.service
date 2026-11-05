@@ -1,0 +1,25 @@
+[Unit]
+Description=Sandswap host bridge + NAT for microVM outbound networking
+# The bridge and the nftables masquerade rule are runtime kernel state: neither
+# survives a reboot, while every sandlot unit IS enabled. Without this unit a
+# rebooted node crash-loops (sandlot fails every VM launch with "bridge
+# br-sandswap missing") until an operator re-runs deploy/setup-network.sh by
+# hand. The script is idempotent, so re-running
+# it per boot is a no-op on an intact host.
+After=network-online.target
+Wants=network-online.target
+Before=sandswap-sandlot.service sandswap-sandlot-instance@.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Addressing written by setup-host.sh (BRIDGE/SUBNET/GATEWAY). Optional: on a
+# default-addressing host the file may be absent and the script's defaults
+# apply — but a host deployed with --subnet/--gateway-ip MUST get the same
+# bridge address at boot, or guests lose their default route.
+EnvironmentFile=-/etc/sandswap/network.env
+# The INSTALLED copy: the repo tree is not guaranteed to exist at boot time.
+ExecStart=/usr/local/bin/sandswap-setup-network
+
+[Install]
+WantedBy=multi-user.target

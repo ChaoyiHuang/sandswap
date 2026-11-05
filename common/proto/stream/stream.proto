@@ -1,0 +1,681 @@
+// Copyright 2026 Chaoyi Huang. All rights reserved.
+//
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Use of this software is governed by the Business Source License
+// included in the LICENSE file at the root of this repository.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package sandswap.stream.v1;
+
+option go_package = "common/proto/stream";
+
+// NodeStream is the bidirectional stream between a sandlot node and the gateway.
+// The sandlot initiates the connection and keeps it alive.
+// The gateway sends commands on the stream; the sandlot sends responses and events.
+service NodeStream {
+  // Connect establishes a persistent bidirectional stream.
+  // Sandlot dials the gateway and sends a NodeHello; gateway replies with HelloAck.
+  // After handshake, gateway sends VMCommand messages and sandlot sends CommandResponse/VMEvent.
+  rpc Connect(stream NodeMessage) returns (stream GatewayMessage);
+}
+
+// NodeMessage is sent from sandlot to gateway.
+message NodeMessage {
+  string node_id = 1;
+  oneof payload {
+    NodeHello hello = 2;
+    CommandResponse response = 3;
+    VMEvent vm_event = 4;
+    Heartbeat heartbeat = 5;
+    ProvisionResponse provision_response = 6;
+  }
+}
+
+// GatewayMessage is sent from gateway to sandlot.
+message GatewayMessage {
+  oneof payload {
+    HelloAck hello_ack = 1;
+    VMCommand vm_command = 2;
+    ProvisionCommand provision_command = 3;
+  }
+}
+
+// NodeHello is sent once when sandlot first connects.
+// Only exposes info gateway needs: identity, capacity for scheduling.
+// Kernel/initramfs paths are sandlot-local config, not exposed.
+message NodeHello {
+  string node_id = 1;
+  string version = 2;
+  uint32 total_cpus = 3;
+  uint64 total_memory_mb = 4;
+  // active_vm_ids is the set of microVM IDs currently live on the node at
+  // (re)connect — i.e. re-adopted survivors of a sandlot restart plus any
+  // freshly created since. The gateway reconciles its pool against this list:
+  // drop pool entries not live, reset survivors to CLEAN, and register any
+  // live VM the pool doesn't yet know about. Sent at connect time because
+  // OnConnect fires before the first heartbeat can arrive.
+  repeated string active_vm_ids = 5;
+  // vms provides detailed info about each live VM (including spec).
+  // Gateway uses this to build its bySpec pool index.
+  repeated VMInfo vms = 6;
+  // pool_target is the number of VMs this sandlot intends to keep in its pool
+  // (derived from the -pool flag). Gateway uses this for:
+  //   1. Per-node capacity cap in Acquire (refuse auto-create beyond this)
+  //   2. Scheduling decisions (bin-pack / spread across nodes)
+  // Zero means the sandlot has no pool config (no capacity constraint).
+  uint32 pool_target = 7;
+  // specs carries the VM spec definitions this node supports. The gateway
+  // registers these for spec-aware Acquire (pick smallest CLEAN VM that
+  // satisfies min_spec). Different sandlot instances can define different
+  // spec sets; the gateway learns from each on connect.
+  repeated VmSpec specs = 10;
+  // timing carries this node's resilience timings (tolerance-first v2 model).
+  // The gateway derives T_safe (presence-key TTL) from these and rejects the
+  // node's connect if the timings violate the invariant
+  // T_safe > T_tolerance + T_warden.
+  NodeTiming timing = 8;
+  // protocol_version is the STREAM PROTOCOL version this sandlot speaks
+  // (gateway↔sandlot wire semantics: the messages in this file and their
+  // handling). Bump it whenever a change alters how either side interprets a
+  // message. The gateway accepts protocol_version within
+  // [StreamProtocolMinSupported, StreamProtocolVersion] and REJECTS the
+  // connection otherwise (mixed-version rolling upgrades fail fast with a
+  // clear log instead of confusing runtime errors). Distinct from the
+  // build-info `version` string above, which is never used for decisions.
+  uint32 protocol_version = 11;
+  // roles is the set of capabilities this instance serves: "exec" (microVM
+  // lifecycle, mounts, exec/file ops) and/or "prov" (sandfs + template
+  // lifecycle on shared storage — the prov role). EMPTY means
+  // ["exec"]: a build from before roles existed is an exec node, so an
+  // in-window mixed fleet keeps working. The gateway routes VM commands ONLY
+  // to exec-advertising connections and provision commands ONLY to
+  // prov-advertising ones, and additionally rejects a connection whose roles
+  // it does not accept at all (an exec-only gateway refuses a prov instance
+  // with a named reject_reason instead of accepting a connection it can never
+  // serve) — see HelloAck.reject_reason.
+  repeated string roles = 12;
+}
+
+// NodeTiming is the sandlot node's resilience timing configuration, sent once
+// in NodeHello so the gateway can anchor its confirmed-condition switching
+// (owner-release / migrated-takeover) and presence-key TTL on the same fixed
+// times the sandlot's cleanup and the warden's countdown use. All values are
+// seconds.
+message NodeTiming {
+  // tolerance_sec (T_tolerance): how long the sandlot tolerates a stream
+  // outage before it starts cleaning (mount release). During this phase
+  // ownership is untouched and the agent sees 503+retry.
+  uint32 tolerance_sec = 1;
+  // cleanup_sec (T_clean): time budget for the sandlot's mount cleanup
+  // (concurrent OP_UNMOUNT + set-fs clear). Must complete before
+  // T_tolerance + T_clean.
+  uint32 cleanup_sec = 2;
+  // warden_countdown_sec (T_warden): the in-VM warden's single countdown,
+  // reset only by OP_MEM_STATS heartbeats. Expiry with a live mount exits the
+  // warden, killing the VM as a last-resort mount release.
+  uint32 warden_countdown_sec = 3;
+  // isolation_sec (T_isolation): the sandlot's DONE-phase wait after cleanup
+  // completes before reconnecting. Must exceed T_safe so that by the time the
+  // sandlot can re-establish a stream (and a new gateway could claim its
+  // sandfs), the old mounts are provably released. The gateway validates
+  // T_isolation > T_safe at connect and rejects the node otherwise.
+  uint32 isolation_sec = 4;
+}
+
+// VMInfo describes a single microVM on the node, including its spec.
+message VMInfo {
+  string vm_id = 1;
+  // spec_id identifies the VM's resource spec: "small", "medium", "large".
+  // Empty means default.
+  string spec_id = 3;
+}
+
+message HelloAck {
+  string gateway_id = 1;
+  uint32 max_concurrent_vms = 2;
+  // protocol_version is the NEGOTIATED ECHO: the NodeHello's protocol_version
+  // validated into the gateway's supported range and sent back — this
+  // connection speaks that version. An old sandlot inside a compat window
+  // ([min, newer]) receives its own version back and accepts; the exact-match
+  // check on both sides then guards every subsequent command. A gateway that
+  // acks a version the sandlot did not send is itself a contract violation —
+  // the sandlot aborts.
+  uint32 protocol_version = 3;
+  // reject_reason, when non-empty, is a NAMED rejection: the gateway is not
+  // accepting this connection (e.g. "roles not accepted: this gateway accepts
+  // [exec] but the instance advertises [prov] — point prov instances at a
+  // human/unified gateway") and closes the stream right after this ack. The
+  // instance logs the reason verbatim and moves to the next configured
+  // gateway address; it does NOT retry the same endpoint in a tight loop.
+  string reject_reason = 4;
+}
+
+// VMCommand is a request from gateway to sandlot.
+message VMCommand {
+  string command_id = 1;
+  // agent_id is the authenticated agent identity the gateway resolved from the
+  // caller's api_key (auth_resolve). Sandswap does not interpret it: sandlot
+  // records it as part of the egress identity binding (tap/ip -> agent/sandfs)
+  // published to the node-local binding region for third-party network policy
+  // enforcers. Sandlot treats it as opaque and requires it on mount-bearing
+  // commands.
+  string agent_id = 20;
+  oneof action {
+    UnmountRootfs unmount_rootfs = 6;
+    MountRootfsAndExecute mount_rootfs_and_execute = 8;
+    StatusExec status_exec = 9;
+    KillExec kill_exec = 10;
+    FileOp file_op = 12;
+    // CleanupOverlay unmounts a host-side read-only overlay mount at
+    // <volume_path>/rootfs/. Sent by the gateway before deleting a SandFS so
+    // the overlay mount point does not block os.RemoveAll (EBUSY).
+    // Only sent to the node currently holding the SandFS lease; stale overlays
+    // on other nodes are cleaned by sandlot's periodic overlay reaper.
+    CleanupOverlay cleanup_overlay = 13;
+  }
+}
+
+// UnmountRootfs is the unmount action: bind umount of /mnt/rootfs + clearing the
+// virtio-fs allowed_dirs filter so no agent directory remains visible.
+message UnmountRootfs {
+  string sandfs_id = 1;
+  string volume_path = 2;
+  // volume_epoch: the generation being released; a mismatch with the live
+  // binding is a superseded unmount and must not tear down the current mount.
+  string volume_epoch = 3;
+}
+
+// MountRootfsAndExecute is the combined attach+execute RPC.
+// Sandlot idempotently ensures the agent directory at volume_path is mounted at
+// /mnt/rootfs (reusing the VM already bound to sandfs_id if mounted; otherwise
+// picking a CLEAN VM locally), then runs command.
+// Cold/cross-node path: one gRPC round-trip instead of Attach + Execute, and one
+// warden mount_and_exec vsock call instead of separate mount + exec.
+// Warm/lease path: sandlot sees the sandfs already bound to a VM and just execs.
+message MountRootfsAndExecute {
+  string sandfs_id = 1;
+  string volume_path = 2;  // host-side agent directory; sandlot checks if mounted
+  string command = 3;
+  // background=true: spawn the command as a background exec and return
+  // immediately with exec_id + status="running" (no wait). The agent polls
+  // with StatusExec. background=false (default): block until the command
+  // completes or times out.
+  bool background = 5;
+  // timeout_ms: command timeout for sync execs (background ignores it —
+  // background execs are bounded by the VM lease). 0 = use the warden default.
+  uint32 timeout_ms = 6;
+  // lease_duration_ms: how long sandlot should hold this VM for the agent
+  // after the call (background) — replaces the default sticky idle timeout so
+  // a long background task survives across subsequent calls. 0 = use default
+  // sticky lease. Ignored for sync execs (they use the default sticky lease).
+  uint32 lease_duration_ms = 7;
+  // install_packages: when true, the warden retains 10 minimal capabilities
+  // (CAP_CHOWN, CAP_DAC_OVERRIDE, etc.) via the ambient capability mechanism
+  // so that package managers (apt-get/dpkg) can function inside the sandbox.
+  // The full 78-syscall seccomp deny list (plus the PID-1 argument guard and x32 range check) and PR_SET_NO_NEW_PRIVS are kept.
+  // When false (default), all capabilities are dropped (maximum isolation).
+  bool install_packages = 8;
+  // min_spec: minimum VM spec the sandfs requires (e.g. "medium"). Sandlot
+  // picks a CLEAN VM whose spec satisfies this (smallest-fitting-upgrade).
+  // Empty = any VM. Added when the gateway delegated VM selection to sandlot.
+  string min_spec = 9;
+  // template_ref is the template ref the gateway's identity record expects
+  // this volume to be serving. Sandlot compares it against the ref the node's
+  // host-side overlay was mounted from (tracked per volume): a mismatch means
+  // the template was swapped while this node held the old overlay — the stale
+  // overlay is unmounted and remounted from the volume's .template marker
+  // (storage truth) before the guest mounts. This is the swap-correctness
+  // backstop for nodes that were offline during a template swap. Zero shared-
+  // storage reads on the matching fast path. The marker wins on divergence
+  // (the gateway record is updated after the marker in the attach flow).
+  string template_ref = 10;
+  // volume_mode is the identity record's volume mode: "flat" or "overlay". The warden
+  // mounts according to THIS value, never by probing the volume's on-disk
+  // layout (a flat volume is agent-writable, so a planted rootfs/ directory
+  // must not be able to flip the mount into overlay semantics). Empty is
+  // refused on the node (no compatibility window: the field ships with the
+  // protocol before first production use).
+  string volume_mode = 11;
+  // volume_epoch is the per-volume random identity minted at sandfs create.
+  // The exec node compares it with the signed stamp so a stale record for a
+  // reused sandfs id cannot mount the new owner's volume.
+  string volume_epoch = 12;
+}
+
+// StatusExec polls a background exec: returns its liveness (running/done/killed/
+// not_found) and a tail of its captured output log.
+message StatusExec {
+  string sandfs_id = 1;
+  string exec_id = 2;
+}
+
+// KillExec kills a background exec by exec_id (SIGKILL the whole process group).
+message KillExec {
+  string sandfs_id = 1;
+  string exec_id = 2;
+}
+
+// CleanupOverlay unmounts a host-side read-only overlay mount so the SandFS
+// directory can be deleted. Sent by the gateway before SandFS deletion.
+message CleanupOverlay {
+  string volume_path = 1;  // host-side sandfs directory (e.g. /var/sandswap/volumes/sandfs-abc)
+}
+
+// FileOp is the unified file I/O RPC: a single message carries a sub-opcode
+// (action) that selects which operation to perform. This avoids 7 separate
+// proto messages, 7 handler methods, and 7 mount-check code paths.
+// All paths are relative to /workspace inside the chroot (/mnt/rootfs/workspace).
+//
+// If volume_path is set and the rootfs is not yet mounted, sandlot will mount
+// it first (same logic as MountRootfsAndExecute) and then perform the file op —
+// combining mount + file op in one gRPC round-trip. If the rootfs is already
+// mounted with the same volume_path, the mount is skipped (warm path).
+message FileOp {
+  string sandfs_id = 1;   // resolves to the VM holding this sandfs
+  string action = 2;   // "read"|"write"|"stat"|"list_dir"|"mkdir"|"remove"|"rename"
+  string path = 3;      // relative to /workspace (e.g., "data/file.txt")
+  string new_path = 4;  // rename only: destination path
+  int64 offset = 5;     // read/write: byte offset (-1 = append for write)
+  int64 length = 6;     // read: max bytes (0 = up to cap)
+  uint32 mode = 7;      // write/mkdir: file/dir permissions (0 = default)
+  bool recursive = 8;   // remove: recursive (rm -rf)
+  uint32 depth = 9;     // list_dir: recursion depth (0 = flat)
+  bytes data = 10;      // write: raw file content (binary-safe)
+  string volume_path = 11; // host-side agent directory; sandlot mounts if not already mounted
+  // min_spec: minimum VM spec for the cold-mount case (picking a CLEAN VM).
+  // Empty = any VM.
+  string min_spec = 12;
+  // template_ref: same semantics as MountRootfsAndExecute.template_ref — the
+  // expected overlay template ref for the swap-staleness check on the node.
+  string template_ref = 13;
+  // volume_mode: same semantics as MountRootfsAndExecute.volume_mode. Required on the cold
+  // path (volume_path set); ignored on the warm path (already mounted).
+  string volume_mode = 14;
+  // volume_epoch: same semantics as MountRootfsAndExecute.volume_epoch.
+  string volume_epoch = 15;
+}
+
+// CommandResponse is sandlot's reply to a VMCommand.
+message CommandResponse {
+  string command_id = 1;
+  bool success = 2;
+  string error = 3;
+  string vm_id = 4;
+  string stdout = 6;
+  // exit_code is the real process exit code for sync exec (0–255, 128+signum
+  // for signal death). Only meaningful when status="done". Not set (0) for
+  // timed_out, background ops, or FileOp (which uses success/error instead).
+  int32 exit_code = 7;
+  // stdout_raw carries binary-safe response data (FileOp READ of non-UTF-8
+  // content). When set, takes precedence over stdout (which must be valid
+  // UTF-8 for protobuf string fields). The gateway checks this field first.
+  bytes stdout_raw = 11;
+  // exec_id is set for background MountRootfsAndExecute (identifies the started
+  // background exec for later StatusExec/KillExec).
+  string exec_id = 8;
+  // status is a string sentinel for exec / status_exec / kill_exec replies:
+  // "done" | "running" | "killed" | "timed_out" | "expired" | "not_found".
+  // For sync exec: "done" (exit_code holds the real code) or "timed_out".
+  // For FileOp: success/error is carried in the `success`/`error` fields.
+  string status = 9;
+  // stderr carries the command's standard error output (sync exec only).
+  string stderr = 12;
+  // exec_duration_ns is the warden-monotonic wall time in nanoseconds of the
+  // operation this response closes — i.e. the WARDEN's share of the latency.
+  // For the warm sync exec (OP_EXEC) this is spawn-to-wait; for the cold
+  // combined op (OP_MOUNT_AND_EXEC) it is the warden-side total (mount +
+  // exec), so the in-guest mount is attributed to warden and
+  // sandlot_duration_ns − exec_duration_ns reduces to sandlot processing +
+  // set-fs + vsock RTT; for UnmountRootfs it is the unmount_workspace wall
+  // time (cgroup.kill + teardown + umount + drop_caches).
+  // Zero for all other ops and for error responses.
+  uint64 exec_duration_ns = 13;
+  // sandlot_duration_ns is the sandlot-side processing time from receiving the
+  // gateway command to building the response, measured with time.Since() in
+  // nanoseconds. Includes set-fs, vsock RTT, and warden execution time.
+  // Populated for MountRootfsAndExecute, FileOp (mount-bearing), and
+  // UnmountRootfs (total unmount handler time).
+  uint64 sandlot_duration_ns = 14;
+  // spec is the actual VM spec that served the command (e.g. "medium"). Set on
+  // mount-bearing ops (MountRootfsAndExecute, FileOp) so the gateway can track
+  // per-spec bound capacity accurately: the gateway reserves bound
+  // under the request's min_spec provisionally, then corrects to this actual spec
+  // on the response. Empty for ops that don't bind a VM.
+  string spec = 15;
+  // error_code is a structured, machine-readable error class for failed
+  // responses (success=false). It decouples the gateway's error handling from
+  // fragile substring matching on the human-readable `error` string. Currently
+  // used values:
+  //   "NO_AVAILABLE_VM" — sandlot had no fitting CLEAN VM (over-subscription);
+  //     the gateway retries on another node without marking the sandfs dirty.
+  // Empty for successful responses and for errors without a specific code
+  // (the gateway falls back to substring matching on `error`).
+  string error_code = 16;
+}
+
+// VMEvent is an async notification from sandlot.
+enum VMEventType {
+  VM_EVENT_UNKNOWN = 0;
+  VM_EVENT_CRASHED = 2;
+  VM_EVENT_VSOCK_READY = 3;
+  // The node rejected a VM creation because the host lacks memory for it
+  // (memLedger admission). vm_id is the would-be VM; message carries the
+  // numbers (requested / reserved / budget / MemAvailable). The node does NOT
+  // retry the launch on its own — the pool refills only via the 60s reconcile
+  // tick, and only if memory has actually freed up.
+  VM_EVENT_RESOURCE_SHORTAGE = 4;
+}
+
+message VMEvent {
+  string vm_id = 1;
+  VMEventType type = 2;
+  string message = 3;
+}
+
+message Heartbeat {
+  uint32 active_vm_count = 1;
+  repeated string active_vm_ids = 2;
+  // Sandswap OOM B: per-VM free (MemAvailable) memory, reported by each VM's
+  // warden and polled by sandlot on each heartbeat. The gateway pool manager
+  // destroys+recreates a VM whose free memory drops below the reclaim threshold.
+  repeated VmMemInfo vm_mem = 3;
+  // SpecCapacity: per-spec CLEAN (available) and total VM counts on this node.
+  // Under delegation the gateway selects a NODE (not a VM) for cold mounts, so
+  // it needs per-spec clean capacity to know which node can serve a sandfs's
+  // min_spec. Sandlot computes "clean" as VMs not currently bound to a sandfs.
+  repeated SpecCapacity spec_capacity = 4;
+  // NodeMetrics: time-integrated node load signals for scheduling
+  // EWMA/window summaries, updated by a 1s tick +
+  // exec events — never raw events.
+  NodeMetrics metrics = 5;
+
+  // Prov-role seed generations (prov instances only; empty on exec
+  // nodes). seed_generation is the fingerprint of the naming generation the
+  // instance is CURRENTLY deriving volume names from, seed_staged_generation
+  // the one a rotation has staged (seed_staged true while the window is open).
+  // Fingerprints are one-way 8-hex hashes (volname.Fingerprint) — never seed
+  // material. The gateway projects these per node in /stats so a rotation can
+  // prove that EVERY prov instance converged before the maintenance window is
+  // closed: with storage ops spread across prov instances, an instance that
+  // still runs the old generation silently splits tenants.
+  string seed_generation = 6;
+  string seed_staged_generation = 7;
+  bool seed_staged = 8;
+
+  // Egress identity binding in force on this node: "none" (no enabler — the
+  // guest is not identity-bound; production must not run this way),
+  // "shm"/"bpf" (Carrier A binding region) or "routed-ipv6" (Carrier B
+  // identity-in-address). Projected per node in /stats. Empty on prov-only
+  // instances (they run no VMs and have no egress binding).
+  string egress_binding = 9;
+}
+
+// NodeMetrics carries a sandlot node's scheduling-relevant load signals,
+// computed sandlot-side and reported compressed in the heartbeat.
+message NodeMetrics {
+  double duty_short = 1;        // EWMA busy ratio (0..1), τ=15s
+  double duty_long = 2;         // EWMA busy ratio, τ=5min
+  double duty_var = 3;          // temporal volatility of duty (0..1)
+  double exec_rate = 4;         // EWMA execs/sec
+  double avg_exec_ms = 5;       // EWMA exec duration (ms)
+  double avg_gap_ms = 6;        // EWMA inter-exec gap (ms)
+  double host_cpu_pct = 7;      // host CPU utilization percent
+  uint64 host_mem_avail_mb = 8; // host MemAvailable (MiB)
+  uint32 active_sandfs = 9;     // sandfs currently bound on this node
+  uint32 active_bg_execs = 10;  // running background execs across VMs
+  uint32 total_vms = 11;        // live VMs on this node
+  int64 idle_duration_ms = 12;  // ms since the last exec started (0 if none)
+  // max_duty_window: 60s peak busy ratio (0..1) — the tail saturation signal
+  // used by the gateway.s hard floor.
+  double max_duty_window = 13;
+  // duty_daily: EWMA busy ratio with τ≈1day — durable/trend headroom for
+  // long-lived placement.
+  double duty_daily = 14;
+  // peak_concurrent_execs: all-time high-water mark of concurrent sync execs
+  // on this node (the parallelism the exec_slots pool provides; reset only on
+  // sandlot restart). 0 = serial node historic peak.
+  uint32 peak_concurrent_execs = 15;
+  // slot_wait_ms: EWMA of warden-pool acquire queue wait (ms; 0 = requests
+  // never queued behind exec_slots). Grayscale signal for pool sizing.
+  double slot_wait_ms = 16;
+  // slot_wait_events: cumulative acquires that had to queue.
+  uint64 slot_wait_events = 17;
+  // recycle_triggers: cumulative POLICY recycles — a VM deliberately destroyed
+  // instead of returned to CLEAN (distinct-agent/mount/use lifetime caps, the
+  // memory threshold, or pool scale-down). Failure-driven dirty destroys are
+  // not counted here.
+  uint64 recycle_triggers = 18;
+  // stranded_reservations_mb: guest-memory reservations (MiB) held by VMs
+  // whose destroy could NOT confirm process death (D-state sandvmm, failed
+  // lifecycle RPC) — released only by a sandlot restart. This is the silent
+  // pool-capacity loss an operator needs to see before "RESOURCE SHORTAGE"
+  // puzzles them. Gauge since process start (never decremented in-process).
+  uint64 stranded_reservations_mb = 19;
+  // stranded_cids: vsock CIDs stranded the same way (kept out of reuse while
+  // the previous holder's death is unconfirmed).
+  uint32 stranded_cids = 20;
+}
+
+// SpecCapacity is one spec's VM availability on a node.
+message SpecCapacity {
+  string spec_id = 1;
+  uint32 clean = 2; // VMs of this spec available to serve a new sandfs
+  uint32 total = 3; // live VMs of this spec
+  // min_clean_window: 60s min CLEAN VM count for this spec (tail floor —
+  // 0 when the window is not yet filled.
+  uint32 min_clean_window = 4;
+  // zero_clean_count: number of 60s-window ticks where clean hit 0 for this
+  // spec (saturation frequency).
+  uint32 zero_clean_count = 5;
+}
+
+// Sandswap OOM B: one VM's current free memory (bytes) as seen by its guest.
+message VmMemInfo {
+  string vm_id = 1;
+  uint64 mem_available_bytes = 2;
+  uint64 mem_total_bytes = 3; // guest MemTotal, for the reclaim-threshold ratio
+}
+
+// VmSpec defines a VM resource specification. Sent from sandlot to gateway
+// in NodeHello so the gateway can make spec-aware scheduling decisions
+// without duplicating spec definitions in its own config.
+message VmSpec {
+  string id = 1;        // "small", "medium", "large", etc.
+  uint32 vcpus = 2;
+  uint64 memory_mb = 3;
+  // Per-VM sync-command concurrency: the size of the sandlot's per-VM warden
+  // connection pool (one in-flight request per connection). Informational for
+  // the gateway (capacity display); enforcement lives in sandlot.
+  uint32 exec_slots = 4;
+}
+
+// ─── Provision commands (sandfs + template lifecycle on shared storage) ─────
+
+// ProvisionCommand is a request from the gateway to a PROV-role sandlot
+// instance. Routing invariant: the gateway sends these ONLY to connections
+// advertising "prov" in NodeHello.roles, never to exec-only nodes; the
+// mirrored VMCommand only goes to exec connections. All ops are idempotent
+// (retry-safe on another instance): EnsureVolume re-runs through its
+// provisioning marker, DeleteVolume treats ENOENT as success, template ops
+// are content-addressed or create-only.
+message ProvisionCommand {
+  string command_id = 1;
+  // deadline_ms bounds the whole operation on the node (0 = node default,
+  // 300s — template pulls can move GBs). The node cancels at the deadline.
+  uint64 deadline_ms = 2;
+  oneof action {
+    EnsureVolume ensure_volume = 3;
+    DeleteVolume delete_volume = 4;
+    PullTemplate pull_template = 5;
+    PushTemplate push_template = 6;
+    SaveAsTemplate save_as_template = 7;
+    ListTemplates list_templates = 8;
+    StatTemplate stat_template = 9;
+    SwapTemplate swap_template = 10;
+    DeleteTemplate delete_template = 11;
+    VerifyVolume verify_volume = 12;
+  }
+}
+
+// EnsureVolume idempotently materializes sandfs_id's volume directory:
+// mkdir + setgid shared-group layout, seed per mode (flat: local-dir copy or
+// OCI blob stream-extract; overlay: workspace/ + home/ + .template marker),
+// auto-pulling the template ref when missing and an OCI registry is
+// configured. A ".provisioning" marker makes partial runs self-healing: a
+// retry wipes and redoes. The reply carries the template's declared min
+// resources so the create path needs no separate StatTemplate round trip.
+message EnsureVolume {
+  string sandfs_id = 1;
+  string mode = 2;          // "flat" | "overlay" (required, no auto-detect)
+  string template_ref = 3;  // required
+  // volume_epoch is written into the signed volume stamp; exec nodes compare
+  // it on every cold mount.
+  string volume_epoch = 4;
+}
+
+// DeleteVolume removes the volume directory. The gateway orchestrates the
+// unmount sweep + overlay cleanup over exec-role connections FIRST; this is
+// the terminal pure-FS step. ENOENT = success (idempotent).
+message DeleteVolume {
+  string sandfs_id = 1;
+}
+
+// VerifyVolume is a READ-ONLY identity check behind the gateway's
+// rootfs-path repoint endpoint (the volume-seed rotation renames volume
+// directories and must tell the control plane where they landed). The node
+// proves the caller-supplied directory IS this sandfs's volume: the path must
+// be contained under the node's volumes root and the directory must carry a
+// ".sandfs-id" stamp naming sandfs_id exactly. It never creates or modifies
+// anything — unlike EnsureVolume, which would materialize a missing path, a
+// repoint verification must not have that side effect.
+message VerifyVolume {
+  string sandfs_id = 1;
+  string rootfs_path = 2;
+}
+
+// SwapTemplate re-points a DETACHED overlay sandfs's volume at a new read-only
+// template: rewrites the .template marker (atomic tmp+rename), applies the
+// /home policy, and returns the new template's declared min resources. The
+// gateway only issues this while the sandfs record status is "detached"
+// (mounts provably released cluster-wide), so no overlay is live during the
+// swap. workspace/ is never touched. Idempotent: re-sending the same ref with
+// the same home policy is a no-op returning the same result.
+message SwapTemplate {
+  string sandfs_id = 1;
+  string template_ref = 2;
+  // home_policy: "keep" (default; /home/agent content carries over — it is
+  // plain files, at worst stale, never destructive to the new template),
+  // "archive" (rename to home.pre-attach-<unixts>, fresh empty home; newest
+  // archive kept, older ones pruned), "reset" (wipe + recreate).
+  string home_policy = 3;
+}
+
+// DeleteTemplate removes a template ref (and its now-unreferenced layers).
+// Overlay templates have a runtime dependency: every overlay sandfs's
+// .template marker names the ref and every cold mount reads refs/+layers/.
+// The node refuses with TEMPLATE_IN_USE while any volume's marker names the
+// ref (bounded parallel marker scan; flat templates skip the scan — flat
+// volumes copy content at creation and have no runtime dependency). Layer
+// deletion is reachability-GC'd: only layers/ entries referenced by NO
+// remaining ref file are removed. force=true skips the in-use check.
+message DeleteTemplate {
+  string template_ref = 1;
+  string mode = 2;           // "flat" | "overlay"; empty = auto-detect
+  bool force = 3;
+}
+
+message PullTemplate {
+  string template_ref = 1;
+  string mode = 2;          // "flat" | "overlay"; empty = "overlay"
+}
+
+message PushTemplate {
+  string template_ref = 1;
+  string mode = 2;          // empty = auto-detect (overlay ref first)
+}
+
+// SaveAsTemplate snapshots a flat sandfs's volume into a local template.
+// Flat only: an overlay sandfs's rootfs is a read-only overlay mount.
+message SaveAsTemplate {
+  string sandfs_id = 1;
+  string template_ref = 2;
+  string description = 3;
+  uint32 vcpus = 4;         // 0 = source sandfs's value
+  uint64 memory_mb = 5;     // 0 = source sandfs's value
+}
+
+message ListTemplates {}
+
+// StatTemplate resolves a ref WITHOUT materializing anything: existence,
+// mode(s), and the declared min resources (the create-time sizing input).
+message StatTemplate {
+  string template_ref = 1;
+}
+
+// ProvisionResponse is the prov instance's reply to a ProvisionCommand.
+// Result fields are op-specific; unused ones stay zero.
+message ProvisionResponse {
+  string command_id = 1;
+  bool success = 2;
+  string error = 3;
+  // error_code mirrors CommandResponse's convention (machine-readable class
+  // instead of substring matching). Node-side values:
+  //   "INVALID_ARGUMENT"  — malformed ids/refs rejected by the node's own
+  //                         validation (never trust the caller's strings)
+  //   "TEMPLATE_NOT_FOUND" — ref missing locally and auto-pull unavailable
+  string error_code = 4;
+  // EnsureVolume: the volume root path (informational record-keeping).
+  string rootfs_path = 5;
+  // EnsureVolume/StatTemplate: the template's declared min resources.
+  uint32 min_vcpus = 6;
+  uint64 min_memory_mb = 7;
+  // StatTemplate: which modes exist for the ref ("flat", "overlay").
+  repeated string modes = 8;
+  // Pull/Push results.
+  string digest = 9;
+  int64 size_bytes = 10;
+  int64 push_time_ms = 11;
+  // SaveAsTemplate result: the local template path.
+  string path = 12;
+  // ListTemplates result.
+  repeated TemplateSummary templates = 13;
+  // Node-side processing time (nanoseconds), mirrors sandlot_duration_ns.
+  uint64 duration_ns = 14;
+  // PullTemplate result: the template manifest's display identity (the
+  // gateway's HTTP response surfaces these verbatim).
+  string name = 15;
+  string version = 16;
+  // PushTemplate result: the pushed layer digests (the HTTP contract's
+  // "layers" array).
+  repeated string push_layers = 17;
+  // SaveAsTemplate result: the local template size (KiB).
+  int64 size_kb = 18;
+  // DeleteTemplate refusal (TEMPLATE_IN_USE): how many volumes reference the
+  // template and a sample of their ids (the HTTP 409 payload).
+  uint32 in_use_count = 19;
+  repeated string in_use_sample = 20;
+  // EnsureVolume/SwapTemplate: the op auto-pulled the template ref from the
+  // OCI registry because it was missing from this node's local store (the
+  // gateway surfaces this as pull_status "pulled" on the create response; an
+  // old node simply leaves it false = "cached").
+  bool pulled = 21;
+}
+
+// TemplateSummary is one local template (one mode of one ref).
+message TemplateSummary {
+  string ref = 1;
+  string mode = 2;
+  string description = 3;
+  uint32 min_vcpus = 4;
+  uint64 min_memory_mb = 5;
+  // Manifest display identity (the gateway's HTTP list response surfaces
+  // these verbatim; they may differ from the ref string).
+  string name = 6;
+  string version = 7;
+}

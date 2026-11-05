@@ -1,0 +1,255 @@
+# Sandlot Provision Plane — Deployment (NOT a DaemonSet).
+#
+# Runs the prov-role sandlot: sandfs + template lifecycle on the shared
+# storage PVCs (volume materialization, deletion, OCI pull/push, template
+# listing). The human gateway holds NO storage of its own — every
+# sandfs/template API call routes over the gateway's stream to one of these
+# pods (round-robin across connected replicas; a pod restart just drops it
+# from the set, ops are idempotent and retried elsewhere).
+#
+# Why a Deployment, not a DaemonSet:
+#   - No node affinity: this pod needs NO KVM, NO vsock, NO TAP, NO hostPath —
+#     only the storage PVCs and cluster networking. It can run on any node,
+#     including dedicated provisioning nodes (nodeSelector/taints are ops
+#     policy; add them here if the cluster partitions workload classes).
+#   - Provisioning load is independent of compute fleet size: scale replicas
+#     with template/volume churn, not with KVM hosts.
+#
+# Security posture — deliberately the weakest-privilege pod in the fleet:
+#   - runAsNonRoot 1000, no privileged, no capabilities, no devices, no
+#     hostNetwork/hostPID, readOnlyRootFilesystem, RuntimeDefault seccomp.
+#   - The storage PVCs are the only shared state it can touch; fsGroup 65536
+# (the RESERVED sandbox gid, ) matches the other storage-plane pods
+#     (sandlot DaemonSet PVC writers) so the kubelet's per-restart chown never
+#     strips access — and no other workload's default ids land in the group.
+#   - NetworkPolicy: the generic sandswap-default policy covers this pod
+#     (ingress in-namespace, egress in-namespace + DNS). OCI registry egress
+#     is NOT permitted by default — when oci_registry is configured, add the
+#     registry CIDR/port to the egress rules (see networkpolicy.yaml).
+#
+# TLS: dials the human gateway's stream (mTLS) with ITS OWN client pair from
+# the sandlot-certs-prov Secret (CN=sandlot-prov). The gateway binds a stream
+# hello's declared node_id to the presented certificate's CN by EXACT match
+# (gateway/stream/server.go verifyNodeIdentity), and a cluster-wide shared
+# certificate is refused by name — so this singleton identity gets its own
+# minted pair, never a compute node's. Node id: the pod passes
+# `-node-id=sandlot-prov` explicitly and a Secret -> emptyDir certs-copy
+# materializes /certs (the Secret's own file modes are not dependable).
+#
+# Image: sandswap/sandlot-boxout (ubuntu + the static sandlot binary +
+# ca-certificates — see sandlot-boxout.Dockerfile). Deliberately the MINIMAL
+# sandlot image: this pod needs no sandvmm, no iproute2, no vsockguard. The
+# Deployment is applied in BOTH deploy modes, so BOTH modes' image sets must
+# import it (build-images.sh + the entry scripts' IMAGE_LIST preflight guard).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandlot-prov
+  namespace: sandswap
+  labels:
+    app: sandlot-prov
+spec:
+  # One replica serves the whole provisioning load comfortably (ops are
+  # human/onboarding-paced, not agent-paced). Scale up for large template
+  # migrations — but NOTE the stream identity: every replica is the SAME node
+  # id (`sandlot-prov`, a fixed CN-bound certificate), and the gateway keys
+  # connections by node id, so a second replica would take over the first's
+  # connection instead of joining it. Scaling past one replica is a
+  # deliberate change: give each replica its own node id + minted pair first.
+  # Recreate (not RollingUpdate): during an upgrade the old and new pods must
+  # not hold the same node id at the same time.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sandlot-prov
+  template:
+    metadata:
+      labels:
+        app: sandlot-prov
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # Must match the sandlot DaemonSet's PVC writers (65536): the kubelet
+        # chowns the PVC to this group on every (re)start — differing values
+        # make pods strip each other's access on restart.
+        fsGroup: 65536
+        # sandtmpl: template-store metadata group (refs/). The provision pod
+        # WRITES refs and must be a member to chgrp them; sandvmm is never
+        # granted this group.
+        supplementalGroups:
+          - 982
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Re-materialize the mTLS certs with ENFORCED modes. The secret
+        # volume's defaultMode is not dependable (k3s's kubelet writes Secret
+        # files 0777 regardless — probed live), and while THIS pod has no
+        # uid-987 process (the exposure that forces the pattern on the compute
+        # DaemonSet), a 777 client key readable by any future in-pod uid is a
+        # posture gap not worth carrying: the copy runs as this pod's own
+        # identity (1000) and the key lands 0400 owner-only.
+        - name: certs-copy
+          image: sandswap/sandlot-boxout:latest
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              # install(1), not cp+chmod: restart-safe over a leftover 0400 key
+              # (cp cannot truncate its own write-less 0400 file);
+              # files land owned by the pod uid with exact modes.
+              install -m 0644 /certs-src/client.crt /certs/client.crt
+              install -m 0644 /certs-src/ca.crt /certs/ca.crt
+              install -m 0400 /certs-src/client.key /certs/client.key
+              echo "certs: key=$(stat -c '%a %u:%g' /certs/client.key)"
+          volumeMounts:
+            - name: sandlot-certs-src
+              mountPath: /certs-src
+              readOnly: true
+            - name: sandlot-certs
+              mountPath: /certs
+      containers:
+        - name: sandlot-prov
+          image: sandswap/sandlot-boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - --roles=prov
+            - --config=/config/sandlot-prov.yaml
+            # The provision plane's singleton node identity — the CN of the
+            # pair in the sandlot-certs-prov Secret (the gateway binds the two
+            # by exact match). Fixed on purpose: unlike the compute DaemonSet
+            # (node id = spec.nodeName), every replica of this Deployment is
+            # the one prov identity (see the replicas note above).
+            - --node-id=sandlot-prov
+            # TLS paths (volume-mounted, must be CLI overrides)
+            - --tls-cert=/certs/client.crt
+            - --tls-key=/certs/client.key
+            - --tls-ca=/certs/ca.crt
+            # OCI registry credentials (only when provision.oci_registry is
+            # set in the ConfigMap). The ConfigMap must never carry a secret,
+            # so credentials come from a Secret via env + $(VAR) expansion:
+            #   kubectl -n sandswap create secret generic sandlot-registry-auth \
+            #       --from-literal=username=robot --from-literal=password=...
+            # then uncomment the env entries AND the two args below TOGETHER —
+            # k8s leaves an undefined $(VAR) as a literal, so a half-applied
+            # edit would pass the literal string to the flag. The value is
+            # then visible in the pod spec (/proc/<pid>/cmdline); cert/key/CA
+            # avoid that by being file PATHS (mount a Secret volume and pass
+            # --registry-cert/key/ca), but username/password/token are
+            # value-only flags.
+            # - --registry-username=$(REGISTRY_USERNAME)
+            # - --registry-password=$(REGISTRY_PASSWORD)
+          env:
+            - name: HOME
+              value: /tmp
+            # Template-store metadata group (numeric: the pod has no /etc/group
+            # entry). Must match supplementalGroups above.
+            - name: SANDSWAP_TPL_GROUP
+              value: "982"
+            # - name: REGISTRY_USERNAME
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: sandlot-registry-auth
+            #       key: username
+            # - name: REGISTRY_PASSWORD
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: sandlot-registry-auth
+            #       key: password
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+            # ONE KEY PER GENERATION: the Secret holds one key per naming generation
+            # ("gen-3"-style; the legacy "volume-seed" key is the first one) and the
+            # ConfigMap's volume_seed_file/volume_seed_next_file are the POINTER — see the
+            # contract in configmaps.yaml and install-kubernetes.md §7. Never rewrite the
+            # key a live generation points at, never delete a generation key.
+            # Volume-name seed (secret): readable by this pod's supplementary
+            # group only (defaultMode 0440 + fsGroup 65536 — the kubelet sets
+            # the file to root:<fsGroup> with EXACTLY these perm bits; no
+            # implicit group read). The compute pods never mount it: a
+            # compromised FUSE daemon must not be able to read the seed, or
+            # every derived name becomes guessable again.
+            - name: sandswap-volume-seed
+              mountPath: /sandswap-seed
+              readOnly: true
+            - name: sandlot-certs
+              mountPath: /certs
+              readOnly: true
+            - name: sandlot-prov-config
+              mountPath: /config
+              readOnly: true
+            # The one-sandlot-per-host role lock lives here. Pod-local emptyDir
+            # is exactly right: the lock is per-PROCESS-tree, and this pod has
+            # no other sandlot instance.
+            - name: run-sandswap
+              mountPath: /run/sandswap
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            # Template pulls stream GBs through this process; the limit is a
+            # safety rail, raise it for large-template fleets.
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: sandswap-volumes
+          persistentVolumeClaim:
+            claimName: sandswap-volumes
+        - name: sandswap-templates
+          persistentVolumeClaim:
+            claimName: sandswap-templates
+        # Created ONCE by the deploy tooling (deploy-lib.sh), never
+        # regenerated — a regenerated seed orphans every existing volume
+        # name. Cleanup scripts must NOT delete it between deploys.
+        # defaultMode is best-effort: at least k3s writes Secret files 0777
+        # regardless (probed live). That stays within the threat model here —
+        # the seed's reader-to-exclude is the sandvmm identity (987), which
+        # lives in the COMPUTE pods and never mounts this Secret; this pod's
+        # only processes run as uid 1000, the seed's legitimate reader. On a
+        # healthy kubelet the 0440 also bites for real.
+        #
+        # fsGroup 65536 is this shape's equivalent of the bare-metal rule that
+        # the seed is scoped to the DEDICATED provision group, never to a
+        # group a sandvmm-identity process carries (see
+        # deploy/baremetal/common.sh, SANDPROV_GROUP): the kubelet makes every
+        # Secret file root:<fsGroup> and adds the fsGroup to THIS pod's
+        # processes — the pod that runs the prov role and nothing else.
+        - name: sandswap-volume-seed
+          secret:
+            secretName: sandswap-volume-seed
+            defaultMode: 0440
+        - name: sandlot-certs
+          emptyDir: {}
+          # Re-materialized by the certs-copy init container with enforced
+          # modes (see there). defaultMode on a Secret volume is not
+          # dependable (k3s writes 0777 — probed live).
+        - name: sandlot-certs-src
+          secret:
+            # The PROV singleton's own minted pair (CN=sandlot-prov). Never a
+            # compute node's — that pair carries a different CN and the
+            # gateway refuses the mismatch by name.
+            secretName: sandlot-certs-prov
+        - name: sandlot-prov-config
+          configMap:
+            name: sandlot-prov-config
+        - name: run-sandswap
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,3 @@
+[codespell]
+skip = .git,output,target,go.sum,*.lock,vmlinux.h,vmm
+ignore-words-list = unparseable,passt,te,ore,aFile,statics,entrie,keep-alives,re-used,disjointness,Dake,dake

@@ -1,0 +1,145 @@
+#!/bin/bash
+# Copyright 2026 Chaoyi Huang. All rights reserved.
+#
+# SPDX-License-Identifier: BUSL-1.1
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+#
+# seed-fetch.sh — TEMPLATE for the seed injection hook of a prov host.
+#
+# Copy to /usr/local/lib/sandswap/seed-fetch.sh (mode 0755 root), replace
+# fetch_generation() with YOUR store's read, and enable
+# sandswap-seed-fetch.service. sandswap deliberately ships no secret-store
+# client: what it promises is the CHANNEL and the rotation protocol, not the
+# store.
+#
+# The contract (docs/deployment/install-baremetal.md, "Seed injection channels"):
+#   * one FILE per generation, at the absolute path the prov config names
+#     (provision.volume_seed_file / volume_seed_next_file), e.g.
+#     /run/sandswap/seed/gen-3
+#   * write ATOMICALLY (temp file in the same directory + mv). The instance
+#     re-reads on fsnotify within ~200ms and refuses a torn value, but a stable
+#     torn value would look like an ordinary edit
+#   * scope root:<prov group> 0640, directory 0750 — the sandvmm identity must
+#     not read the seed, and nobody else may REPLACE it
+#   * NEVER rewrite the file a live generation points at and NEVER delete a
+#     generation file: a rotation points the config at a NEW file, and an
+#     aborted window is recovered by re-staging the same file
+#   * a tmpfs path (/run/...) is wiped at reboot — that is the point; this unit
+#     re-runs at every boot
+#
+# The seed is the index key of every volume's on-disk name: never log it, never
+# pass it in argv (/proc/<pid>/cmdline is world-readable), never write it
+# anywhere but the generation file.
+set -euo pipefail
+
+CONFIG="${SANDSWAP_PROV_CONFIG:-/etc/sandswap/sandlot-prov.yaml}"
+
+log()  { echo "[seed-fetch] $*"; }
+die()  { echo "[seed-fetch] ERROR: $*" >&2; exit 1; }
+
+# The generation files are scoped to the DEDICATED provision group (sandprov)
+# in every deployment shape — the same contract sandswap_ensure_volume_seed
+# applies to the minted seed. The SHAPE variable (prov-user.env) names which
+# identity READS the seed; the group is what scopes the read. In the merged
+# shape SS_PROV_USER=sandlot, whose primary group is the shared group the
+# sandvmm identity (every VMM + the FUSE daemon) also belongs to — scoping a
+# generation file to it would make every tenant's derived name computable.
+SS_PROV_USER="sandprov"
+if [[ -f /etc/sandswap/prov-user.env ]]; then
+    # shellcheck disable=SC1091
+    . /etc/sandswap/prov-user.env
+    SS_PROV_USER="${SS_PROV_USER:-sandprov}"
+fi
+PROV_GROUP="${SANDPROV_GROUP:-sandprov}"
+
+# fetch_generation <generation>  -> the seed (hex or base64) on stdout.
+#
+# Replace the body with your store's read. The value goes to STDOUT only — it
+# must never appear in argv, in a log line, or in a temp file outside the
+# generation path.
+#
+#   Vault KV v2:   VAULT_ADDR=https://vault.example:8200 \
+#                    vault kv get -field=seed secret/sandswap/volume-seed/gen-3
+#   AWS:           aws secretsmanager get-secret-value \
+#                    --secret-id sandswap/volume-seed/gen-3 --query SecretString --output text
+#   GCP:           gcloud secrets versions access latest --secret=sandswap-seed-gen-3
+#   systemd cred:  cat "$CREDENTIALS_DIRECTORY/gen-3"      (pair with LoadCredentialEncrypted=)
+#   sealed file:   systemd-creds decrypt /etc/credstore.encrypted/gen-3 -
+fetch_generation() {
+    local generation="$1"
+    echo "[seed-fetch] replace fetch_generation() in $0 with your store's read (generation: $generation)" >&2
+    return 1
+}
+
+# Every absolute seed path the config names, current and staged.
+# A config that cannot be READ or PARSED is fatal, and deliberately distinct
+# from "no seed FILE paths configured": both used to leave the target list
+# empty, so a typo'd path (or an unreadable config) reported a successful
+# no-op while the prov instance went on refusing to start. The parser's exit
+# status is checked (a process substitution's is not).
+[[ -r "$CONFIG" ]] || die "cannot read the prov config $CONFIG — nothing was fetched"
+PARSE_OUT="$(mktemp)"
+trap 'rm -f "$PARSE_OUT"' EXIT
+python3 - "$CONFIG" > "$PARSE_OUT" <<'PY' || die "cannot parse $CONFIG — nothing was fetched"
+import os, re, sys
+cfg = sys.argv[1]
+paths = []
+for line in open(cfg):
+    line = line.split("#", 1)[0]
+    m = re.match(r'\s*volume_seed(_next)?_file\s*:\s*(.+?)\s*$', line)
+    if not m:
+        continue
+    p = m.group(2).strip().strip('"')
+    paths.append(p if os.path.isabs(p) else os.path.join(os.path.dirname(cfg), p))
+seen = set()
+for p in paths:
+    if p not in seen:
+        seen.add(p)
+        print(p)
+PY
+mapfile -t TARGETS < "$PARSE_OUT"
+rm -f "$PARSE_OUT"
+trap - EXIT
+if [[ "${#TARGETS[@]}" -eq 0 ]]; then
+    log "no seed FILE paths in $CONFIG — nothing to fetch (inline seeds need no injection)"
+    exit 0
+fi
+
+for target in "${TARGETS[@]}"; do
+    value="$(fetch_generation "$(basename "$target")")" \
+        || die "cannot fetch the generation for $target — the prov instance refuses to start without a readable CURRENT generation"
+
+    # Sanity BEFORE installing: hex or base64, >= 32 bytes decoded. A malformed
+    # value would be refused by the instance anyway; failing here keeps the
+    # previous (working) file in place. The value is piped, never argv.
+    printf '%s' "$value" | python3 -c '
+import base64, binascii, sys
+raw = sys.stdin.read().strip()
+if not raw:
+    sys.exit(1)
+try:
+    b = binascii.unhexlify(raw)
+except Exception:
+    try:
+        b = base64.b64decode(raw, validate=True)
+    except Exception:
+        sys.exit(1)
+sys.exit(0 if len(b) >= 32 else 1)
+' || die "the value fetched for $target is not a usable seed (hex or base64, >= 32 bytes decoded)"
+
+    dir="$(dirname "$target")"
+    install -d -m 0750 -o root -g "$PROV_GROUP" "$dir"
+    tmp="$dir/.$(basename "$target").new.$$"
+    ( umask 027; printf '%s\n' "$value" > "$tmp" )
+    chown "root:$PROV_GROUP" "$tmp"
+    chmod 0640 "$tmp"
+    mv -f "$tmp" "$target"
+    log "materialized $target (root:$PROV_GROUP 0640, atomic; read by $SS_PROV_USER through the $PROV_GROUP group grant)"
+done
+log "done — ${#TARGETS[@]} generation file(s) in place"

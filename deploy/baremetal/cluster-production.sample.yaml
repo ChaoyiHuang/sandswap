@@ -1,0 +1,45 @@
+# Sample production-cluster config for deploy-cluster-multi-gw.sh
+# 2 exec GW + 1 human GW + etcd + N sandlots + sandns
+etcd:
+  endpoints:
+    - "https://etcd1.example.com:2379"
+    - "https://etcd2.example.com:2379"
+    - "https://etcd3.example.com:2379"
+shared_storage:
+  type: nfs
+  mount_point: /mnt/sandswap
+  nfs_server: nfs1.example.com
+  nfs_export: /export/sandswap
+dns:
+  host: dns1.example.com
+  agent_domain: sandswap.local
+  stream_domain: sandswap-stream.local
+  # No gateway list: sandns builds its candidate set entirely from etcd
+  # self-registration — each gateway writes /sandswap/gateway/{id}
+  # (gateway_url + stream_addr) at startup; health records mark liveness and
+  # load records mark score.
+gateways:
+  exec:
+    # >= 2 exec gateways required. host is required; ip / agent_port /
+    # stream_port are optional (defaults: resolve host, 3000, 9998).
+    - host: gw1.example.com
+      ip: "10.0.1.10"
+    - host: gw2.example.com
+      ip: "10.0.1.11"
+  human:
+    - host: gw1.example.com
+sandlots:
+  # per-sandlot: host/node_id required; pool/subnet optional;
+  # net_gateway_ip = guest-network bridge IP on that host (IPv4 inside
+  # subnet, .1 by convention) — the gateway SERVICE address is not
+  # configured here (gateways section above / stream DNS domain).
+  - host: sandlot1.example.com
+    node_id: sandlot-1
+    pool: "medium:5"
+    subnet: "10.188.1.0/24"
+    net_gateway_ip: "10.188.1.1"  # guest-network bridge IP on this host (NOT the GW service address)
+  - host: sandlot2.example.com
+    node_id: sandlot-2
+    pool: "medium:5"
+    subnet: "10.188.2.0/24"
+    net_gateway_ip: "10.188.2.1"

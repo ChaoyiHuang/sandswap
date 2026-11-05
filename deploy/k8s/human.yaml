@@ -1,0 +1,193 @@
+# Human Gateway Deployment — provides /human/* API for agent/SandFS CRUD.
+#
+# In K8s exec mode, the in-cluster gateway only serves /agent/* endpoints.
+# This human gateway provides the /human/* management API used during
+# initial setup (creating agents + SandFS) and ongoing ops.
+#
+# Not exposed externally by default — accessed via port-forward or
+# an optional Ingress. Scale to 0 when not in use.
+#
+# TLS: All /human/* endpoints are served over HTTPS. The human cert
+# is mounted from the gateway-certs Secret (human.crt/human.key).
+#
+# Storage: NONE. The human gateway holds no template manager and mounts no
+# shared storage — every sandfs/template op routes over its stream listener
+# (:9998) to a prov-role sandlot pod (the sandlot-prov Deployment), which owns
+# the storage PVCs.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-human
+  namespace: sandswap
+  labels:
+    app: gateway-human
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-human
+  template:
+    metadata:
+      labels:
+        app: gateway-human
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # enforced modes via certs-copy (Secret volumes land 0777 on
+        # this k3s); keys 0400, files chowned to the app uid (1000).
+        - name: certs-copy
+          image: sandswap/gateway:latest
+          imagePullPolicy: Never
+          # Runs as the pod's OWN identity (1000, inherited — no explicit
+          # runAsUser): pod-level runAsNonRoot forbids a uid-0 init container
+          # and kubelet v1.36 enforces it on init containers too
+          # (CreateContainerConfigError "runAsUser breaks non-root policy").
+          # Same pattern as the sandlot-prov pod: the emptyDir
+          # is 0777 so uid 1000 creates the copies itself, chmod(2) on its own
+          # files enforces the key modes, and the chown below is a permitted
+          # no-op. Reading the -src Secrets needs no privilege: this k3s writes
+          # Secret files 0777 (probed), and a healthy kubelet's 0644 default is
+          # world-readable as well.
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              # install(1) + no chown: see the gateway pod's certs-copy comment
+              # (restart-safe over leftover 0400 keys; non-root cannot chown the
+              # emptyDir dir itself).
+              for f in ca.crt stream.crt human.crt; do
+                [ -f "/gwcerts-src/$f" ] && install -m 0644 "/gwcerts-src/$f" "/certs/$f"
+              done
+              for f in stream.key human.key; do
+                [ -f "/gwcerts-src/$f" ] && install -m 0400 "/gwcerts-src/$f" "/certs/$f"
+              done
+              for f in ca.crt client.crt; do
+                [ -f "/etcdcerts-src/$f" ] && install -m 0644 "/etcdcerts-src/$f" "/etcd-certs/$f"
+              done
+              [ -f /etcdcerts-src/client.key ] && install -m 0400 /etcdcerts-src/client.key /etcd-certs/client.key
+              echo "human certs: $(stat -c '%a %u:%g' /certs/human.key 2>/dev/null)"
+          volumeMounts:
+            - name: gateway-certs-src
+              mountPath: /gwcerts-src
+              readOnly: true
+            - name: etcd-certs-src
+              mountPath: /etcdcerts-src
+              readOnly: true
+            - name: gateway-certs
+              mountPath: /certs
+            - name: etcd-certs
+              mountPath: /etcd-certs
+      containers:
+        - name: gateway-human
+          image: sandswap/gateway:latest
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - --mode=human
+            - --config=/config/human.yaml
+            # No OIDC issuer is configured by this deployer: the human plane
+            # is scoped by NetworkPolicy, so the explicit anonymous opt-out is
+            # required — without it the gateway refuses to start. The pod must
+            # bind :3100 for the Service, so the second acknowledgement
+            # (-allow-anonymous-human-public) is explicit here. Logged loudly
+            # at startup; configure authn.issuer to authenticate.
+            - --allow-anonymous-human
+            - --allow-anonymous-human-public
+            # etcd TLS paths (volume-mounted, must be CLI overrides)
+            - --etcd-ca=/etcd-certs/ca.crt
+            - --etcd-cert=/etcd-certs/client.crt
+            - --etcd-key=/etcd-certs/client.key
+            # Human TLS (HTTPS for /human/* endpoints)
+            - --human-tls-cert=/certs/human.crt
+            - --human-tls-key=/certs/human.key
+            # Stream listener TLS (mTLS for the prov instances)
+            - --stream-tls-cert=/certs/stream.crt
+            - --stream-tls-key=/certs/stream.key
+            - --stream-tls-ca=/certs/ca.crt
+          ports:
+            - containerPort: 3100
+            - name: stream
+              containerPort: 9998
+          env:
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: gateway-certs
+              mountPath: /certs
+              readOnly: true
+            - name: etcd-certs
+              mountPath: /etcd-certs
+              readOnly: true
+            - name: human-config
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+      volumes:
+        # emptyDirs re-materialized by certs-copy (enforced modes).
+        - name: gateway-certs
+          emptyDir: {}
+        - name: etcd-certs
+          emptyDir: {}
+        - name: gateway-certs-src
+          secret:
+            secretName: gateway-certs
+        - name: etcd-certs-src
+          secret:
+            secretName: etcd-certs
+        - name: human-config
+          configMap:
+            name: human-config
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-human
+  namespace: sandswap
+spec:
+  selector:
+    app: gateway-human
+  ports:
+    - name: human
+      port: 3100
+      targetPort: 3100
+    # Stream listener: prov instances dial the Service VIP; kube-proxy spreads
+    # them across human-gateway replicas (per-connection) and the prov side's
+    # connection-age recycling rebalances — no client-side gateway list needed.
+    - name: stream
+      port: 9998
+      targetPort: 9998

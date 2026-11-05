@@ -1,0 +1,52 @@
+# Copyright 2026 Chaoyi Huang. All rights reserved.
+#
+# SPDX-License-Identifier: BUSL-1.1
+#
+# Use of this software is governed by the Business Source License
+# included in the LICENSE file at the root of this repository.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0.
+#
+# sandswap-seed-fetch.service — the seed INJECTION HOOK for a prov host whose
+# seed is materialized into tmpfs at boot (a secret manager, a sealed systemd
+# credential, an internal API). sandswap ships the plumbing and the contract;
+# the store read lives in the operator's /usr/local/lib/sandswap/seed-fetch.sh
+# (start from deploy/baremetal/seed-fetch.sh.template).
+#
+# It is deliberately NOT required by the prov unit: a failed fetch must not
+# keep the instance from starting — the instance itself refuses to start
+# without a readable CURRENT generation (fail-closed), which is the guard that
+# matters. Install this unit only when your seed sources are tmpfs paths.
+[Unit]
+Description=Sandswap volume-name seed fetch (materialize the configured generations)
+Documentation=file:/etc/sandswap/sandlot-prov.yaml
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/lib/sandswap/seed-fetch.sh
+ConditionPathExists=/etc/sandswap/sandlot-prov.yaml
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+# Root: the store credential is root-scoped and the generation files land
+# root:<prov group> 0640 — the sandvmm identity must never be able to read them.
+ExecStart=/usr/local/lib/sandswap/seed-fetch.sh
+TimeoutStartSec=120
+# Writable: the tmpfs generation directory. A deployment that materializes the
+# seed onto PERSISTENT storage adds its own path here (and accepts that the
+# seed then lives on disk).
+ReadWritePaths=/run/sandswap
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+LimitCORE=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sandswap-seed-fetch
+
+[Install]
+WantedBy=multi-user.target

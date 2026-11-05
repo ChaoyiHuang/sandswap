@@ -1,0 +1,62 @@
+[Unit]
+Description=Sandswap Gateway (%i mode)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/sandswap/gateway-%i.yaml
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# No OIDC issuer is configured by these deployers (the human plane is scoped
+# by network policy), so the listener requires the EXPLICIT anonymous opt-out:
+# without it the gateway refuses to start. The flag is logged loudly at
+# startup; configure authn.issuer to authenticate instead.
+ExecStart=/usr/local/bin/sandswap-gateway -config /etc/sandswap/gateway-%i.yaml -allow-anonymous-human
+ExecReload=/bin/kill -SIGHUP $MAINPID
+# LimitCORE=0: a crash must never write a core image to disk — this process
+# holds credential material in memory (API keys, TLS private keys; the merged
+# sandlot also holds the volume seed).
+LimitCORE=0
+# Dedicated-identity model: the gateway owns credential state only — no
+# capabilities, no devices, no supplementary groups, no shared storage (see
+# the sandswap-gateway.service note).
+User=sandserv
+Restart=on-failure
+# LimitCORE=0: a crash must never write a core image to disk — this process
+# holds credential material in memory (API keys, TLS private keys; the merged
+# sandlot also holds the volume seed).
+RestartSec=5
+
+# /run/sandswap is provisioned by setup-host.sh (tmpfiles.d/sandswap.conf,
+# sandprov:sandlot 2750) — shared with the sandlot unit, NOT a RuntimeDirectory.
+NoNewPrivileges=true
+ProtectSystem=strict
+# The gateway owns ONLY its private state/ subdirectory: /var/lib/sandswap
+# itself is root-owned 0755 (the single-node shape carries the guest kernel +
+# initramfs there, and a service identity owning the directory could replace
+# the TCB). systemd creates the parents but only chowns/modes the LEAF
+# directory, so this expresses the split exactly.
+StateDirectory=sandswap/state
+StateDirectoryMode=0750
+# The prov-plane ownership re-assert (volumes root + template stores) runs
+# after start, only when this host carries them: a storage-attached host must
+# never inherit the state-directory ownership on its shared trees.
+# The prov-plane ownership re-assert follows the deployment's SHAPE: the deployer
+# writes /etc/sandswap/prov-user.env (SS_PROV_USER=sandprov for a dedicated prov
+# instance, sandlot for the merged exec,prov shape); default sandprov keeps the
+# dedicated shapes safe when the file is absent. Hardcoding sandprov here
+# re-broke the merged single-node shape at EVERY unit start (the
+# deployer-side fixes get overwritten by this guard).
+ExecStartPost=+/usr/local/lib/sandswap/apply-prov-ownership
+ReadWritePaths=/var/lib/sandswap /var/log/sandswap
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65536
+TasksMax=4096
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sandswap-gateway-%i
+
+[Install]
+WantedBy=multi-user.target

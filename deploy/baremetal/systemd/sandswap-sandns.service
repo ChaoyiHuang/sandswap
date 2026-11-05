@@ -1,0 +1,43 @@
+[Unit]
+Description=Sandswap owner-aware DNS service
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/sandswap/sandns.yaml
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sandns -config /etc/sandswap/sandns.yaml
+ExecReload=/bin/kill -SIGHUP $MAINPID
+# Dedicated-identity model: DNS holds no credentials and no devices; the
+# only privilege is the :53 bind (AmbientCapabilities below).
+User=sandserv
+Restart=on-failure
+RestartSec=5
+
+# DNS does not need root: only UDP/TCP 53 listener (AmbientCapabilities for privileged port)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+# DNS keeps its own state subdirectory; /var/lib/sandswap stays root-owned
+# 0755 (see the gateway unit's note on the TCB and the leaf-only chown).
+StateDirectory=sandswap/sandns
+StateDirectoryMode=0750
+# The prov-plane ownership re-assert follows the deployment's SHAPE: the deployer
+# writes /etc/sandswap/prov-user.env (SS_PROV_USER=sandprov for a dedicated prov
+# instance, sandlot for the merged exec,prov shape); default sandprov keeps the
+# dedicated shapes safe when the file is absent. Hardcoding sandprov here
+# re-broke the merged single-node shape at EVERY unit start (the
+# deployer-side fixes get overwritten by this guard).
+ExecStartPost=+/usr/local/lib/sandswap/apply-prov-ownership
+ReadWritePaths=/var/lib/sandswap/sandns
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sandswap-sandns
+
+[Install]
+WantedBy=multi-user.target

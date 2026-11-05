@@ -1,0 +1,426 @@
+# Sandlot DaemonSet — boxout mode (one pod per KVM-capable node).
+#
+# Connects to the gateway-exec-stream Service for gRPC stream (mTLS).
+#
+# VM Mode: boxout — privileged operations are delegated to the boxout sidecar.
+#   - boxout container: UID 0, privileged — owns sandvmm lifecycle, network
+#     provisioning (TAP/bridge), OverlayFS mounts, /proc scanning, crash detection
+# - sandlot container: UID 65536 (THE RESERVED SANDBOX IDENTITY, —
+#     see the sandlot-config ConfigMap's api_gid block for why this value and
+#     not a collidable uid), drop ALL + add NET_RAW — communicates
+#     with the gateway (gRPC), sandvmm (HTTP API for SetFs/Ping), warden (vsock
+#     for exec/mount), and boxout (Unix socket for privileged operations)
+#
+# The hot path is identical in both modes:
+#   sandlot → sandvmm HTTP (SetFs/Ping) + sandlot → warden vsock (exec/mount)
+# Only the cold path (VM lifecycle, network, overlay) goes through boxout.
+#
+# Network: uses --network-backend=bridge for microVM outbound connectivity.
+# The host bridge (br-sandswap) is set up by deploy/setup-network.sh.
+#
+# Security:
+#   - sandlot runs as UID 65536 with ALL capabilities dropped
+#   - boxout runs as UID 0 with privileged (required for KVM device access
+#     on cgroup v2, CAP_SYS_ADMIN for mount, CAP_NET_ADMIN for ip tuntap)
+#   - Communication via /run/sandswap-boxout/boxout.sock (Unix socket, 0600 +
+#     chown 65536 + SO_PEERCRED verification — only sandlot UID 65536 can
+#     connect). The socket lives in its OWN root-owned directory (0711):
+#     /run/sandswap is writable by the sandlot UID (role lock / state), and a
+#     socket inside it could be renamed and replaced by any same-UID process.
+#   - vsockguard init container allows UID 65536 (not UID 0) to connect to
+#     the warden vsock port — sandlot is the legitimate connector in this mode.
+#     These three gates (vsockguard uid, boxout SO_PEERCRED, api_gid group on
+#     the sandvmm sockets) all key on the SAME reserved 65536 pair; the
+#     deploy-tree pin asserts no shape drifts back to a collidable uid.
+#
+# Volumes:
+#   - sandswap-volumes PVC: SandFS data (virtio-fs shared_dir, shared with gateway)
+#   - sandswap-templates PVC: Overlay template layers/refs (shared with admin)
+#   - sandswap-host hostPath: kernel, initramfs, flat-templates (node-local)
+#   - dev-kvm, dev-vhost-vsock, dev-net-tun: device nodes (boxout container only)
+#   - run-sandswap: shared between boxout and sandlot (sandvmm.sock dirs + role lock)
+#   - run-sandswap-boxout: boxout-DEDICATED, root-owned socket directory
+#     (0711); the privileged lifecycle socket lives here
+#   - sandlot-stream-certs hostPath /etc/sandswap/stream-certs: THIS node's
+#     mTLS client pair (materialized per node by deploy/k8s/k8s-host-setup.sh
+#     from the per-node Secret sandlot-certs-<node>); the sandlot declares
+#     node_id = its node name (`fieldRef: spec.nodeName`) and the gateway
+#     binds node_id == the certificate's CN by exact match
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sandlot-boxout
+  namespace: sandswap
+  labels:
+    app: sandlot-boxout
+spec:
+  selector:
+    matchLabels:
+      app: sandlot-boxout
+  template:
+    metadata:
+      labels:
+        app: sandlot-boxout
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        fsGroup: 65536  # reserved sandbox gid: ensures sandlot (uid 65536) can read PVC volumes
+        # sandtmpl: template-store metadata group (refs/) — the exec relay
+        # resolves overlay refs by reading refs/*.json, so it needs the
+        # group; the prov pod chgrps refs/ to it. Pod-level is the only
+        # form Kubernetes offers (container securityContext has no
+        # supplementalGroups). The boxout container and initContainers run
+        # as root, for whom a supplementary group is inert, and sandvmm is
+        # excluded at spawn: the setpriv identity split (sandlot/vmm/
+        # launcher.go) sets its groups wholesale (--groups/--clear-groups),
+        # so the FUSE daemon never inherits this grant.
+        supplementalGroups:
+          - 982
+      initContainers:
+        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §4;
+        # storage contract row 10b): the SHARE ROOT must be writable only by
+        # the provision plane. The FUSE daemon runs as uid 987 with
+        # supplementary gid 65536 (microvm.vmm_groups + api_gid in the sandlot
+        # ConfigMap) — the same group that owns the volume tree — so without
+        # this step the root is exactly as writable as the volumes themselves,
+        # and a guest-driven escape could create/remove/rename entries BESIDE
+        # the allowed directory (the class the in-daemon root gate also
+        # refuses; this is the kernel-enforced backstop for it).
+        # owner = provision plane (1000, see sandlot-prov.yaml), group = shared
+        # (65536) with x ONLY at the root (no list, no write), setgid kept so
+        # volumes created inside inherit the shared group. The template store
+        # is prov-owned read-only (no layer/ref swap-out by the daemon).
+        # Re-asserted on every pod start: the local-path provisioner creates
+        # the node-side directory world-writable (measured 2777).
+        # The stream client key must not be readable by the sandvmm identity
+        # (987): it shares group 65536 with this pod. The source is this NODE's
+        # pair, materialized by k8s-host-setup.sh at 0600 owner sandlot (65536)
+        # — re-materialize it into the runtime emptyDir with the modes this
+        # pod's uid can actually read and 987 cannot.
+        - name: prep-certs
+          image: sandswap/sandlot-boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ ! -s /certs-src/client.crt ] || [ ! -s /certs-src/client.key ]; then
+                echo "FATAL: this node's stream client certificate is missing from the hostPath"
+                echo "  /etc/sandswap/stream-certs — the gateway binds node_id == the client"
+                echo "  certificate's CN, so the sandlot cannot connect without its own pair."
+                echo "  Fix (on this node): sudo bash deploy/k8s/k8s-host-setup.sh --stream-certs-only"
+                exit 1
+              fi
+              cp /certs-src/client.crt /certs-out/client.crt
+              cp /certs-src/client.key /certs-out/client.key
+              cp /certs-src/ca.crt /certs-out/ca.crt
+              chown 65536:65536 /certs-out/client.key
+              chmod 400 /certs-out/client.key
+              chmod 444 /certs-out/client.crt /certs-out/ca.crt
+              echo "certs prepared: $(stat -c '%a %u:%g' /certs-out/client.key)"
+          volumeMounts:
+            - name: sandlot-stream-certs
+              mountPath: /certs-src
+              readOnly: true
+            - name: certs-runtime
+              mountPath: /certs-out
+        - name: prep-share-root
+          image: sandswap/sandlot-boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              chown 1000:65536 /sandswap/volumes
+              chmod 2710 /sandswap/volumes
+              chown 1000:65536 /sandswap/overlay-templates
+              chmod 2750 /sandswap/overlay-templates
+              echo "share root: $(stat -c '%a %u:%g' /sandswap/volumes)  templates: $(stat -c '%a %u:%g' /sandswap/overlay-templates)"
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+        - name: attach-vsockguard
+          image: sandswap/boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+            privileged: true  # BPF LSM attach requires CAP_BPF + CAP_SYS_ADMIN
+          env:
+            - name: SANDSWAP_SKIP_VSOCKGUARD
+              value: "0"
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ "${SANDSWAP_SKIP_VSOCKGUARD:-}" = "1" ]; then
+                echo "WARNING: vsockguard SKIPPED (SANDSWAP_SKIP_VSOCKGUARD=1) — no BPF LSM enforcement"
+                exit 0
+              fi
+              if [ ! -e /sandswap/vsockguard.bpf.o ] || [ ! -x /sandswap/vsockguardctl ]; then
+                echo "FATAL: vsockguard binaries not found"
+                exit 1
+              fi
+              if ! grep -qE '(^|,)bpf(,|$)' /sys/kernel/security/lsm 2>/dev/null; then
+                echo "FATAL: BPF LSM not active in kernel — vsockguard cannot enforce"
+                echo "  Fix: sudo bash deploy/k8s/k8s-host-setup.sh && reboot"
+                exit 1
+              fi
+              if [ -e /sys/fs/bpf/vsockguard/link ]; then
+                # allowed_uid is a PINNED BPF MAP — `cat` prints the kernel
+                # debug banner plus "key: value" lines; take the first value.
+                pinned="$(cat /sys/fs/bpf/vsockguard/allowed_uid 2>/dev/null | grep -E '^[0-9]+:' | head -1 | sed 's/^[0-9]*:[[:space:]]*//')"
+                if [ -z "$pinned" ]; then pinned="unreadable"; fi
+                if [ "$pinned" = "65536" ]; then
+                  echo "vsockguard already attached (allowed_uid=65536)"
+                  exit 0
+                fi
+                echo "FATAL: vsockguard pinned for UID $pinned but this pod runs as UID 65536"
+                echo "  Fix: bash deploy/k8s/k8s-cleanup.sh (step 3 detaches), then re-deploy"
+                exit 1
+              fi
+              echo "Attaching vsockguard BPF LSM (allowed UID=65536 for boxout mode)..."
+              mkdir -p /sys/fs/bpf/vsockguard && \
+              /sandswap/vsockguardctl attach /sandswap/vsockguard.bpf.o 65536 /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/allowed_uid && \
+                echo "vsockguard attached successfully" || \
+                (echo "FATAL: vsockguard attach failed"; exit 1)
+          volumeMounts:
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+            - name: sys-kernel-security
+              mountPath: /sys/kernel/security
+              readOnly: true
+      containers:
+        # ── boxout: privileged VM lifecycle manager ───────────────────
+        - name: boxout
+          image: sandswap/boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 0
+            privileged: true  # REQUIRED: cgroup v2 device access + CAP_SYS_ADMIN + CAP_NET_ADMIN
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SYS_ADMIN   # mount/umount for OverlayFS + vsockguard BPF
+                - NET_ADMIN   # ip tuntap/bridge (sandlot/network/bridge_nat.go)
+          args:
+            - --socket=/run/sandswap-boxout/boxout.sock
+            - --config=/config/sandlot.yaml
+            # The reserved sandbox uid, passed EXPLICITLY: this flag
+            # gates the boxout socket (SO_PEERCRED + chown), the binding
+            # region and state.json ownership. It must never be left to the
+            # binary's built-in default — the deploy-tree pin asserts this
+            # exact flag value across the manifests.
+            - --allowed-uid=65536
+            # Per-POD admission token: SO_PEERCRED authenticates a numeric
+            # UID, and UID 65536 is a reserved host-wide constant — a foreign
+            # pod/process that shares it could otherwise drive root boxout.
+            # The token lives in a pod-private emptyDir shared with sandlot.
+            - --client-token-file=/run/boxout-token/token
+            - --max-vms=64
+            # Network config comes from the sandlot-config ConfigMap's
+            # network block (both processes read the same file — boxout owns
+            # the privileged network ops, including the egress identity
+            # enabler keys: binding backend, routed-ipv6, iid template,
+            # vm-to-vm posture). CLI network flags would OVERRIDE the
+            # ConfigMap, so none are set here.
+          env:
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+              readOnly: true
+            - name: sandswap-host
+              mountPath: /sandswap-host
+            - name: boxout-token
+              mountPath: /run/boxout-token
+            - name: dev-kvm
+              mountPath: /dev/kvm
+            - name: dev-vhost-vsock
+              mountPath: /dev/vhost-vsock
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+            - name: run-sandswap
+              mountPath: /run/sandswap
+            - name: run-sandswap-boxout
+              mountPath: /run/sandswap-boxout
+            - name: run-sandswap-state
+              mountPath: /run/sandswap-state
+            - name: sandlot-config
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # bpf binding-region carrier: OBJ_GET the sidecar-pinned map +
+            # mmap-write it (boxout mode), or create/pin it (embedded root).
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+        # ── sandlot: unprivileged gRPC/vsock relay ────────────────────
+        - name: sandlot
+          image: sandswap/sandlot-boxout:latest
+          imagePullPolicy: Never
+          securityContext:
+            runAsUser: 65536
+            runAsGroup: 65536
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_RAW  # AF_VSOCK socket creation (vsock connect to warden)
+            seccompProfile:
+              type: Localhost
+              localhostProfile: sandswap/sandlot-seccomp.json  # Allows AF_VSOCK (domain=40) + standard RuntimeDefault syscalls
+          args:
+            - --vm-mode=boxout
+            - --boxout-socket=/run/sandswap-boxout/boxout.sock
+            - --boxout-token-file=/run/boxout-token/token
+            - --config=/config/sandlot.yaml
+            # The node identity: the KUBERNETES NODE name, stable across pod
+            # restarts (the old default — the pod name — changed every restart
+            # and could never match a certificate). One sandlot per node is the
+            # shape; the per-node Secret sandlot-certs-<node> carries the
+            # matching CN.
+            - --node-id=$(SANDSWAP_NODE_NAME)
+            # TLS paths (volume-mounted, must be CLI overrides)
+            - --tls-cert=/certs/client.crt
+            - --tls-key=/certs/client.key
+            - --tls-ca=/certs/ca.crt
+          env:
+            - name: HOME
+              value: /tmp
+            # Template-store metadata group (numeric: the pod has no /etc/group
+            # entry). Must match the pod-level supplementalGroups GID; refs/ is
+            # chgrp'd to it so the FUSE daemon cannot enumerate refs.
+            - name: SANDSWAP_TPL_GROUP
+              value: "982"
+            - name: SANDSWAP_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: sandswap-volumes
+              mountPath: /sandswap/volumes
+            - name: sandswap-templates
+              mountPath: /sandswap/overlay-templates
+              readOnly: true
+            - name: sandswap-host
+              mountPath: /sandswap-host
+              readOnly: true
+            - name: run-sandswap
+              mountPath: /run/sandswap
+            - name: run-sandswap-boxout
+              mountPath: /run/sandswap-boxout
+            - name: run-sandswap-state
+              mountPath: /run/sandswap-state
+            - name: boxout-token
+              mountPath: /run/boxout-token
+              readOnly: true
+            - name: certs-runtime
+              mountPath: /certs
+              readOnly: true
+            - name: sandlot-config
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # bpf binding-region carrier: OBJ_GET the sidecar-pinned map +
+            # mmap-write it (boxout mode), or create/pin it (embedded root).
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: sandswap-volumes
+          persistentVolumeClaim:
+            claimName: sandswap-volumes
+        - name: sandswap-templates
+          persistentVolumeClaim:
+            claimName: sandswap-templates
+        - name: sandswap-host
+          hostPath:
+            path: /var/lib/sandswap
+            type: DirectoryOrCreate
+        - name: dev-kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
+        - name: dev-vhost-vsock
+          hostPath:
+            path: /dev/vhost-vsock
+            type: CharDevice
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: run-sandswap
+          hostPath:
+            path: /run/sandswap
+            type: DirectoryOrCreate
+        - name: run-sandswap-boxout
+          hostPath:
+            # The sidecar's own root-owned socket directory (0711). Kept OUT of
+            # /run/sandswap, which the sandlot UID can write: a socket there
+            # could be renamed/replaced by any same-UID process.
+            path: /run/sandswap-boxout
+            type: DirectoryOrCreate
+        - name: run-sandswap-state
+          hostPath:
+            path: /run/sandswap-state
+            type: DirectoryOrCreate
+        - name: certs-runtime
+          emptyDir: {}
+        # Pod-private admission token shared by the boxout and sandlot
+        # containers. NEVER a hostPath: the whole point is that another pod on
+        # the node cannot read it.
+        - name: boxout-token
+          emptyDir: {}
+        - name: sandlot-stream-certs
+          hostPath:
+            # THIS node's stream client pair (materialized by
+            # deploy/k8s/k8s-host-setup.sh step 2b from the per-node Secret
+            # sandlot-certs-<node>, 0600 owned by the sandlot identity). A
+            # hostPath — not a Secret — because the pair is per NODE: the
+            # gateway binds the stream's node_id == the certificate's CN, and
+            # no node may hold another node's key.
+            path: /etc/sandswap/stream-certs
+            type: DirectoryOrCreate
+        - name: sandlot-config
+          configMap:
+            name: sandlot-config
+        - name: sys-fs-bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: sys-kernel-security
+          hostPath:
+            path: /sys/kernel/security
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}

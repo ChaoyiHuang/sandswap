@@ -1,0 +1,324 @@
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[1;33m[!][0m Nested virtualization detected: systemd-detect-virt=google, hypervisor flag=1
+[1;33m[!][0m   Results are labeled [NESTED-VIRT]; re-run on bare metal for true steady state.
+    CPU cores: 4    load: load: 0.21, 0.14, 0.06
+    Pinning:   PIN_MODE=0 (auto stack cores, auto VM slices)
+[0;32m[✓][0m /dev/kvm available
+[0;32m[✓][0m /dev/vhost-vsock readable
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m Required tools: curl go python3
+[0;32m[✓][0m All artifacts fresh (newer than their sources)
+
+[0;32m═══ Phase 1: Deploy ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /var/lib/sandswap/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via ens4)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> ens4); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+
+[0;32m═══ Phase 2: Start etcd + gateways (distributed: exec http://localhost:3001, human http://localhost:3100) ═══[0m
+[0;32m[✓][0m etcd binary: /usr/bin/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (aiagent-bench, data=/tmp/sandswap-aiagent-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=80632)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 80651)
+[0;32m[✓][0m exec gateway ready (http://localhost:3001)
+[0;32m[→][0m Starting human gateway (127.0.0.1:3100, mode=human, shared etcd)...
+[0;32m[✓][0m human gateway ready (http://localhost:3100)
+
+[0;32m═══ Phase 3: Start sandlot (connects to gateway, mTLS) ═══[0m
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap/sandlot-aiagent.yaml
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 80708)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3001)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+
+[0;32m═══ Phase 4: Create agents A/B (busybox template) ═══[0m
+    CRUD goes through the human gateway (http://localhost:3100/human/*); execution hits the exec gateway (http://localhost:3001/agent/execute)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m agents A/B created (sandfs sandfs-9983f927 / sandfs-acdc54a7)
+
+[0;32m═══ Phase 5: Run benchmark (mode=mcp) ═══[0m
+[0;32m[✓][0m benchmark binary: /home/joehuang_sweden/sandswap/e2e/../output/openai-sandswap
+
+[0;32m═══ Benchmark — mode=mcp ═══[0m
+═══ Sandswap latency benchmark — mode=mcp ═══
+MCP: http://localhost:3001/mcp   LLM: deepseek   model: deepseek-flash   warm_n=100  cold_n=50  warm_gap_ms=5  switch_gap_ms=300  switch_settle_ms=1000  n_llm=5
+
+
+LLM round-trip (openai-sandswap → LLM API): n=5 min=1069.260 P50=1150.033 P95=1272.645 max=1272.645 ms
+Warm: 100 execute tool calls to agent A (5ms gap)...
+Switch: 50 rounds alternating A<->B (300ms gap, lease expires)...
+
+Warm — sticky lease reuse (n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        3.549     4.144     5.187     5.824
+  gateway E2E              2.964     3.372     4.136     4.537
+  sandlot                  2.537     2.872     3.580     3.916
+  exec                     2.207     2.480     3.051     3.476
+
+Switch — cross-agent cold mount_and_exec (n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        6.550     7.786     8.441    10.674
+  gateway E2E              5.672     6.849     7.436     9.705
+  sandlot                  5.056     6.134     6.714     7.103
+  exec                     4.237     5.204     5.735     6.097
+
+LLM-driven tool calls (cold, n=5) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        7.328     7.879    18.689    18.689
+  gateway E2E              6.291     6.987    17.454    17.454
+  sandlot                  5.660     6.390    13.808    13.808
+  exec                     4.633     5.397     6.503     6.503
+
+  per-sample detail (all in ms):
+   idx  class      client   gateway   sandlot     exec  exit
+     1  warm        3.607     2.982     2.571    2.237     0
+     2  warm        3.738     3.077     2.575    2.226     0
+     3  warm        4.244     3.424     2.872    2.487     0
+     4  warm        4.618     3.461     2.954    2.577     0
+     5  warm        4.632     3.887     3.446    2.951     0
+     6  warm        4.048     3.273     2.798    2.433     0
+     7  warm        3.943     3.198     2.751    2.321     0
+     8  warm        3.911     3.285     2.794    2.413     0
+     9  warm        3.761     3.064     2.610    2.293     0
+    10  warm        4.084     3.391     2.936    2.549     0
+    11  warm        4.667     3.911     3.412    2.977     0
+    12  warm        4.087     3.239     2.803    2.389     0
+    13  warm        4.450     3.731     3.311    2.892     0
+    14  warm        4.486     3.704     3.282    2.869     0
+    15  warm        3.707     3.075     2.616    2.289     0
+    16  warm        4.370     3.676     3.213    2.833     0
+    17  warm        4.249     3.558     3.103    2.533     0
+    18  warm        3.986     3.041     2.595    2.207     0
+    19  warm        4.389     3.645     3.148    2.696     0
+    20  warm        5.824     4.537     3.642    2.641     0
+    21  warm        3.990     3.197     2.744    2.379     0
+    22  warm        4.286     3.582     3.131    2.789     0
+    23  warm        4.069     3.377     2.858    2.320     0
+    24  warm        4.165     3.444     2.971    2.547     0
+    25  warm        3.982     3.213     2.750    2.315     0
+    26  warm        4.073     3.367     2.841    2.456     0
+    27  warm        4.552     3.726     3.227    2.726     0
+    28  warm        4.063     3.326     2.742    2.314     0
+    29  warm        4.573     3.808     3.296    2.902     0
+    30  warm        4.159     3.306     2.856    2.470     0
+    31  warm        4.025     3.253     2.767    2.342     0
+    32  warm        4.090     3.326     2.831    2.412     0
+    33  warm        3.928     3.207     2.757    2.331     0
+    34  warm        4.153     3.148     2.668    2.319     0
+    35  warm        4.643     3.888     3.403    2.957     0
+    36  warm        4.432     3.710     3.250    2.756     0
+    37  warm        4.203     3.502     3.042    2.619     0
+    38  warm        3.925     3.304     2.819    2.437     0
+    39  warm        4.270     3.427     2.881    2.480     0
+    40  warm        4.466     3.709     3.149    2.697     0
+    41  warm        4.064     3.281     2.798    2.426     0
+    42  warm        4.013     3.301     2.824    2.425     0
+    43  warm        4.144     3.451     2.930    2.508     0
+    44  warm        3.946     3.225     2.732    2.401     0
+    45  warm        4.419     3.717     3.213    2.792     0
+    46  warm        3.926     3.258     2.790    2.400     0
+    47  warm        3.894     3.234     2.766    2.370     0
+    48  warm        3.553     2.970     2.537    2.252     0
+    49  warm        3.826     3.236     2.817    2.332     0
+    50  warm        3.885     3.025     2.614    2.268     0
+    51  warm        3.549     2.964     2.564    2.251     0
+    52  warm        3.884     3.298     2.877    2.514     0
+    53  warm        3.695     3.125     2.727    2.355     0
+    54  warm        3.988     3.293     2.852    2.512     0
+    55  warm        3.962     3.306     2.874    2.532     0
+    56  warm        3.993     3.330     2.907    2.545     0
+    57  warm        3.907     3.279     2.806    2.404     0
+    58  warm        4.390     3.712     3.256    2.857     0
+    59  warm        4.087     3.374     2.834    2.413     0
+    60  warm        5.197     4.343     3.777    3.314     0
+    61  warm        4.268     3.409     2.783    2.365     0
+    62  warm        4.555     3.742     3.170    2.716     0
+    63  warm        4.958     4.136     3.580    3.113     0
+    64  warm        4.274     3.475     2.899    2.507     0
+    65  warm        4.814     3.979     3.419    3.027     0
+    66  warm        5.187     4.218     3.660    3.186     0
+    67  warm        4.511     3.700     3.177    2.748     0
+    68  warm        4.432     3.728     3.174    2.876     0
+    69  warm        4.045     3.352     2.798    2.363     0
+    70  warm        3.907     3.189     2.707    2.307     0
+    71  warm        4.159     3.463     2.924    2.548     0
+    72  warm        4.099     3.370     2.914    2.541     0
+    73  warm        3.941     3.299     2.847    2.464     0
+    74  warm        3.904     3.232     2.721    2.360     0
+    75  warm        4.452     3.718     3.185    2.785     0
+    76  warm        4.651     3.915     3.402    2.965     0
+    77  warm        4.669     3.929     3.448    3.051     0
+    78  warm        3.871     3.175     2.721    2.298     0
+    79  warm        3.941     3.272     2.826    2.416     0
+    80  warm        3.939     3.266     2.757    2.353     0
+    81  warm        4.318     3.319     2.843    2.475     0
+    82  warm        4.287     3.508     3.020    2.430     0
+    83  warm        4.147     3.372     2.859    2.452     0
+    84  warm        3.973     3.229     2.739    2.354     0
+    85  warm        4.117     3.342     2.826    2.433     0
+    86  warm        3.926     3.259     2.778    2.431     0
+    87  warm        4.328     3.622     3.169    2.771     0
+    88  warm        4.672     3.893     3.401    2.957     0
+    89  warm        3.957     3.242     2.713    2.312     0
+    90  warm        4.450     3.709     3.179    2.812     0
+    91  warm        4.423     3.739     3.244    2.820     0
+    92  warm        4.023     3.269     2.743    2.400     0
+    93  warm        4.042     3.319     2.796    2.456     0
+    94  warm        4.565     3.856     3.372    2.951     0
+    95  warm        4.521     3.753     3.241    2.837     0
+    96  warm        4.666     3.898     3.341    2.974     0
+    97  warm        3.966     3.186     2.703    2.313     0
+    98  warm        4.710     3.915     3.371    3.028     0
+    99  warm        5.204     3.999     3.406    2.987     0
+   100  warm        5.431     4.519     3.916    3.476     0
+   101  cold        7.852     6.913     6.251    5.204     0
+   102  cold       10.674     9.705     7.103    6.097     0
+   103  cold        8.029     7.118     6.533    5.507     0
+   104  cold        8.303     7.426     6.815    5.789     0
+   105  cold        8.127     7.159     6.501    5.570     0
+   106  cold        7.819     6.846     6.260    5.298     0
+   107  cold        7.759     6.904     6.242    5.337     0
+   108  cold        7.466     6.525     5.893    4.977     0
+   109  cold        7.467     6.569     5.946    5.007     0
+   110  cold        7.852     6.924     6.121    5.181     0
+   111  cold        8.355     7.528     6.930    5.948     0
+   112  cold        8.191     7.250     6.506    5.479     0
+   113  cold        7.025     6.151     5.495    4.573     0
+   114  cold        8.441     7.436     6.714    5.664     0
+   115  cold        8.081     7.231     6.558    5.587     0
+   116  cold        8.125     7.266     6.606    5.602     0
+   117  cold        6.836     5.949     5.265    4.402     0
+   118  cold        7.635     6.564     5.713    4.760     0
+   119  cold        7.967     6.813     6.161    5.291     0
+   120  cold        8.101     7.098     6.496    5.587     0
+   121  cold        7.456     6.570     5.900    4.934     0
+   122  cold        8.327     7.330     6.586    5.705     0
+   123  cold        7.999     7.081     6.324    5.368     0
+   124  cold        7.077     6.151     5.517    4.476     0
+   125  cold        8.520     7.613     6.901    6.028     0
+   126  cold        7.759     6.837     6.134    5.244     0
+   127  cold        7.660     6.738     6.042    5.139     0
+   128  cold        7.870     6.911     6.214    5.279     0
+   129  cold        7.786     6.849     6.170    5.231     0
+   130  cold        7.895     6.891     6.128    5.187     0
+   131  cold        7.559     6.725     6.029    5.032     0
+   132  cold        7.559     6.720     5.995    5.072     0
+   133  cold        8.131     7.208     6.434    5.427     0
+   134  cold        7.599     6.677     6.034    5.095     0
+   135  cold        8.174     7.212     6.553    5.512     0
+   136  cold        8.168     7.220     6.496    5.563     0
+   137  cold        7.468     6.217     5.581    4.623     0
+   138  cold        8.280     7.300     6.597    5.614     0
+   139  cold        7.452     6.540     5.902    4.971     0
+   140  cold        7.647     6.696     6.023    5.014     0
+   141  cold        8.253     7.353     6.650    5.735     0
+   142  cold        7.044     6.142     5.468    4.563     0
+   143  cold        7.009     6.068     5.396    4.537     0
+   144  cold        8.144     7.274     6.561    5.478     0
+   145  cold        7.059     6.048     5.397    4.500     0
+   146  cold        7.825     6.869     6.128    5.157     0
+   147  cold        8.067     7.132     6.421    5.479     0
+   148  cold        7.598     6.649     5.959    5.034     0
+   149  cold        7.472     6.561     5.878    4.987     0
+   150  cold        7.619     6.737     6.077    5.132     0
+   151  cold        7.783     6.849     6.142    5.209     0
+   152  cold        7.617     6.690     5.987    5.068     0
+   153  cold        7.014     6.117     5.487    4.519     0
+   154  cold        6.971     6.017     5.327    4.444     0
+   155  cold        8.060     7.043     6.403    5.486     0
+   156  cold        7.429     6.266     5.520    4.642     0
+   157  cold        7.279     6.232     5.457    4.519     0
+   158  cold        8.167     7.188     6.475    5.499     0
+   159  cold        7.828     6.850     6.129    5.241     0
+   160  cold        7.600     6.719     6.065    5.189     0
+   161  cold        7.540     6.661     5.997    5.090     0
+   162  cold        7.820     6.907     6.208    5.305     0
+   163  cold        8.161     7.224     6.511    5.547     0
+   164  cold        9.073     7.488     6.502    5.511     0
+   165  cold        7.110     6.149     5.476    4.535     0
+   166  cold        7.505     6.639     5.973    5.063     0
+   167  cold        8.074     7.195     6.507    5.546     0
+   168  cold        8.105     7.201     6.504    5.495     0
+   169  cold        7.577     6.649     5.974    4.942     0
+   170  cold        7.839     6.968     6.311    5.410     0
+   171  cold        7.908     6.959     6.231    5.362     0
+   172  cold        8.339     7.350     6.688    5.653     0
+   173  cold        7.651     6.735     6.079    5.192     0
+   174  cold        7.911     7.036     6.389    5.410     0
+   175  cold        7.505     6.066     5.374    4.499     0
+   176  cold        7.103     6.173     5.509    4.691     0
+   177  cold        7.504     6.600     5.938    5.037     0
+   178  cold        7.583     6.679     6.035    5.160     0
+   179  cold        7.593     6.529     5.856    4.943     0
+   180  cold        8.059     7.097     6.437    5.537     0
+   181  cold        7.508     6.601     5.962    5.027     0
+   182  cold        6.971     5.969     5.310    4.406     0
+   183  cold        7.070     6.063     5.408    4.514     0
+   184  cold        7.289     6.232     5.551    4.637     0
+   185  cold        8.257     7.290     6.628    5.735     0
+   186  cold        7.180     6.321     5.674    4.561     0
+   187  cold        7.706     6.803     6.193    5.296     0
+   188  cold        7.812     6.955     6.318    5.396     0
+   189  cold        7.642     6.721     6.048    5.055     0
+   190  cold        8.003     7.135     6.467    5.462     0
+   191  cold        7.905     7.033     6.378    5.551     0
+   192  cold        8.152     7.223     6.544    5.568     0
+   193  cold        6.550     5.672     5.056    4.237     0
+   194  cold        7.781     6.298     5.656    4.713     0
+   195  cold        7.987     6.998     6.292    5.477     0
+   196  cold        8.478     7.318     6.293    5.203     0
+   197  cold        7.551     6.282     5.464    4.579     0
+   198  cold        8.007     7.183     6.531    5.517     0
+   199  cold        7.597     6.693     6.016    5.087     0
+   200  cold        7.963     7.004     6.230    5.216     0
+   201  cold       18.689    17.454    13.808    6.503     0
+   202  cold        8.137     7.165     6.529    5.565     0
+   203  cold        7.659     6.291     5.660    4.633     0
+   204  cold        7.879     6.987     6.390    5.397     0
+   205  cold        7.328     6.460     5.889    5.010     0
+
+
+[0;32m═══ Phase 6: Verdict ═══[0m
+  [1;33m[NESTED-VIRT] Host is nested virtualization (google); results include guest-scheduling tail jitter.[0m
+  [1;33m  Expected: warm P50 3-7ms (tail 4-15ms), switch P50 15-25ms (tail 20-40ms).[0m
+
+
+[0;32m═══ Summary ═══[0m
+  Environment: nested virtualization (google)
+  Mode:       mcp
+  Topology:   distributed (etcd http://127.0.0.1:2379, exec gw http://localhost:3001, human gw http://localhost:3100)
+  Warm/Cold:  WARM_N=100 COLD_N=50  warm_gap_ms=5  switch_gap_ms=300  settle_ms=1000
+  Gateway:    http://localhost:3001
+  Temp dirs:  deploy=/var/lib/sandswap logs=/tmp/sandswap-logs (all removed on exit)
+
+[0;32m═══ Shutdown ═══[0m
+/home/joehuang_sweden/sandswap/e2e/../common/sh/runtime.sh: line 176: 80879 Killed                     ss_service_exec sandlot -- "$DEPLOY_DIR/sandlot" -gateway-addr "${HUMAN_STREAM_ADDR:-localhost:9999}" -node-id "aiagent-bench-prov" -volumes-dir "$VOL_ROOT" -allow-insecure-volumes -allow-missing-vsockguard -roles prov -volume-seed-file "$DEPLOY_DIR/volume-seed" -flat-templates "${TC_FLAT_TEMPLATES:-$DEPLOY_DIR/flat-templates}" -tls-cert "$(tc_node_cert aiagent-bench-prov prov).crt" -tls-key "$(tc_node_cert aiagent-bench-prov prov).key" -tls-ca "$CERT_DIR/ca.crt" -allow-colocated-instances > "$LOG_DIR/sandlot-prov.log" 2>&1
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+All processes stopped.

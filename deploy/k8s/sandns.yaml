@@ -1,0 +1,171 @@
+# Sandswap DNS — owner-aware in-cluster resolver.
+#
+# Resolves the per-sandfs zone <sandfs_id>.sandfs.<zone> to the OWNER gateway:
+#   /sandswap/owner/{sandfs_id} ─► gateway_id ─► /sandswap/gateway/{gateway_id}
+#   ─► gateway_url (CNAME to the owner's headless FQDN, or A record for an IP).
+# On owner death / no owner, falls back to any registered healthy gateway.
+#
+# How agents reach it:
+#   - In-cluster pods resolve the zone via CoreDNS, which forwards
+#     sandfs.<zone> → this Service (patched into the cluster CoreDNS by
+#     deploy-k8s-embedded.sh). CoreDNS then chases the CNAME back into the cluster.
+#   - External clients can point their resolver at this Service's ClusterIP or
+#     delegate the zone to it; the zone is fully authoritative.
+#
+# Etcd: reads ONLY Sandswap's application etcd (the etcd StatefulSet in this
+# namespace) over mTLS from the etcd-certs Secret — never the k8s control-plane
+# etcd. Listeners: :53 UDP+TCP (NET_BIND_SERVICE lets UID 1000 bind <1024).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandswap-sandns
+  namespace: sandswap
+  labels:
+    app: sandswap-sandns
+spec:
+  # ONE replica: the stream-domain stickiness is instance-local state, and a
+  # plain ClusterIP does NOT give source-IP affinity (UDP flows rebalance per
+  # query). Scale out only per docs/how-it-works/ownership-and-dns.md (multi-instance
+  # deployment: an L4 LB with source-IP affinity, plus the owner-cache prerequisites
+  # described there). The stateless sandfs zone
+  # alone would tolerate replicas>1.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandswap-sandns
+  template:
+    metadata:
+      labels:
+        app: sandswap-sandns
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # (same class as the gateway/human/etcd pods): Secret volumes
+        # land 0777 on this k3s; re-materialize with enforced modes (key 0400,
+        # chowned to the app uid 1000).
+        - name: certs-copy
+          image: sandswap/sandns:latest
+          imagePullPolicy: Never
+          # Runs as the pod's OWN identity (1000, inherited — no explicit
+          # runAsUser): pod-level runAsNonRoot forbids a uid-0 init container
+          # and kubelet v1.36 enforces it on init containers too
+          # (CreateContainerConfigError "runAsUser breaks non-root policy").
+          # Same pattern as the sandlot-prov pod: the emptyDir
+          # is 0777 so uid 1000 creates the copies itself, chmod(2) on its own
+          # files enforces the key modes, and the chown below is a permitted
+          # no-op. Reading the -src Secrets needs no privilege: this k3s writes
+          # Secret files 0777 (probed), and a healthy kubelet's 0644 default is
+          # world-readable as well.
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              # install(1), not cp+chmod: it unlinks the target first, so a
+              # restart re-creates over a leftover 0400 key (cp cannot truncate
+              # its own write-less 0400 file — the crash-loop shape),
+              # and the files land owned by the pod uid with the
+              # exact final modes. No chown: as a non-root init it would hit
+              # EACCES on the root-owned emptyDir dir itself (the other half
+              # of the same failure), and ownership is already correct.
+              install -m 0644 /etcdcerts-src/ca.crt /etcd-certs/ca.crt
+              install -m 0644 /etcdcerts-src/client.crt /etcd-certs/client.crt
+              install -m 0400 /etcdcerts-src/client.key /etcd-certs/client.key
+              echo "sandns certs: key=$(stat -c '%a %u:%g' /etcd-certs/client.key)"
+          volumeMounts:
+            - name: etcd-certs-src
+              mountPath: /etcdcerts-src
+              readOnly: true
+            - name: etcd-certs
+              mountPath: /etcd-certs
+      containers:
+        - name: sandns
+          image: sandswap/sandns:latest
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE  # bind :53 as UID 1000
+          args:
+            - -config=/config/sandns.yaml
+          ports:
+            - name: sandns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: sandns-tcp
+              containerPort: 53
+              protocol: TCP
+          volumeMounts:
+            - name: sandns-config
+              mountPath: /config
+              readOnly: true
+            - name: etcd-certs
+              mountPath: /etcd-certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            # No HTTP endpoint — probe via DNS over UDP from the pod network is
+            # not straightforward in a readiness check; rely on liveness below
+            # and the Service having the pod once Ready. Use a TCP check on :53.
+            tcpSocket:
+              port: 53
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 53
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            # Memory is sized by the owners cache default (owners.cache_max
+            # 1,000,000 entries ~ 250-300MB at ~250B/entry) plus sticky and
+            # buffers; lower cache_max if you shrink the limit.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+      volumes:
+        - name: sandns-config
+          configMap:
+            name: sandns-config
+        - name: etcd-certs
+          emptyDir: {}
+          # re-materialized by certs-copy (see the init container).
+        - name: etcd-certs-src
+          secret:
+            secretName: etcd-certs
+        - name: tmp
+          emptyDir: {}
+---
+# ClusterIP Service — the forward target for the CoreDNS zone and any
+# external resolver delegation. No LoadBalancer: the DNS is reached in-cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandswap-sandns
+  namespace: sandswap
+spec:
+  selector:
+    app: sandswap-sandns
+  ports:
+    - name: sandns-udp
+      port: 53
+      targetPort: 53
+      protocol: UDP
+    - name: sandns-tcp
+      port: 53
+      targetPort: 53
+      protocol: TCP

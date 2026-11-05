@@ -1,0 +1,40 @@
+Sandswap
+========
+
+Sandswap is licensed under the Business Source License 1.1 (see ./LICENSE),
+which converts to the Apache License, Version 2.0 on the Change Date stated
+therein (Apache-2.0 text: ./LICENSE-APACHE), except where noted below.
+A plain-language License FAQ: LICENSE-FAQ.md.
+
+
+vsockguard  —  network/vsockguard/ (first-party exception)
+  License: GPL-2.0-only OR BUSL-1.1 (GPL-2.0 text:
+           network/vsockguard/LICENSE-GPL-2.0; full notice in the file
+           headers)
+  The Linux kernel exposes the BPF helpers vsockguard needs (e.g.
+  bpf_probe_read_kernel) only to programs carrying a GPL-compatible
+  `license` ELF declaration, so the copy loaded into the kernel is
+  GPL-2.0-only. The files are dual-licensed; the BSL branch keeps their
+  terms aligned with the rest of this repository.
+
+This product includes code derived from the following upstream projects. Their
+original copyright notices and license terms are preserved in the respective
+files and directories.
+
+
+cloud-hypervisor  —  https://github.com/cloud-hypervisor/cloud-hypervisor
+  Directory: vmm/
+  License: Apache-2.0 OR BSD-3-Clause (see vmm/LICENSE-APACHE,
+           vmm/LICENSE-BSD-3-Clause)
+  `sandvmm` (the KVM Virtual Machine Monitor) is a fork of Cloud Hypervisor.
+  Files modified by Sandswap carry an additional
+  "Modified by Sandswap (c) 2026" line below the original header.
+  vmm/virtiofsd/ is the vendored in-tree virtiofsd crate compiled into the
+  VMM binary (upstream notices: Intel, Chromium OS/crosvm, Red Hat),
+  dual-licensed Apache-2.0 AND BSD-3-Clause (see vmm/virtiofsd/LICENSE-*).
+  Files modified by Sandswap carry the "Modified by Sandswap" line.
+
+
+busybox  —  https://busybox.net
+  Directory: initramfs/ (guest initramfs userspace, linked at build time)
+  License: GPL-2.0-or-later

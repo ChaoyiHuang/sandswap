@@ -1,0 +1,5 @@
+# Generated from the running kernel's BTF (kernel-specific — do not commit).
+vmlinux.h
+# Compiled artifacts (built into ../../output/ by build/build.sh).
+vsockguard.bpf.o
+vsockguardctl

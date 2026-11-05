@@ -1,0 +1,42 @@
+# Sandswap documentation site — Jekyll + just-the-docs on GitHub Pages.
+#
+# Publishing: GitHub repo Settings → Pages → Build and deployment →
+# Source: "Deploy from a branch", branch: main, folder: /docs.
+# The remote_theme is resolved by GitHub Pages (jekyll-remote-theme is allowlisted),
+# so no CI is required. The Gemfile next to this file is for local preview only.
+
+title: Sandswap
+description: Transparent code-execution sandboxes for AI agents
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+
+# Allowlisted GH Pages plugins, listed explicitly so local builds behave
+# exactly like the Pages build (remote-theme auto-loads with remote_theme;
+# relative-links rewrites repo-relative .md links into page URLs).
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+
+# Project Pages URL: https://<user>.github.io/sandswap/
+url: "https://chaoyihuang.github.io"
+baseurl: "/sandswap"
+
+# Search (lunr) — works on GitHub Pages.
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+# Auto-generate anchor links on h3..h4 headings.
+heading_anchors: 3
+
+aux_links:
+  "Sandswap on GitHub":
+    - "//github.com/ChaoyiHuang/sandswap"
+aux_links_new_tab: true
+
+footer_content: "Copyright &copy; 2026 Sandswap contributors."

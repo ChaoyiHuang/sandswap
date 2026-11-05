@@ -1,0 +1,14 @@
+{
+    "name": "python",
+    "version": "1.0.0",
+    "description": "Python 3.12 runtime template with pip and venv support",
+    "workspace_path": "/workspace",
+    "default_timeout": 300,
+    "is_serverless": false,
+    "idle_timeout": 0,
+    "entrypoint": [],
+    "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PIP_NO_CACHE_DIR": "1"
+    }
+}

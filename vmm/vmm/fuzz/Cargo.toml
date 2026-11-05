@@ -1,0 +1,20 @@
+[package]
+name = "sandvmm-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "raw_frames"
+path = "fuzz_targets/raw_frames.rs"
+test = false
+doc = false

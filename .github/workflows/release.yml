@@ -1,0 +1,112 @@
+# Release pipeline: tag push → build everything → package → GitHub Release.
+#
+# Triggered by:
+#   - pushing a v* tag            → publishes the release
+#   - workflow_dispatch           → creates a DRAFT release (dry run)
+#
+# The produced tarball is fully offline: static binaries (incl. the
+# static-PIE sandvmm with ASLR), an IPv6-enabled custom guest kernel,
+# normalized templates, vendored etcd, and a .release-stamp that makes every
+# deploy script bypass builds on the consumer host. Storage contract and
+# support matrix: docs/operations/storage.md. Release process:
+# docs/operations/release.md.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for the draft release (e.g. v0.0.3-rc1). Required: version tags are only created by push.'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      # Static-glibc sandvmm build must not link rust-lld (produces a
+      # start-up-segfaulting binary); build.sh vmm handles the flags.
+      DEBIAN_FRONTEND: noninteractive
+      # HARD PIN, belt over install-deps' pinned tarball: the runner image
+      # may already carry a newer Go on PATH (install-deps' >=1.26 reuse
+      # accepts it), and a newer toolchain broke the release build once
+      # through a grpc/x/net compile incompatibility. Every `go` invocation
+      # in this job — including under sudo -E — compiles with exactly this
+      # version (matches the go1.26.3 tarball install-deps.sh pins).
+      GOTOOLCHAIN: go1.26.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "draft=" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version || format('v0.0.0-dispatch-{0}', github.run_number) }}" >> "$GITHUB_OUTPUT"
+            echo "draft=--draft" >> "$GITHUB_OUTPUT"
+          fi
+
+      # install-deps.sh assumes root (direct apt-get) and installs the Rust
+      # toolchain SYSTEM-WIDE (/usr/local/rustup, exposed through /usr/local/bin
+      # — cargo/rustc symlinks plus a rustup wrapper carrying RUSTUP_HOME).
+      # The runner image preinstalls a per-user rustup in ~/.cargo/bin, AHEAD
+      # of /usr/local/bin on PATH, whose toolchains lack the warden musl
+      # target — so every subsequent build step also runs under sudo, and
+      # build.sh's PATH repair puts /usr/local/bin first. -u RUSTUP_HOME/-u
+      # CARGO_HOME: a runner-preset value would otherwise redirect BOTH the
+      # system install (install-deps honors a preset RUSTUP_HOME) and the
+      # wrapper's toolchain lookup back at the runner's toolchain.
+      - name: Install build + deploy dependencies
+        run: |
+          sudo -E env -u RUSTUP_HOME -u CARGO_HOME PATH="$PATH" bash build/install-deps.sh
+          # custom-kernel compile deps (not covered by install-deps.sh)
+          sudo apt-get install -y -qq flex bison bc libelf-dev libssl-dev
+
+      - name: Build IPv6-enabled guest kernel (CONFIG_IPV6=y)
+        run: sudo bash kernel/build.sh custom
+
+      - name: Materialize VERSION (release tag)
+        run: printf '%s' "${{ steps.ver.outputs.version }}" > VERSION
+
+      - name: Build all artifacts (version-stamped gateway + sandlot)
+        run: >
+          sudo -E env -u RUSTUP_HOME -u CARGO_HOME PATH="$PATH"
+          GO_LDFLAGS_EXTRA="-X main.Version=${{ steps.ver.outputs.version }} -X main.Commit=${{ github.sha }} -X main.BuildTime=release -X gateway/cmd.Version=${{ steps.ver.outputs.version }} -X gateway/cmd.Commit=${{ github.sha }} -X gateway/cmd.BuildTime=release -X sandlot/cmd.Version=${{ steps.ver.outputs.version }} -X sandlot/cmd.Commit=${{ github.sha }} -X sandlot/cmd.BuildTime=release"
+          bash build/build.sh all
+
+      - name: Build Ubuntu rootfs template (chroot needs root)
+        run: sudo bash build/build-ubuntu-rootfs.sh
+
+      - name: Package release
+        run: sudo bash build/package-release.sh "${{ steps.ver.outputs.version }}"
+
+      # Idempotent publish: a re-run, or a force-moved tag whose old release
+      # still exists, must UPDATE the release instead of dying on
+      # "a release with the same tag already exists" (which threw away a full
+      # 30-40min build). If the release exists: replace assets (--clobber)
+      # and refresh title/notes; else create it.
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          TITLE="sandswap $VER"
+          if gh release view "$VER" >/dev/null 2>&1; then
+            echo "Release $VER already exists — updating assets and notes"
+            gh release upload "$VER" dist/*.tar.gz dist/SHA256SUMS --clobber
+            gh release edit "$VER" --title "$TITLE" --notes-file dist/RELEASE_NOTES.md
+          else
+            ARGS=("$VER" dist/*.tar.gz dist/SHA256SUMS
+                  --title "$TITLE"
+                  --notes-file dist/RELEASE_NOTES.md)
+            if [ -n "${{ steps.ver.outputs.draft }}" ]; then ARGS+=("${{ steps.ver.outputs.draft }}"); fi
+            gh release create "${ARGS[@]}"
+          fi

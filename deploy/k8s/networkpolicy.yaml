@@ -1,0 +1,107 @@
+# Sandswap NetworkPolicy — restrict namespace traffic to Sandswap components only.
+#
+# Defense-in-depth for POD-NETWORK pods: even if a pod from another namespace
+# is compromised, it cannot reach the etcd / gateway / human / sandns pods on the
+# network level.
+#
+# ⚠ SCOPE — this policy does NOT protect the sandlot/boxout DaemonSet pods.
+# They run with hostNetwork: true (TAP/bridge management + vsock CID routing
+# require the host netns), and NetworkPolicy is enforced by the CNI at the
+# pod veth — hostNetwork pods' traffic bypasses it entirely, in BOTH
+# directions. Do not rely on this policy for sandbox isolation; that is the
+# host layer's job: vsockguard (BPF LSM on the warden vsock port),
+# ptrace/perf sysctls, UID separation, and restricted /dev/kvm +
+# /dev/vhost-vsock. See docs/deployment/prerequisites.md and
+# docs/how-it-works/vsockguard.md.
+#
+# Corollary: the sandbox→gateway stream and the gateway's readiness probes
+# keep working regardless of the ingress rules below, on any CNI. If you
+# switch CNIs, re-verify the pod-network rules only.
+#
+# Ingress: only from within the sandswap namespace.
+# Egress:  only to within the sandswap namespace + DNS (port 53).
+#
+# NOTE — sandlot-prov OCI egress: the prov pods pull/push templates from the
+# configured oci_registry. The default policy above blocks external egress, so
+# when a registry OUTSIDE the cluster is configured, uncomment the
+# sandswap-prov-oci-egress policy below and set the registry CIDR/port.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandswap-default
+  namespace: sandswap
+spec:
+  # Applies to the pod-network workloads: gateway (StatefulSet), gateway-human,
+  # sandswap-sandns, etcd. The hostNetwork DaemonSets are out of scope (above).
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sandswap
+  egress:
+    # Allow traffic within the namespace (gateway↔etcd, sandbox→gateway, etc.)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sandswap
+    # Allow DNS resolution (required for K8s service discovery)
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Sandswap DNS ingress — permit the cluster's CoreDNS (kube-system) to forward
+# the sandfs.sandswap.local zone to the sandswap-sandns Service. The generic
+# sandswap-default policy above only allows ingress from the sandswap namespace;
+# NetworkPolicies are additive, so this rule permits CoreDNS → sandswap-sandns :53.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandswap-sandns-ingress
+  namespace: sandswap
+spec:
+  podSelector:
+    matchLabels:
+      app: sandswap-sandns
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sandswap
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Provision pods → OCI registry egress (only needed when oci_registry points
+# OUTSIDE the cluster). NetworkPolicies are additive: this widens egress for
+# the prov pods ONLY, leaving the gateway/human/sandns pods at in-namespace+DNS.
+# Registry credentials (basic auth / bearer token / mTLS) are HTTP/TLS-level
+# and change nothing here — but a registry on a non-default port must be in
+# the ports list, and an in-cluster registry needs no egress rule at all
+# (in-namespace egress is already granted).
+#
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: sandswap-prov-oci-egress
+#   namespace: sandswap
+# spec:
+#   podSelector:
+#     matchLabels:
+#       app: sandlot-prov
+#   egress:
+#     - to:
+#         - ipBlock:
+#             cidr: 203.0.113.0/24   # ← the registry's address range
+#       ports:
+#         - port: 443
+#           protocol: TCP

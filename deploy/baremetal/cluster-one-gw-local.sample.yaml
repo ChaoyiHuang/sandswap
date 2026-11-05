@@ -1,0 +1,20 @@
+# Single-box rehearsal config for deploy-cluster-one-gw.sh.
+#
+# The deploy matrix's heavy-phase row runs this file directly:
+#   deploy-cluster-one-gw.sh --config deploy/baremetal/cluster-one-gw-local.sample.yaml
+# Role auto-detection matches 127.0.0.1 on this host and installs `all`
+# (exec + human gateways, co-located etcd, prov instance, one exec sandlot).
+# The matrix precondition provisions the loopback NFS export this file names.
+gateway:
+  host: 127.0.0.1
+shared_storage:
+  type: nfs
+  mount_point: /mnt/sandswap
+  nfs_server: 127.0.0.1
+  nfs_export: /srv/sandswap-nfs
+sandlots:
+  - host: 127.0.0.1
+    node_id: sandlot-1
+    pool: "small:2"
+    subnet: "10.188.0.0/24"
+    net_gateway_ip: "10.188.0.1"

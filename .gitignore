@@ -1,0 +1,43 @@
+# Build artifacts (all in one directory)
+output/
+
+# Kernel source tree (extracted from tarball)
+kernel/linux-*/
+
+# Rust target dirs
+vmm/target/
+warden/target/
+
+# Go test binaries
+*.test
+
+# In-place Go binaries. Bare `go build` (or `go build ./...` in a module whose
+# only package is main) drops the executable into the CWD — never commit them.
+# Real builds always target output/ via build/build.sh (build.sh go).
+/dns/dns
+/boxout/boxout
+/sandctl/sandctl
+/gateway/cmd/cmd
+/gateway/mcp/e2e/e2e
+/sandlot/warden-probe
+/examples/openai-sandswap/openai-sandswap
+/examples/eino-sandswap/eino-sandswap
+/examples/keepalive-sandswap/keepalive-sandswap
+/examples/mcp-sandswap/mcp-sandswap
+
+# sandctl workspace (run/ subtree: pids, logs, configs, certs, etcd data)
+/run/
+
+# PID files: process discipline writes them ad-hoc during test/deploy runs
+# (run/pids/ for sandctl, $LOG_DIR or /tmp for e2e, CWD for manual runs).
+# Always ephemeral — no tracked artifact is ever a .pid.
+*.pid
+
+# Local etcd data dirs (created when running `etcd` without --data-dir in a
+# module dir during ad-hoc testing; e2e scripts use /tmp/ explicitly)
+**/default.etcd/
+
+# Jekyll build output (docs site)
+docs/_site/
+docs/.jekyll-cache/
+dist/

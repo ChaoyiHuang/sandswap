@@ -1,0 +1,206 @@
+    shaped: lanes=32 x up to 64 agents/lane (period 6ms) = 2048 sandfs
+
+[0;32m═══ Phase 0: Preflight ═══[0m
+[0;32m[✓][0m Bare-metal detected
+    CPU cores: 96    MemAvailable: 378907MB    load: load: 0.86, 4.76, 6.06
+    plan: online cpus=0-95, 48 physical core(s) [node0:24, node1:24]
+    plan: explicit stack layout loadgen=0-3,48-51, gateway=4-7,52-55, sandlot=8-11,56-59
+    plan: VM pool 12-47,60-95 (72 CPUs); stack reserve 0-11,48-59 (12 whole core(s))
+[0;32m[✓][0m CPU partition: VM pool 12-47,60-95; stack reserve 0-11,48-59 (loadgen=0-3,48-51 gateway=4-7,52-55 sandlot=8-11,56-59)
+[0;32m[✓][0m /dev/kvm available
+[0;32m[✓][0m /dev/vhost-vsock readable
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[✓][0m load driver: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/loadgen
+[0;32m[✓][0m Prebuilt release package (.release-stamp present) — freshness check skipped
+[0;32m[✓][0m etcd binary: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/etcd/etcd
+[0;32m[✓][0m Required tools: numactl
+[0;32m[✓][0m numactl present — CPU pinning/confinement requested (PIN_MODE=1 partitioned=1)
+[0;32m[✓][0m Required tools: taskset
+[0;32m[✓][0m taskset present — host stack will be pinned to 0-11,48-59
+
+[0;32m═══ Phase 1: Single-microVM no-load latency (latency-benchmark-aiagent.sh) ═══[0m
+[1;33m[!][0m SKIP_ESTIMATE_BENCH=1 — using supplied no-load P95s: gateway warm/cold 0.868/2.323ms, client 0.979/2.488ms
+[0;32m[✓][0m No-load reference: gateway E2E P95 warm=0.868ms cold=2.323ms; client P95 warm=0.979ms cold=2.488ms
+
+[0;32m═══ Phase 2: Deploy (one-machine-etcd, sticky-ms=1) ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /var/lib/sandswap/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via eth0)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> eth0); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[✓][0m etcd binary: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/etcd/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (load-bench, data=/tmp/sandswap-load-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=704053)
+[0;32m[✓][0m etcd (pid 704053): all threads on 4-7,52-55
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 704095)
+[0;32m[✓][0m exec gateway ready (http://localhost:3001)
+[0;32m[✓][0m exec-gateway (pid 704095): all threads on 4-7,52-55
+[0;32m[→][0m Starting human gateway (127.0.0.1:3100, mode=human, shared etcd)...
+[0;32m[✓][0m human gateway ready (http://localhost:3100)
+[0;32m[✓][0m human-gateway (pid 704131): all threads on 4-7,52-55
+
+[0;32m═══ Phase 3: Sandlot + provision instance ═══[0m
+[0;32m[→][0m CPU/NUMA pinning setup
+[0;32m[✓][0m VM pinning: PIN_MODE=1: VM pool 12-47,60-95 -> 36 whole-core slices x 2 CPU(s) [node0:12,node1:24], POOL=32, 0 CPU(s) unused; stack cores: loadgen=0-3,48-51 gateway=4-7,52-55 sandlot=8-11,56-59
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap/sandlot-load.yaml
+[0;32m[✓][0m vmm_binary pinned to the CPU/NUMA shim: /var/lib/sandswap/sandvmm-pinned
+[0;32m[✓][0m recycle policy (capacity): max_uses=-1 max_mounts=-1 max_distinct_agents=-1 mem=0%/0MB
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 704240)
+[0;32m[✓][0m exec-sandlot (pid 704240): all threads on 8-11,56-59
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+[0;32m[✓][0m provision instance connected (load-bench-prov)
+[0;32m[✓][0m prov-sandlot (pid 704820): all threads on 8-11,56-59
+    Waiting for sandlot pool pre-creation (target: 32, stats: http://localhost:3001)...
+[0;32m[✓][0m Pool ready: 32 CLEAN VM(s)
+    pin-vm pool-bench-1             pid=704320  slot=1   cpus=24,72        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-3             pid=704379  slot=3   cpus=25,73        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-2             pid=704401  slot=2   cpus=13,61        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-4             pid=704429  slot=4   cpus=14,62        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-0             pid=704465  slot=0   cpus=12,60        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-5             pid=704523  slot=5   cpus=26,74        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-6             pid=704568  slot=6   cpus=15,63        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-7             pid=704608  slot=7   cpus=27,75        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-8             pid=704666  slot=8   cpus=16,64        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-9             pid=704721  slot=9   cpus=28,76        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-10            pid=704765  slot=10  cpus=17,65        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-11            pid=704862  slot=11  cpus=29,77        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-12            pid=704902  slot=12  cpus=18,66        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-13            pid=704943  slot=13  cpus=30,78        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-14            pid=704986  slot=14  cpus=19,67        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-15            pid=705028  slot=15  cpus=31,79        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-16            pid=705071  slot=16  cpus=20,68        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-17            pid=705114  slot=17  cpus=32,80        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-18            pid=705151  slot=18  cpus=21,69        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-19            pid=705188  slot=19  cpus=33,81        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-20            pid=705225  slot=20  cpus=22,70        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-21            pid=705271  slot=21  cpus=34,82        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-22            pid=705361  slot=22  cpus=23,71        node=0  mem_on_node= 96.2%
+    pin-vm pool-bench-23            pid=705398  slot=23  cpus=35,83        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-24            pid=705444  slot=24  cpus=36,84        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-25            pid=705485  slot=25  cpus=37,85        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-26            pid=705528  slot=26  cpus=38,86        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-27            pid=705565  slot=27  cpus=39,87        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-28            pid=705614  slot=28  cpus=40,88        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-29            pid=705652  slot=29  cpus=41,89        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-30            pid=705681  slot=30  cpus=42,90        node=1  mem_on_node=100.0%
+    pin-vm pool-bench-31            pid=705709  slot=31  cpus=43,91        node=1  mem_on_node=100.0%
+    pin-summary vms=32 mode=slice slices=36 pool=32 oversubscribed=no
+[0;32m[✓][0m pin-cpu-numa: every sandvmm thread is on its VM's CPU slice and >=95% of its pages on the slice's NUMA node
+    exec-gateway (pid 704095): all threads on 4-7,52-55
+    human-gateway (pid 704131): all threads on 4-7,52-55
+    etcd (pid 704053): all threads on 4-7,52-55
+    exec-sandlot (pid 704240): all threads on 8-11,56-59
+    prov-sandlot (pid 704820): all threads on 8-11,56-59
+[0;32m[✓][0m stack pinning: loadgen/gateway/etcd/sandlot are on their reserved CPUs
+
+[0;32m═══ Phase 4: Create 2048 LLM agents (flat rootfs:v1) ═══[0m
+    volume space preflight: 2048 x 2092KiB ~= 5141299KiB, 449111420KiB available under /var/lib/sandswap/volumes
+    agent creation: 512/2048 done
+    agent creation: 1024/2048 done
+    agent creation: 1536/2048 done
+    agent creation: 2048/2048 done
+[0;32m[✓][0m agents ready: 2048 flat sandfs, template rootfs:v1, recycle policy capacity
+[0;32m[✓][0m shaped hold calibrated from measured unmount P95: 2.366ms -> hold=5ms (p95 + 2ms margin, clamped [1,100])
+
+[0;32m═══ Phase 5: shaped lanes (lanes=32, agents/lane auto ~ rate x think 900-1500ms, hold=5ms; periods: 6 8 10ms; requests/turn=1; retry=50x10ms; sticky 1ms; window 20s + 10s warmup) ═══[0m
+[0;32m[→][0m period=6 ms (lanes=32 x 64 agents) (think=900-1500ms, requests/turn=1, window=20s, warmup=10s)
+    stack-cpu: loadgen=0.00 gateway=7.57 human=0.02 etcd=1.54 sandlot=6.95 prov=0.02 cores (wall=0s)
+    agents=2048 ok=22580 err=0 busy=471 retried=445 req/s=1129 cold/s=1129 warm/s=0 warm_hit=0% per-VM cold/s=35.28
+    gw p95: cold=63.231ms warm=0ms | client p95: cold=63.345ms warm=0ms
+    VMs: clean min/mean/p95=21/29.94/32 of 32; recycles=0; unmounts=31050; fires=31050 (under2=31050 max=1.01ms)
+bench-result {"mode":"shaped","agents":2048,"period_ms":6,"ok":22580,"err":0,"busy_attempts":471,"busy_retried":445,"req_rps":1129,"cold_rps":1129,"warm_rps":0,"warm_hit_pct":0,"duration_sec":20,"turns":22580,"cold_gw_p50_ms":2.703,"cold_gw_p95_ms":63.231,"cold_gw_p99_ms":259.961,"warm_gw_p50_ms":0,"warm_gw_p95_ms":0,"warm_gw_p99_ms":0,"cold_client_p95_ms":63.345,"warm_client_p95_ms":0,"expected_expiries":20532,"expected_expiries_all":29002,"unmount_delta":31050,"lease_fire_delta":31050,"lease_fire_under2":31050,"lease_fire_max_ms":1.01,"unmount_p95_ms":2.839,"clean_min":21,"clean_mean":29.94,"clean_p95":32,"total_vms":32,"recycle_delta":0,"err_kinds":{}}
+[0;32m[→][0m period=8 ms (lanes=32 x 64 agents) (think=900-1500ms, requests/turn=1, window=20s, warmup=10s)
+    stack-cpu: loadgen=0.00 gateway=11.08 human=0.01 etcd=0.13 sandlot=11.23 prov=0.03 cores (wall=0s)
+    agents=2048 ok=33956 err=0 busy=0 retried=0 req/s=1697.8 cold/s=1697.8 warm/s=0 warm_hit=0% per-VM cold/s=53.06
+    gw p95: cold=3.679ms warm=0ms | client p95: cold=3.797ms warm=0ms
+    VMs: clean min/mean/p95=16/26.62/32 of 32; recycles=0; unmounts=50648; fires=50648 (under2=50648 max=1.062ms)
+bench-result {"mode":"shaped","agents":2048,"period_ms":8,"ok":33956,"err":0,"busy_attempts":0,"busy_retried":0,"req_rps":1697.8,"cold_rps":1697.8,"warm_rps":0,"warm_hit_pct":0,"duration_sec":20,"turns":33956,"cold_gw_p50_ms":2.368,"cold_gw_p95_ms":3.679,"cold_gw_p99_ms":5.935,"warm_gw_p50_ms":0,"warm_gw_p95_ms":0,"warm_gw_p99_ms":0,"cold_client_p95_ms":3.797,"warm_client_p95_ms":0,"expected_expiries":31908,"expected_expiries_all":48600,"unmount_delta":50648,"lease_fire_delta":50648,"lease_fire_under2":50648,"lease_fire_max_ms":1.062,"unmount_p95_ms":3.048,"clean_min":16,"clean_mean":26.62,"clean_p95":32,"total_vms":32,"recycle_delta":0,"err_kinds":{}}
+[0;32m[→][0m period=10 ms (lanes=32 x 64 agents) (think=900-1500ms, requests/turn=1, window=20s, warmup=10s)
+    stack-cpu: loadgen=0.00 gateway=11.04 human=0.03 etcd=0.13 sandlot=11.22 prov=0.01 cores (wall=0s)
+    agents=2048 ok=33903 err=0 busy=0 retried=0 req/s=1695.15 cold/s=1695.15 warm/s=0 warm_hit=0% per-VM cold/s=52.97
+    gw p95: cold=3.774ms warm=0ms | client p95: cold=3.898ms warm=0ms
+    VMs: clean min/mean/p95=19/25.94/32 of 32; recycles=0; unmounts=50532; fires=50532 (under2=50532 max=1.005ms)
+bench-result {"mode":"shaped","agents":2048,"period_ms":10,"ok":33903,"err":0,"busy_attempts":0,"busy_retried":0,"req_rps":1695.15,"cold_rps":1695.15,"warm_rps":0,"warm_hit_pct":0,"duration_sec":20,"turns":33903,"cold_gw_p50_ms":2.375,"cold_gw_p95_ms":3.774,"cold_gw_p99_ms":6.113,"warm_gw_p50_ms":0,"warm_gw_p95_ms":0,"warm_gw_p99_ms":0,"cold_client_p95_ms":3.898,"warm_client_p95_ms":0,"expected_expiries":31855,"expected_expiries_all":48484,"unmount_delta":50532,"lease_fire_delta":50532,"lease_fire_under2":50532,"lease_fire_max_ms":1.005,"unmount_p95_ms":3.26,"clean_min":19,"clean_mean":25.94,"clean_p95":32,"total_vms":32,"recycle_delta":0,"err_kinds":{}}
+
+[0;32m═══ Phase 6: Gates ═══[0m
+    PASS zero-unexpected-errors: no non-503 failures
+    
+    -- shaped lanes (one per microVM; many AI agents queued per lane, one in-flight request per VM) --
+    INFO period=6ms: agents=2048 cold/s=1129.00 (per-VM 35.28/s) warm/s=0.0 busy=471 terminal=0 | cold gw p95=63.231ms client p95=63.345ms | clean mean=29.94/32
+    INFO period=8ms: agents=2048 cold/s=1697.80 (per-VM 53.06/s) warm/s=0.0 busy=0 terminal=0 | cold gw p95=3.679ms client p95=3.797ms | clean mean=26.62/32
+    INFO period=10ms: agents=2048 cold/s=1695.15 (per-VM 52.97/s) warm/s=0.0 busy=0 terminal=0 | cold gw p95=3.774ms client p95=3.898ms | clean mean=25.94/32
+    PASS shaped-max: period=8ms pool=32 agents=2048: cold/s=1697.80 (per-VM 53.06/s) terminal=0 (busy retries reported) busy=0; cold gw p95=3.679ms client p95=3.797ms; pool clean mean=26.62/32
+    PASS punctuality: shaped-max period=8ms: 50648 fires, 100.0% <2ms, max=1.062ms
+    PASS conservation: shaped-max period=8ms: expected_expiries(all incl. warmup)=48600 unmount_delta=50648 (slack 12662)
+
+[0;32m═══ Summary ═══[0m
+  Environment: bare-metal KVM
+  Topology:    one-machine-etcd (exec http://localhost:3001, human http://localhost:3100, etcd http://127.0.0.1:2379), sticky=1ms
+  Pinning:     PIN_MODE=1: VM pool 12-47,60-95 -> 36 whole-core slices x 2 CPU(s) [node0:12,node1:24], POOL=32, 0 CPU(s) unused; stack cores: loadgen=0-3,48-51 gateway=4-7,52-55 sandlot=8-11,56-59
+  Stack CPU:   /tmp/sandswap-logs/load-stack-cpu.tsv
+  Pin advisor:
+    pin-advisor: peak stack CPU (core-equivalents): loadgen=0.00 gateway+human+etcd=11.22 sandlot+prov=11.26
+    pin-advisor: this run's allocation: loadgen 0.00/8 threads=0%; gateway 11.22/8 threads=140%; sandlot 11.26/8 threads=141%
+    pin-advisor: target 0.60 -> reserve 21 whole core(s) (loadgen 1, gateway+human+etcd 10, sandlot+prov 10)
+    pin-advisor: target 0.70 -> reserve 19 whole core(s) (loadgen 1, gateway+human+etcd 9, sandlot+prov 9)
+    pin-advisor: target 0.80 -> reserve 17 whole core(s) (loadgen 1, gateway+human+etcd 8, sandlot+prov 8)
+    pin-advisor: recommended next run: PIN_RESERVE_CORES=19 PIN_STACK_LAYOUT="loadgen:0,48;gateway:1,49,2,50,3,51,4,52,5,53,6,54,7,55,8,56,9,57;sandlot:10,58,11,59,12,60,13,61,14,62,15,63,16,64,17,65,18,66"
+    pin-advisor: VM cores under it: 29 (1 VM/core -> POOL_SIZE=29; 2 VM/core on SMT -> 58)
+    pin-advisor: saved /tmp/sandswap-logs/pin-recommendation.env (source it before the next run)
+  No-load reference (latency-benchmark-aiagent.sh): gateway E2E P95 warm=0.868ms cold=2.323ms; client P95 warm=0.979ms cold=2.488ms
+  Retry policy: 503 NO_AVAILABLE_SANDBOX retried 50x with 10ms full-jitter backoff
+  Measured (agents/lanes = offered load; period = ideal mode turn period; cold/s = VM switches/s;
+            per-VM = cold/s ÷ pool; busy = 503 refusals absorbed by retries; ERR = terminal failures):
+     AGENTS   PERIOD      OK    ERR    BUSY  RETRY%     REQ/S    COLD/S  PER-VM/S    WARM/S   HIT%  COLD_GW95  WARM_GW95  COLD_CL95  CLEAN/POOL RECYCLES
+       2048        6   22580      0     471     2.0      1129      1129     35.28         0      0     63.231          0     63.345    29.94/32        0
+       2048        8   33956      0       0     0.0    1697.8    1697.8     53.06         0      0      3.679          0      3.797    26.62/32        0
+       2048       10   33903      0       0     0.0   1695.15   1695.15     52.97         0      0      3.774          0      3.898    25.94/32        0
+  Error classes:
+    (none — every request completed)
+  Gates / observations:
+    PASS zero-unexpected-errors: no non-503 failures
+    
+    -- shaped lanes (one per microVM; many AI agents queued per lane, one in-flight request per VM) --
+    INFO period=6ms: agents=2048 cold/s=1129.00 (per-VM 35.28/s) warm/s=0.0 busy=471 terminal=0 | cold gw p95=63.231ms client p95=63.345ms | clean mean=29.94/32
+    INFO period=8ms: agents=2048 cold/s=1697.80 (per-VM 53.06/s) warm/s=0.0 busy=0 terminal=0 | cold gw p95=3.679ms client p95=3.797ms | clean mean=26.62/32
+    INFO period=10ms: agents=2048 cold/s=1695.15 (per-VM 52.97/s) warm/s=0.0 busy=0 terminal=0 | cold gw p95=3.774ms client p95=3.898ms | clean mean=25.94/32
+    PASS shaped-max: period=8ms pool=32 agents=2048: cold/s=1697.80 (per-VM 53.06/s) terminal=0 (busy retries reported) busy=0; cold gw p95=3.679ms client p95=3.797ms; pool clean mean=26.62/32
+    PASS punctuality: shaped-max period=8ms: 50648 fires, 100.0% <2ms, max=1.062ms
+    PASS conservation: shaped-max period=8ms: expected_expiries(all incl. warmup)=48600 unmount_delta=50648 (slack 12662)
+  Data source: http://localhost:3001/stats (unmount_stats + a 2s pool clean/recycle poller)
+  Temp dirs:   deploy=/var/lib/sandswap logs=/tmp/sandswap-logs (all removed on exit)
+[0;32m[✓][0m load benchmark completed: measured levels and gates above
+{"level":"error","ts":"2026-11-02T15:56:31.435245+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"mux: server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-02T15:56:31.435275+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"http: Server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-02T15:56:38.435568+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2379: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+{"level":"error","ts":"2026-11-02T15:56:38.436203+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2380: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 64 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

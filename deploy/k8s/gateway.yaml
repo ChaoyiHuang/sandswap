@@ -1,0 +1,259 @@
+# Gateway StatefulSet for Sandswap exec mode.
+#
+# Runs N replicas behind ONE headless Service (gateway-exec) exposing both the
+# MCP HTTP endpoint (:3000) and the gRPC stream (:9998). The headless Service
+# gives every pod a stable FQDN — gateway-0.gateway-exec.sandswap.svc.cluster.local
+# — which doubles as the fixed gateway_id and the address the owner-aware
+# DNS, 307 redirects, and sandlot reconnects all target.
+#
+# Affinity model (in-cluster, connection = affinity anchor):
+#   - Sandlot DaemonSets connect to the headless Service once; the sandlot
+#     remembers its last gateway and re-dials the same pod's stream FQDN on
+#     reconnect, so every sandfs bound to that node stays warm.
+#   - Agents (MCP clients, in-cluster pods) use a per-sandfs URL
+#     https://<sandfs_id>.sandfs.sandswap.local:3000/mcp. CoreDNS forwards the
+#     sandfs.sandswap.local zone to the sandswap-sandns Deployment, which resolves
+#     each name to its OWNER gateway's CNAME (owner-aware DNS). A misroute
+#     (health lag / cache staleness) is caught by the gateway's 307 redirect.
+#   - NO port-forward, NO LoadBalancer: agent↔gateway is pod-to-pod over CNI.
+#     Gateway and sandlot may be on different nodes — the Service + CNI handle it.
+#
+# TLS: gRPC stream uses mTLS; MCP endpoint serves the shared wildcard cert
+# (SAN *.sandfs.sandswap.local). Certs from gateway-certs Secret.
+# Runs as non-root (UID 1000) and mounts NO storage: every sandfs/template op
+# routes over the stream (exec ops to sandlot DaemonSet nodes; storage ops to
+# a sandlot-prov pod behind the human gateway). `vol_root` is a path
+# convention for those commands only.
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gateway
+  namespace: sandswap
+  labels:
+    app: gateway
+spec:
+  # Default 1 replica keeps the dev harness deterministic (its port-forward hits
+  # the single gateway, which always has a sandlot connected). Scale to 2+ for
+  # production multi-gateway affinity — ensure EVERY gateway pod has at least one
+  # sandlot DaemonSet node connected (the owner-aware DNS routes each sandfs to
+  # its owner; a gateway with no sandlot would 503 on the first-claim fallback).
+  replicas: 1
+  serviceName: gateway-exec
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: gateway
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # No fsGroup and no storage volumes: this pod mounts NOTHING shared
+        # (every sandfs/template op routes over the stream). The storage PVCs
+        # belong to the sandlot-prov Deployment / sandlot DaemonSet pods.
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # re-materialize the TLS material with enforced modes —
+        # Secret volumes land 0777 on this k3s (probed live), and the pod
+        # previously held the etcd SERVER key too. Files are copied to a
+        # plain emptyDir, chowned to the app uid, keys 0400.
+        - name: certs-copy
+          image: sandswap/gateway:latest
+          imagePullPolicy: Never
+          # Runs as the pod's OWN identity (1000, inherited — no explicit
+          # runAsUser): pod-level runAsNonRoot forbids a uid-0 init container
+          # and kubelet v1.36 enforces it on init containers too
+          # (CreateContainerConfigError "runAsUser breaks non-root policy").
+          # Same pattern as the sandlot-prov pod: the emptyDir
+          # is 0777 so uid 1000 creates the copies itself, chmod(2) on its own
+          # files enforces the key modes, and the chown below is a permitted
+          # no-op. Reading the -src Secrets needs no privilege: this k3s writes
+          # Secret files 0777 (probed), and a healthy kubelet's 0644 default is
+          # world-readable as well.
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              # install(1), not cp+chmod: it unlinks the target first, so a
+              # restart re-creates over a leftover 0400 key (cp cannot truncate
+              # its own write-less 0400 file — the crash-loop shape),
+              # and the files land owned by the pod uid with the
+              # exact final modes. No chown: as a non-root init it would hit
+              # EACCES on the root-owned emptyDir dir itself (the other half
+              # of the same failure), and ownership is already correct.
+              for f in ca.crt stream.crt agent.crt human.crt; do
+                [ -f "/gwcerts-src/$f" ] && install -m 0644 "/gwcerts-src/$f" "/certs/$f"
+              done
+              for f in stream.key agent.key human.key; do
+                [ -f "/gwcerts-src/$f" ] && install -m 0400 "/gwcerts-src/$f" "/certs/$f"
+              done
+              for f in ca.crt client.crt; do
+                [ -f "/etcdcerts-src/$f" ] && install -m 0644 "/etcdcerts-src/$f" "/etcd-certs/$f"
+              done
+              [ -f /etcdcerts-src/client.key ] && install -m 0400 /etcdcerts-src/client.key /etcd-certs/client.key
+              echo "gateway certs: $(stat -c '%a %u:%g' /certs/stream.key 2>/dev/null)"
+          volumeMounts:
+            - name: gateway-certs-src
+              mountPath: /gwcerts-src
+              readOnly: true
+            - name: etcd-certs-src
+              mountPath: /etcdcerts-src
+              readOnly: true
+            - name: gateway-certs
+              mountPath: /certs
+            - name: etcd-certs
+              mountPath: /etcd-certs
+      containers:
+        - name: gateway
+          image: sandswap/gateway:latest
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - --config=/config/gateway.yaml
+            # etcd TLS paths (volume-mounted, must be CLI overrides)
+            - --etcd-ca=/etcd-certs/ca.crt
+            - --etcd-cert=/etcd-certs/client.crt
+            - --etcd-key=/etcd-certs/client.key
+            # gRPC stream TLS (mTLS — sandlot presents client cert)
+            - --stream-tls-cert=/certs/stream.crt
+            - --stream-tls-key=/certs/stream.key
+            - --stream-tls-ca=/certs/ca.crt
+            # MCP HTTP TLS (no mTLS — kubelet probes don't have client certs)
+            - --agent-tls-cert=/certs/agent.crt
+            - --agent-tls-key=/certs/agent.key
+            # Fixed gateway identity = pod name (stable across restart).
+            - --gateway-id=$(POD_NAME)
+            # Routing address registered in the /sandswap/gateway/{id} registry
+            # key (owner-aware DNS CNAME target + 307 Location). The
+            # $(POD_NAME)/$(POD_NAMESPACE) args are expanded by k8s from the
+            # downward-API env vars below.
+            - --gateway-url=https://$(POD_NAME).gateway-exec.$(POD_NAMESPACE).svc.cluster.local:3000
+            - --gateway-stream-addr=$(POD_NAME).gateway-exec.$(POD_NAMESPACE).svc.cluster.local:9998
+            # Long keep-alive idle — connection = affinity anchor. 3600s =
+            # 1h covers agents pausing between tool calls; configurable higher.
+            - --idle-timeout=3600
+          env:
+            - name: HOME
+              value: /tmp
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: mcp
+              containerPort: 3000
+            - name: stream
+              containerPort: 9998
+          volumeMounts:
+            - name: gateway-certs
+              mountPath: /certs
+              readOnly: true
+            - name: etcd-certs
+              mountPath: /etcd-certs
+              readOnly: true
+            - name: gateway-config
+              mountPath: /config
+              readOnly: true
+            # MCP agent guide (see configmaps.yaml gateway.yaml mcp.instructions_file).
+            # Seeded from the gateway binary's compiled-in default by deploy-lib;
+            # ops edits the ConfigMap and the gateway hot-reloads (symlink swap
+            # handled by its file watcher).
+            - name: gateway-mcp-instructions
+              mountPath: /etc/sandswap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        # emptyDirs re-materialized by the certs-copy init container
+        # (Secret defaultMode is not dependable on this k3s; and the pod must
+        # NOT directly hold the etcd server key — the client-only etcd-certs
+        # Secret is what it mounts, with keys enforced 0400).
+        - name: gateway-certs
+          emptyDir: {}
+        - name: etcd-certs
+          emptyDir: {}
+        - name: gateway-certs-src
+          secret:
+            secretName: gateway-certs
+        - name: etcd-certs-src
+          secret:
+            secretName: etcd-certs
+        - name: gateway-config
+          configMap:
+            name: gateway-config
+        - name: gateway-mcp-instructions
+          configMap:
+            name: gateway-mcp-instructions
+        - name: tmp
+          emptyDir: {}
+---
+# Headless Service — the single entry for BOTH agent HTTP (:3000) and sandlot
+# gRPC (:9998). clusterIP: None gives every StatefulSet pod a stable FQDN
+# (<pod>.<svc>.<ns>.svc.cluster.local) that is the fixed gateway_id, the
+# owner-aware DNS CNAME target, the 307 redirect target, and the sandlot
+# last-gateway reconnect target.
+#
+# No sessionAffinity, no LoadBalancer: affinity is owned by the app (etcd
+# ownership + sandfs-level DNS + keep-alive), NOT by the transport. A sandlot
+# dials the Service for its FIRST connection (kube-proxy picks a pod); the
+# last-gateway memory then pins it to that pod across reconnects.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-exec
+  namespace: sandswap
+spec:
+  clusterIP: None
+  selector:
+    app: gateway
+  ports:
+    - name: mcp
+      port: 3000
+      targetPort: 3000
+    - name: stream
+      port: 9998
+      targetPort: 9998

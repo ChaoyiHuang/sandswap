@@ -1,0 +1,127 @@
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected -> bare-metal KVM host
+    pinning host stack to CPUs 16-23,64-71; VM slices: 13,61:0;14,62:0;15,63:0
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected -> bare-metal KVM host
+    CPU cores: 16    load: load: 0.04, 0.13, 0.25
+    Pinning:   PIN_MODE=1 (16-23,64-71 stack cores, 13,61:0;14,62:0;15,63:0 VM slices)
+[0;32m[✓][0m /dev/kvm available
+[0;32m[✓][0m /dev/vhost-vsock readable
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[✓][0m Prebuilt release package (.release-stamp present) — freshness check skipped
+
+[0;32m═══ Phase 1: Deploy ═══[0m
+[0;32m[✓][0m Ubuntu rootfs with python3: /root/bench-0.0.5/sandswap-v0.0.5-linux-amd64/e2e/../output/rootfs-ubuntu (141M)
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /var/lib/sandswap/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via eth0)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> eth0); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[✓][0m bare-metal pinning: stack CPUs 16-23,64-71, VM slices 13,61:0;14,62:0;15,63:0 (VMM shim: /var/lib/sandswap/pinned/sandvmm)
+[0;32m[→][0m Deploying Ubuntu rootfs template (replacing default busybox)...
+[0;32m[✓][0m Ubuntu template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (141M)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+
+[0;32m═══ Phase 2: Start gateway (single-node) ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 49888)
+
+[0;32m═══ Phase 3: Start sandlot (connects to gateway, mTLS) ═══[0m
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap/sandlot-unmount.yaml
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 49928)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+
+[0;32m═══ Phase 4: Create agent + sandfs (Ubuntu rootfs) ═══[0m
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m agent created (sandfs sandfs-b70b7ec5)
+
+[0;32m═══ Phase 5: Run unmount scenarios (data source: /stats unmount_stats) ═══[0m
+[0;32m[✓][0m /stats reachable at http://localhost:3100 (node: test-node-1)
+
+[0;32m═══ Scenario: baseline (ITER_N=20 + 1 warmup, FILE_MB=16) ═══[0m
+    data source: http://localhost:3100/stats unmount_stats (node test-node-1); workload lang=shell
+[0;32m[✓][0m baseline: n=20 success=20 fail=0 timeout=0 exec_err=0 badout=0
+    under_5ms:  20 (100%)    under_10ms: 20 (100%)    new top_slow entries: 9
+    recent ring (cumulative window): gateway n=21 P50=2.28ms P95=2.423ms P99=2.503ms max=2.503ms | warden n=21 P50=1.858ms P95=1.944ms P99=2.004ms max=2.004ms
+
+[0;32m═══ Scenario: cache16m (ITER_N=20 + 1 warmup, FILE_MB=16) ═══[0m
+    data source: http://localhost:3100/stats unmount_stats (node test-node-1); workload lang=python
+[0;32m[✓][0m cache16m: n=20 success=20 fail=0 timeout=0 exec_err=0 badout=0
+    under_5ms:  20 (100%)    under_10ms: 20 (100%)    new top_slow entries: 10
+    recent ring (cumulative window): gateway n=42 P50=2.929ms P95=3.08ms P99=3.106ms max=3.106ms | warden n=42 P50=2.481ms P95=2.59ms P99=2.61ms max=2.61ms
+
+[0;32m═══ Scenario: dirty16m (ITER_N=20 + 1 warmup, FILE_MB=16) ═══[0m
+    data source: http://localhost:3100/stats unmount_stats (node test-node-1); workload lang=python
+[0;32m[✓][0m dirty16m: n=20 success=20 fail=0 timeout=0 exec_err=0 badout=0
+    under_5ms:  20 (100%)    under_10ms: 20 (100%)    new top_slow entries: 1
+    recent ring (cumulative window): gateway n=63 P50=2.945ms P95=3.07ms P99=3.106ms max=3.106ms | warden n=63 P50=2.48ms P95=2.59ms P99=2.624ms max=2.624ms
+
+[0;32m═══ Phase 6: Slow unmount samples (top_slow, attributed by workload marker) ═══[0m
+  scenario   gateway_ms  sandlot_ms  warden_ms  reason                 timestamp
+  baseline        2.423        2.17      1.944  lease-expiry           2026-11-01T23:32:46Z
+  baseline        2.415       2.164      1.936  lease-expiry           2026-11-01T23:32:47Z
+  baseline        2.358       2.135      1.923  lease-expiry           2026-11-01T23:32:47Z
+  baseline        2.321       2.108      1.892  lease-expiry           2026-11-01T23:32:50Z
+  baseline         2.31       2.065      1.858  lease-expiry           2026-11-01T23:32:48Z
+  baseline        2.309       2.092      1.888  lease-expiry           2026-11-01T23:32:49Z
+  baseline        2.305       2.085      1.863  lease-expiry           2026-11-01T23:32:50Z
+  baseline        2.298       2.059      1.856  lease-expiry           2026-11-01T23:32:49Z
+  baseline        2.291       2.085      1.885  lease-expiry           2026-11-01T23:32:50Z
+  cache16m        3.106       2.826      2.594  lease-expiry           2026-11-01T23:32:57Z
+  cache16m        3.083       2.841       2.61  lease-expiry           2026-11-01T23:32:55Z
+  cache16m         3.08       2.813       2.59  lease-expiry           2026-11-01T23:32:56Z
+  cache16m         3.07       2.793      2.568  lease-expiry           2026-11-01T23:32:56Z
+  cache16m        3.067       2.804      2.571  lease-expiry           2026-11-01T23:32:58Z
+  cache16m        3.062       2.792      2.563  lease-expiry           2026-11-01T23:32:52Z
+  cache16m        3.059       2.797      2.566  lease-expiry           2026-11-01T23:32:52Z
+  cache16m         3.05       2.773      2.545  lease-expiry           2026-11-01T23:32:55Z
+  cache16m        3.042         2.8      2.545  lease-expiry           2026-11-01T23:32:53Z
+  cache16m        3.036       2.787       2.55  lease-expiry           2026-11-01T23:32:54Z
+  dirty16m         3.07       2.829      2.624  lease-expiry           2026-11-01T23:32:59Z
+
+[0;32m═══ Phase 6: Verdict ═══[0m
+  baseline: n=20  under_5ms=20 (100%)  under_10ms=20 (100%)  exec_err=0 badout=0  slow_entries=9  max_warden_ms=1.944
+  cache16m: n=20  under_5ms=20 (100%)  under_10ms=20 (100%)  exec_err=0 badout=0  slow_entries=10  max_warden_ms=2.61
+  dirty16m: n=20  under_5ms=20 (100%)  under_10ms=20 (100%)  exec_err=0 badout=0  slow_entries=1  max_warden_ms=2.624
+[0;32m[✓][0m cache16m warden-layer max (2.61ms) > baseline (1.944ms) — drop_caches scales with page cache, as expected
+[0;32m[✓][0m dirty16m warden-layer max (2.624ms) ≥ cache16m (2.61ms) — umount writeback adds on top of drop_caches
+
+
+[0;32m═══ Summary ═══[0m
+  Environment: bare-metal KVM
+  Scenarios:   baseline cache16m dirty16m  (ITER_N=20, FILE_MB=16, sticky lease=100ms)
+  Data source: http://localhost:3100/stats unmount_stats — counters + top-10 slow + rolling P50/P95/P99
+  Layers:      gateway_ms = RPC E2E · sandlot_ms = handler total (incl. set-fs clear) · warden_ms = kill+teardown+umount+drop_caches
+  P95 columns: gateway P95=3.07ms (n=63, P50=2.945ms, P99=3.106ms, max=3.106ms)  warden P95=2.59ms (n=63, P50=2.48ms, P99=2.624ms, max=2.624ms)
+bench-p95 gateway_ms=3.07 warden_ms=2.59 n=63 warden_n=63
+  Gateway:     http://localhost:3001 (exec) / http://localhost:3100 (stats)
+  Temp dirs:   deploy=/var/lib/sandswap logs=/tmp/sandswap-logs (removed on exit; output/rootfs-ubuntu kept)
+[0;32m[✓][0m unmount benchmark completed cleanly
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+All processes stopped.

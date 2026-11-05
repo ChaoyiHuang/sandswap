@@ -1,0 +1,6 @@
+/build
+/.cargo
+/target
+**/*.rs.bk
+**/rusty-tags.vi
+/rpm/SOURCES

@@ -1,0 +1,22 @@
+[package]
+name = "virtiofsd-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+virtiofsd = { path = ".." }
+
+# Prevent this from interfering with the virtiofsd package.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "filter_init"
+path = "fuzz_targets/filter_init.rs"
+test = false
+doc = false

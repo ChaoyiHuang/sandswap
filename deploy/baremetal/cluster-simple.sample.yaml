@@ -1,0 +1,33 @@
+# Sample small-cluster config for deploy-cluster-one-gw.sh (1 GW host + N sandlots)
+gateway:
+  host: gateway1.example.com
+  # Gateway SERVICE address (DNS name or IP). NOTE: deploy-cluster-one-gw.sh
+  # binds the default ports 3000/3100/9998; it does not read per-port
+  # overrides from this file.
+# etcd — OPTIONAL: omit this section entirely and the script installs a
+# co-located single-node etcd (mTLS, https://127.0.0.1:2379) on the gateway
+# host. Set endpoints only to point the gateways at an existing etcd cluster
+# (its server certs must chain to the same generated CA):
+# etcd:
+#   endpoints:
+#     - "https://etcd1.example.com:2379"
+shared_storage:
+  type: nfs
+  mount_point: /mnt/sandswap
+  nfs_server: nfs1.example.com
+  nfs_export: /export/sandswap
+sandlots:
+  - host: sandlot1.example.com
+    node_id: sandlot-1
+    pool: "medium:5"
+    subnet: "10.188.1.0/24"          # optional; per-node guest VM subnet
+    # net_gateway_ip: the guest-network bridge IP on THIS sandlot host (lands
+    # in sandlot.yaml network.gateway + setup-host.sh --gateway-ip). Optional
+    # (default 10.188.0.1); must be an IPv4 inside subnet, first host (.1) by
+    # convention. NOT the gateway service address — that is gateway.host above.
+    net_gateway_ip: "10.188.1.1"
+  - host: sandlot2.example.com
+    node_id: sandlot-2
+    pool: "medium:5"
+    subnet: "10.188.2.0/24"
+    net_gateway_ip: "10.188.2.1"
