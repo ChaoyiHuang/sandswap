@@ -14,8 +14,8 @@ places:
   always present, and what mounts actually read;
 - an **OCI registry** — optional: how templates cross storage boundaries
   (separate clusters or sites), using the same push/pull/tags/replication
-  workflows as container images ([OCI Registry
-  Integration](../integration/registry.md)).
+  workflows as container images
+  ([OCI Registry Integration](../integration/registry.md)).
 
 How a template is *consumed* — copied into a writable volume (flat) or
 mounted read-only under one (overlay) — is [SandFS](sandfs.md). This page
@@ -65,8 +65,8 @@ Container images work too — `docker export`, an alpine/busybox minirootfs
 tarball — unpacked into a directory. Step-by-step recipes are in
 [Building Templates](../building/templates.md), and `template-tool validate`
 checks a finished tree against all of this offline before it is ever
-registered (rules and severities: [Template
-Contract](../operations/template-contract.md)).
+registered (rules and severities:
+[Template Contract](../operations/template-contract.md)).
 
 Register it by placing the directory in the prov instance's
 `-flat-templates` scan root as `<name>/<version>/` — no restart, no
@@ -158,8 +158,8 @@ Two things to know:
 
 Publishing is `sandctl api template push <ref>` for something already in
 the local store, or the ORAS-based `build/build-template.sh` for an
-assembled template directory ([Building
-Templates](../building/templates.md)). Pulling happens explicitly
+assembled template directory
+([Building Templates](../building/templates.md)). Pulling happens explicitly
 (`sandctl api template pull`) or automatically on the first SandFS creation
 that names a ref not yet in the local store (the create response's
 `pull_status` says `cached` or `pulled` — see
@@ -193,8 +193,8 @@ The create response says which happened: `pull_status` is **`pulled`** when
 that create fetched the ref (it was missing from the local store) and
 **`cached`** on every create after it. The pull happens on the **prov
 instance** (the storage plane), which is where the registry — and its
-credentials — are configured ([OCI Registry
-Integration](../integration/registry.md)); the gateway only relays the
+credentials — are configured
+([OCI Registry Integration](../integration/registry.md)); the gateway only relays the
 create. A deployment whose prov sandlot instances share the templates tree needs
 exactly one pull for the whole fleet.
 
@@ -314,8 +314,8 @@ without any coordination. Two visibility facts follow:
   in the same `refs/` either way).
 
 A store's integrity — ref identity, the layer trust boundary, layer presence
-— is checkable offline with `template-tool check-store` (rules: [Template
-Contract](../operations/template-contract.md)).
+— is checkable offline with `template-tool check-store` (rules:
+[Template Contract](../operations/template-contract.md)).
 
 ## 3. Deleting a template (and the retirement loop)
 

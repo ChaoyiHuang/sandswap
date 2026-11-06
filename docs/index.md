@@ -10,10 +10,8 @@ nav_order: 1
 - **[Benchmark](benchmark/index.md)**
   - [Benchmark Report — Bare Metal](benchmark/baremetal.md)
   - [Benchmark Report — Nested Virtualization](benchmark/nested-virt.md)
-  - [Benchmark Report — Bare Metal:
-    microVM Reuse Capacity](benchmark/baremetal-load.md)
-  - [Benchmark Report — Nested-virt:
-    microVM Reuse Capacity](benchmark/nested-virt-load.md)
+  - [Benchmark Report — Bare Metal: microVM Reuse Capacity](benchmark/baremetal-load.md)
+  - [Benchmark Report — Nested-virt: microVM Reuse Capacity](benchmark/nested-virt-load.md)
   - [Reproducing the Benchmarks](benchmark/reproducing.md)
 - **[How It Works](how-it-works/index.md)**
   - [Concepts & Terms](how-it-works/concepts.md)

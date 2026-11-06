@@ -955,8 +955,8 @@ not degrade to an unfiltered bridge — it refuses to start; the only opt-out
 is an explicit `egress_baseline: off`. `security/verify-host-security.sh`
 (check 12) re-asserts all three layers on any host carrying the sandbox
 bridge. The routed-ipv6 backend adds the same per-TAP anti-spoof plus the
-per-attachment identity stamp ([Egress Enabler
-Contract](egress-enabler.md)).
+per-attachment identity stamp
+([Egress Enabler Contract](egress-enabler.md)).
 
 What remains by design: aggregate per-netns counters (§6.4), and the
 machine-reuse linkability already listed in §6.5 — the bridge filtering

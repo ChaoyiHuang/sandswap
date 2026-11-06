@@ -27,8 +27,8 @@ A healthy cluster looks like:
 - `clean_vms` close to each node's pool target; `in_use_vms` tracks load.
 
 `stale_sec` is judged differently per consumer — know the thresholds (all
-hot-reloadable, see §10 of the [Gateway
-configuration](configuration/gateway.md) reference):
+hot-reloadable, see §10 of the
+[Gateway configuration](configuration/gateway.md) reference):
 
 | Threshold | Default | Meaning |
 |---|---|---|
@@ -92,8 +92,8 @@ the [field notes](../deployment/install-baremetal.md#16-troubleshooting).
   (`KillMode=process`) and are re-adopted. Before reconnecting, the sandlot
   releases all its mounts (connect-clean invariant) — which **aborts
   still-running background execs**; the workspace survives untouched and the
-  agent recovers per the [abort
-  contract](../integration/agent-http.md#7-design-for-the-abort-contract).
+  agent recovers per the
+  [abort contract](../integration/agent-http.md#7-design-for-the-abort-contract).
 - **Node crash/hang, gateway alive** — the warden countdown releases the
   mount by `T_tolerance + T_warden` even with nobody driving it; the gateway
   owner-releases at `T_safe`; the next request lands on another node.

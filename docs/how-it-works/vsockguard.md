@@ -184,8 +184,8 @@ UID = the hook is NOT firing (re-check the `bpf` LSM list). The sanctioned
   tag verified before the body is read, and every response carries a tag
   bound to that nonce. vsockguard is therefore defense-in-depth, not the
   boundary: a kernel/transport change that made the port reachable in-guest
-  would still meet the per-frame authentication ([Isolation and
-  Swap](isolation-and-swap.md), "The warden's vsock port").
+  would still meet the per-frame authentication
+  ([Isolation and Swap](isolation-and-swap.md), "The warden's vsock port").
 - **No fail-open window in the attach flow.** The ctl seeds `allowed_uid`
   BEFORE the LSM link attaches, and the single-entry map exists from load
   time — so the program's `!allowed` branch is defensive and unreachable:

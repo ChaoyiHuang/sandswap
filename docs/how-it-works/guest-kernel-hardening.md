@@ -13,8 +13,8 @@ the layers that reduce it — the build-time configuration that shrinks the
 kernel, the load-time and runtime configuration that hardens it, the
 capability and seccomp fence around what agent code can ask of it, the
 kernel objects cleared at every unmount, and the reuse and network
-bounds that shrink the blast radius. [Isolation
-and Swap](isolation-and-swap.md) covers the swap machinery that assumes
+bounds that shrink the blast radius.
+[Isolation and Swap](isolation-and-swap.md) covers the swap machinery that assumes
 this boundary holds; [Threat Model](threat-model.md) covers the
 adversaries outside the microVM.
 
@@ -275,8 +275,8 @@ VMs on the same path.
 The network bounds the blast radius from the other side. A microVM has
 **egress-only** traffic: there is no inbound path for an outside prober
 to reach the guest kernel's network stacks. On the way out, every
-attachment carries an unforgeable per-agent identity (the [Egress Enabler
-Contract](egress-enabler.md)), so the network policy controller can
+attachment carries an unforgeable per-agent identity (the
+[Egress Enabler Contract](egress-enabler.md)), so the network policy controller can
 enforce and audit what an agent's traffic may reach — an implant's
 exfiltration channel is confined to the destinations its segment's policy
 already admits, and every flow is attributable to the agent that sent it.

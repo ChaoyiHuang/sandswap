@@ -55,8 +55,8 @@ belongs to (the node of its most recent mount). It **survives unmounts** —
 unmounting does not clear it, node reconnection does not clear it, and
 takeover preserves it. It is an affinity fact, not a mount status. (The
 routing-side view of ownership and placement — what DNS and node selection
-do with them on the normal path — is [Ownership &
-DNS](ownership-and-dns.md); this section is the failure-analysis view.)
+do with them on the normal path — is
+[Ownership & DNS](ownership-and-dns.md); this section is the failure-analysis view.)
 
 **Mount state is transient, existing only in the owner gateway's memory; etcd
 records nothing about it.** The justification: sandbox mount release has

@@ -7,9 +7,9 @@ parent: Benchmark
 # Reproducing the Benchmarks
 
 The numbers in the four reports — [bare-metal latency](baremetal.md),
-[nested-virt latency](nested-virt.md), [bare-metal microVM reuse
-capacity](baremetal-load.md) and [nested-virt microVM reuse
-capacity](nested-virt-load.md) — come from self-contained
+[nested-virt latency](nested-virt.md),
+[bare-metal microVM reuse capacity](baremetal-load.md) and
+[nested-virt microVM reuse capacity](nested-virt-load.md) — come from self-contained
 scripts in [`e2e/`](https://github.com/ChaoyiHuang/sandswap/tree/main/e2e).
 Each one deploys its own throwaway stack (binaries, certs, volumes, logs —
 everything under `$DEPLOY_DIR`, default `/var/lib/sandswap`), runs, and
@@ -242,8 +242,8 @@ section of each report for the exact command set behind each table.
 - The first offered level of every realistic run is a warm-up and is excluded
   from the tables: on bare metal the host kernel is still writing back the
   per-agent volume creations (multi-GB at thousands of agents), which stalls
-  guest I/O (see the [bare-metal capacity
-  report](baremetal-load.md#27-bare-metal-specifics-what-a-nested-virt-run-cannot-reproduce)).
+  guest I/O (see the
+  [bare-metal capacity report](baremetal-load.md#27-bare-metal-specifics-what-a-nested-virt-run-cannot-reproduce)).
 - On a nested-virt host the aiagent script labels its output
   `[NESTED-VIRT]`; treat such runs as comparative only.
 - Numbers are only comparable within one tag and one hardware class —

@@ -17,8 +17,8 @@ isolation, unlike containers, which share the host kernel. Unlike an ordinary
 VM, it is pooled and warm: your files live on shared storage and reach the VM
 through one virtio-fs device, and switching which filesystem the VM sees is an
 `allowed_dirs` hot-swap plus bind-mount — milliseconds, no VM rebuild, no disk
-image. A SandFS is never mounted on two microVMs at once ([Design
-Principles](../how-it-works/design-principles.md), principle 4).
+image. A SandFS is never mounted on two microVMs at once
+([Design Principles](../how-it-works/design-principles.md), principle 4).
 
 ## Do I need to change my agent's code?
 
@@ -58,8 +58,8 @@ workspace first, then resume or roll back. Make side effects idempotent or
 checkpointed. Background execs are memory-only handles: after a failure they
 are lost (`not_found`) and must be re-created with a new
 `execute(background: true)` — the work may already have run; trust the
-workspace. This is the [abort
-contract](../integration/agent-http.md#7-design-for-the-abort-contract).
+workspace. This is the
+[abort contract](../integration/agent-http.md#7-design-for-the-abort-contract).
 
 ## How fast is it?
 
@@ -127,5 +127,5 @@ From the control plane: `POST /human/agent` — or `sandctl api agent
 create --name ...`, which caches the key locally. The key
 (`sk-sandswap-agent-...`) is returned **exactly once**; store it. Deleting
 the agent deletes its SandFS instances too. Reference:
-[Human API](../reference/human-api.md); walkthrough: [Quick
-Start](../getting-started/index.md).
+[Human API](../reference/human-api.md); walkthrough:
+[Quick Start](../getting-started/index.md).

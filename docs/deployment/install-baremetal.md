@@ -629,8 +629,8 @@ exec: { default_timeout_sec: 30, max_timeout_sec: 180 }
 
 There is no gateway-side template configuration: the gateway mounts no
 shared storage and owns no template store — SandFS/template operations
-route over the stream to a prov sandlot instance ([Storage plane
-split](../how-it-works/architecture.md)), and the flat-template scan root
+route over the stream to a prov sandlot instance
+([Storage plane split](../how-it-works/architecture.md)), and the flat-template scan root
 is the prov sandlot's `-flat-templates` (§12.3 below shows where the
 prov-side paths land).
 
