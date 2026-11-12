@@ -1,3 +1,8 @@
+---
+title: Raw logs — bare-metal latency benchmark
+nav_exclude: true
+---
+
 # Raw logs — bare-metal latency benchmark
 
 Raw stdout/stderr of the `e2e/latency-benchmark-aiagent.sh` and
