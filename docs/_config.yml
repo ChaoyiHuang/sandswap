@@ -6,7 +6,7 @@
 # so no CI is required. The Gemfile next to this file is for local preview only.
 
 title: Sandswap
-description: Transparent code-execution sandboxes for AI agents
+description: Ultra efficient sandboxes for AI agents
 remote_theme: just-the-docs/just-the-docs@v0.12.0
 
 # Allowlisted GH Pages plugins, listed explicitly so local builds behave
@@ -36,7 +36,7 @@ heading_anchors: 3
 
 aux_links:
   "Sandswap on GitHub":
-    - "//github.com/ChaoyiHuang/sandswap"
+    - "https://github.com/ChaoyiHuang/sandswap"
 aux_links_new_tab: true
 
-footer_content: "Copyright &copy; 2026 Sandswap contributors."
+footer_content: "Copyright &copy; 2026 Sandswap contributors. &middot; <a href=\"https://github.com/ChaoyiHuang/sandswap\">github.com/ChaoyiHuang/sandswap</a>"

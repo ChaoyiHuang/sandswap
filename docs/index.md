@@ -6,6 +6,9 @@ nav_order: 1
 
 # Sandswap Documentation
 
+Source code, issues, and releases live on GitHub:
+**[github.com/ChaoyiHuang/sandswap](https://github.com/ChaoyiHuang/sandswap)**
+
 - **[Quick Start](getting-started/index.md)**
 - **[Benchmark](benchmark/index.md)**
   - [Benchmark Report — Bare Metal](benchmark/baremetal.md)
