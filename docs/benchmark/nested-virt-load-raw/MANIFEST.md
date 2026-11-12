@@ -1,3 +1,8 @@
+---
+title: Raw logs — nested-virt microVM reuse capacity
+nav_exclude: true
+---
+
 # Raw logs — nested-virt microVM reuse capacity
 
 Raw stdout/stderr of the `e2e/latency-benchmark-aiagent.sh` and
