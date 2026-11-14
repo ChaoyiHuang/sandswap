@@ -267,19 +267,16 @@ Which modes a platform supports:
 | Kubernetes | ✓ | ✓ |
 
 The node diagrams show **embedded** mode: sandlot is privileged and manages
-sandvmm directly — on bare metal this is the only mode. In **boxout** mode
-(Kubernetes), sandlot runs unprivileged (UID 65536 — the reserved sandbox
-identity, see [Prerequisites](../deployment/prerequisites.md) — all caps
-dropped) and
-delegates the privileged path — sandvmm lifecycle, network provisioning,
-host-side OverlayFS mount/unmount, /proc re-adopt, crash detection — to a
-privileged **boxout** sidecar (UID 0) over a Unix socket
-(`/run/sandswap-boxout/boxout.sock` — a boxout-private root-owned 0711
-directory separate from the sandlot-writable `/run/sandswap`;
-SO_PEERCRED-verified, plus an optional per-connection HMAC
-challenge-response where the token never crosses the wire). The hot path
-(set-fs, warden vsock exec, lease) stays in sandlot and needs zero
-privileges. See [Install — Kubernetes](../deployment/install-kubernetes.md).
+sandvmm directly — on bare metal this is the only mode.
+
+In **boxout** mode (Kubernetes) — **experimental** — sandlot runs
+unprivileged and delegates the privileged path (sandvmm lifecycle, network
+provisioning, host-side overlay mounts) to a privileged **boxout** sidecar
+over a Unix socket. The separation has not delivered the expected benefit:
+boxout itself still needs excessive privileges, and the split adds
+complexity and recurring permission problems between sandlot and boxout.
+The hot path stays in sandlot with zero privileges — details in
+[Install — Kubernetes](../deployment/install-kubernetes.md).
 
 ## 5. Interface catalog
 
