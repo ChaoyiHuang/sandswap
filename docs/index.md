@@ -2,18 +2,21 @@
 title: Home
 layout: home
 nav_order: 1
+description: >-
+  Compute-disk decoupled AI agent microVM sandbox: 183 reuse/sec,
+  ~2.3 ms cold, ~0.96 ms warm. ~6ms microVM rotation cuts agent execution
+  costs by 50x–100x.
 ---
 
 # Sandswap Documentation
 
-Sandswap redefines the microVM by decoupling compute from disk: a microVM
-acts as pure compute(only the kernel and PID 1 warden), while the agent's
-rootfs (SandFS) is simply a directory(local or distributed). SandFS is
-dynamically mounted into the microVM to execute commands with ultra-low
-latency—~2.3 ms cold and ~0.96 ms warm. After just as little as 1 ms of
-inactivity, SandFS is asynchronously unmounted to free up resources. Under
-ideal conditions, benchmarks show a single microVM can be reused up to
-183 times per second across different AI agents.
+Sandswap is a compute-disk decoupled **microVM sandbox for AI agents**
+delivering **~2.3 ms cold**, **~0.96 ms warm** execution latency and
+**183 reuses/sec** per microVM. By keeping microVMs tiny (only kernel + PID 1
+warden) and hot-swapping directory-based **SandFS** rootfs after
+configurable idle (min 1 ms),ideally it achieves **~6 ms cross-agent microVM
+rotation — slashing AI agent command execution costs by 50x–100x**
+
 
 Source code, issues, and releases live on GitHub:
 **[github.com/ChaoyiHuang/sandswap](https://github.com/ChaoyiHuang/sandswap)**

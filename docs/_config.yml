@@ -6,7 +6,10 @@
 # so no CI is required. The Gemfile next to this file is for local preview only.
 
 title: Sandswap
-description: Ultra efficient sandboxes for AI agents
+description: >-
+  Compute-disk decoupled AI agent microVM sandbox: 183 reuse/sec,
+  ~2.3 ms cold, ~0.96 ms warm. ~6ms microVM rotation cuts agent execution
+  costs by 50x–100x.
 remote_theme: just-the-docs/just-the-docs@v0.12.0
 
 # Allowlisted GH Pages plugins, listed explicitly so local builds behave
