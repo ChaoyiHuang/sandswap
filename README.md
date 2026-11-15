@@ -166,6 +166,13 @@ output/sandctl api execute --agent <agent_id> --sandfs <sandfs_id> \
 Full walkthrough (including distributed mode with etcd + DNS + TLS):
 [Quick Start](docs/getting-started/index.md).
 
+## Talk & write-ups
+
+- **CNCF AI TCG (November 2026)** —
+    ["Sandswap: ultra efficient sandboxes for AI agents"](https://chaoyihuang.github.io/posts/blog/sandswap-ultra-high-efficient-sandbox-for-ai-agents.html) —  Walkthrough
+    of compute-disk decoupling, guest kernel hardening, four layers isolation,
+    ultra low latency engineering, etc.
+
 ## Community chat
 
 A Discord server where enthusiasts can share experience and ideas and
