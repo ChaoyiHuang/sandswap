@@ -8,14 +8,14 @@ description: >-
   costs by 50x–100x.
 ---
 
-# Sandswap Documentation
+# Sandswap
 
-Sandswap is a compute-disk decoupled **microVM sandbox for AI agents**
+Compute-disk decoupled **microVM sandboxes for AI agents**
 delivering **~2.3 ms cold**, **~0.96 ms warm** execution latency and
 **183 reuses/sec** per microVM. By keeping microVMs tiny (only kernel + PID 1
 warden) and hot-swapping directory-based **SandFS** rootfs after
-configurable idle (min 1 ms),ideally it achieves **~6 ms cross-agent microVM
-rotation — slashing AI agent command execution costs by 50x–100x**
+configurable idle (min 1 ms), ideally it achieves **~6 ms cross-agent microVM
+rotation — slashing AI agent command execution costs by 50x–100x**.
 
 
 Source code, issues, and releases live on GitHub:
