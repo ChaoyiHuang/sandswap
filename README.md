@@ -20,79 +20,36 @@ AI agents ──HTTP/MCP──► gateway ──gRPC stream──► sandlot (no
 
 ## Under the hood
 
-Forget VMs and containers — Sandswap is a brand-new sandbox tech stack
-for AI agents. An agent's sandfs (rootfs, flat or overlay) is a directory
-on host storage (local disk or a distributed file system); the microVM itself is
-deliberately empty — booted once by **Sandlot** with nothing but a kernel and
-**Warden**, PID 1 in a ~5 MB initramfs whose entire job is to mount the
-agent's sandfs, exec the command, then swap out completely. When a command
-arrives, Sandlot re-points the microVM's virtio-fs `allowed_dirs` filter at
-the agent's sandfs (no boot, no copy, no snapshot/pause/resume), and warden
-bind-mounts it and spawns the command: **mount + exec in one vsock round
-trip**, ~0.96 ms warm (the agent's next call lands on its still-mounted
-microVM), ~2.3 ms cold (the command lands on an idle microVM from the pool,
-so its sandfs must be mounted first). **Gateway** watches every call: if a
-sandfs stays idle for longer than a configurable duration (1 ms in the
-benchmark), it asynchronously instructs Sandlot to swap it out of the
-occupied microVM — killing the agent's process group, unmounting, dropping
-caches so nothing of agent A survives into agent B — entirely off the
-response path (warden completes the teardown in ~3 ms or less). Because
-the sandfs *is* the directory, everything the agent writes (pip, apt,
-files) persists across swaps and restarts. An agent's reasoning loop
-runs on the order of seconds, so Sandswap is often "too fast" — the
-microVM is swapped out between two reasoning steps; agents that want
-the next round of calls to land warm can simply hold the microVM with
-a background command (e.g. `sleep`).
+A compute-and-disk decoupled microVM architecture built from scratch
+for AI Agents:
 
-Sandswap compromises almost nothing in its pursuit of ultra-high resource
-efficiency: a purpose-built **Sandns**, ownership and tolerance-first resilience
-design, and a microsecond- to nanosecond-level egress enabler, etc.
-It also scales to distributed deployments (multi-sandlots, multi-gateways)
-with no performance degradation. Sandswap also takes sandbox isolation and
-security for AI agents very seriously — while seamlessly extending to other
-serverless environments.
+- ⚡ **Pure-compute microVM**: Only a custom hardened guest kernel + PID 1
+  warden. Zero baked-in rootfs.
+- ⚡ **Dynamic SandFS swap**: The agent's rootfs directory (SandFS) is mounted
+  via virtio-fs allow-dirs on demand (~2.3 ms cold, ~0.96 ms warm), keeping
+  files and pip/apt installs persistent.
+- ⚡ **Zero legacy overhead**: No boot, no image pull,
+  no snapshot/suspend/resume/restore.
+- ⚡ **Millisecond reclamation**: Once idle past a configurable threshold
+  (down to 1 ms), SandFS swaps out asynchronously off the response path
+  (~3.1 ms), scrubbing state for the next agent.
+- ⚡ **4-layer strict isolation**: A custom-hardened guest kernel, PID 1
+  warden, purpose-built sandvmm, and host defenses enforce 4-layer
+  isolation — matching or exceeding traditional VMs.
+
+In bare-metal KVM benchmarks, a single microVM can be reused ideally up to
+183 times per second. An agent's reasoning takes seconds while commands
+run in milliseconds, so one microVM rotates across 50–100 agents —
+cutting sandbox cost by 50–100x.
+
+Agents run commands over two surfaces with identical semantics — HTTPS
+and MCP(with zero code changes). Every path is engineered for ultra-low
+latency, and isolation security is never traded for speed. The same
+architecture extends to serverless scenarios as well.
 
 Refer to the [Load Benchmark Report](docs/benchmark/baremetal-load.md),
 [Benchmark Report](docs/benchmark/baremetal.md), and
 [Reproducing](docs/benchmark/reproducing.md).
-
-## BSL · Donation · Community
-
-**Chaoyi Huang** — the original author of Sandswap, a cancer survivor, a fully
-independent developer, not employed by or affiliated with any company or
-organization.
-
-**Why BSL 1.1?** The Business Source License is a funding mechanism, not a
-restriction for its own sake. Sandswap is free for individuals, startups,
-and the vast majority of companies — any use, including production, forever.
-The BSL terms attach conditions to exactly one group: **Revenue Threshold
-Entities** (annual revenue ≥ US$1B in any of 2026–2028), which need a
-production-use grant from the Licensor. This gives Sandswap's largest
-beneficiaries a direct way to support the project: a **one-time donation**
-in exchange for a BSL production grant. The purpose is simple and personal —
-so that no matter what the future brings, the original author can secure a
-healthy financial situation for the family.
-
-**Two years, then fully open.** The BSL window is deliberately short and
-fixed: every version released before the Change Date automatically becomes
-[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) on
-**November 30, 2028** — no action by anyone, ever — and versions first
-released after that date are Apache-2.0 from the start. Development,
-testing, QA, staging, and evaluation use are unrestricted for everyone
-throughout.
-
-**Community.** Due to ongoing health challenges, the author unfortunately
-cannot commit much time to community building and will only be able to
-offer support on important directions and topics ocassionaly. Sandswap therefore
-depends on its users to sustain it: companies and individuals — especially
-those who donated to obtain the BSL production grant — are warmly
-encouraged to take the initiative in building a sustainable community,
-whether by answering questions, triaging bugs, developing features,
-reviewing PRs, hardening for production, improving documentation,
-stewarding integrations, or leading governance and outreach.
-
-Full terms, licensor contact, and CLA: [LICENSE](LICENSE) ·
-[License FAQ](LICENSE-FAQ.md) · [CLA](CLA.md).
 
 ## Quick start
 
@@ -169,16 +126,9 @@ Full walkthrough (including distributed mode with etcd + DNS + TLS):
 ## Talk & write-ups
 
 - **CNCF AI TCG (November 2026)** —
-    ["Sandswap: ultra efficient sandboxes for AI agents"](https://chaoyihuang.github.io/posts/blog/sandswap-ultra-high-efficient-sandbox-for-ai-agents.html) —  Walkthrough
+    ["Sandswap: ultra efficient sandboxes for AI agents"](https://chaoyihuang.github.io/posts/blog/sandswap-ultra-high-efficient-sandbox-for-ai-agents.html) — Walkthrough
     of compute-disk decoupling, guest kernel hardening, four layers isolation,
     ultra low latency engineering, etc.
-
-## Community chat
-
-A Discord server where enthusiasts can share experience and ideas and
-help one another:
-[https://discord.gg/STkNKJ5m65](https://discord.gg/STkNKJ5m65).
-If a formal community is established later, this server may be closed.
 
 ## Documentation
 
@@ -249,6 +199,48 @@ deploy/       deployment scripts (baremetal + k8s)
 security/     vsockguard attach/verify + host-security tooling
 docs/         the documentation site (this is what GitHub Pages publishes)
 ```
+
+## Community chat
+
+A Discord server where enthusiasts can share experience and ideas and
+help one another:
+[https://discord.gg/STkNKJ5m65](https://discord.gg/STkNKJ5m65).
+If a formal community is established later, this server may be closed.
+
+## BSL · Donation · Community
+
+**Chaoyi Huang** — the original author of Sandswap, a cancer survivor, a fully
+independent developer, not employed by or affiliated with any company or
+organization.
+
+**Why BSL 1.1?** The Business Source License is a funding mechanism, not a
+restriction for its own sake. Sandswap is free for individuals, startups,
+and the vast majority of companies — any use, including production, forever.
+The BSL terms attach conditions to exactly one group: **Revenue Threshold
+Entities** (annual revenue ≥ US$1B in any of 2026–2028), which need a
+production-use grant from the Licensor. This gives Sandswap's largest
+beneficiaries a direct way to support the project: a **one-time donation**
+in exchange for a BSL production grant. The purpose is simple and personal —
+so that no matter what the future brings, the original author can secure a
+healthy financial situation for the family.
+
+**Two years, then fully open.** The BSL window is deliberately short and
+fixed: every version released before the Change Date automatically becomes
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) on
+**November 30, 2028** — no action by anyone, ever — and versions first
+released after that date are Apache-2.0 from the start. Development,
+testing, QA, staging, and evaluation use are unrestricted for everyone
+throughout.
+
+**Community.** Due to ongoing health challenges, the author unfortunately
+cannot commit much time to community building and will only be able to
+offer support on important directions and topics. Sandswap therefore
+depends on its users to sustain it: companies and individuals — especially
+those who donated to obtain the BSL production grant — are warmly
+encouraged to take the initiative in building a sustainable community,
+whether by answering questions, triaging bugs, developing features,
+reviewing PRs, hardening for production, improving documentation,
+stewarding integrations, or leading governance and outreach.
 
 ## License
 
