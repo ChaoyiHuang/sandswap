@@ -103,7 +103,7 @@ func main() {
 	fmt.Printf("  sandfs    : %s\n", cfg.sandfsID)
 	fmt.Printf("  transport : keep-alive (IdleConnTimeout=0, MaxIdleConnsPerHost=%d)\n", cfg.pool)
 	fmt.Println("  timings   : total = client total: request sent -> response received (whole chain)")
-	fmt.Println("              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the microVM (warden)")
+	fmt.Println("              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the tinyVM (warden)")
 	fmt.Println()
 
 	// -- 1. Warm-up: the only dial + TLS handshake of the whole run. --------
@@ -301,7 +301,7 @@ type execResponse struct {
 	Status            string `json:"status"`
 	GatewayDurationNs uint64 `json:"gateway_duration_ns"` // gateway E2E wall time (includes waiting for sandlot)
 	SandlotDurationNs uint64 `json:"sandlot_duration_ns"` // sandlot dispatch→response (includes waiting for warden)
-	ExecDurationNs    uint64 `json:"exec_duration_ns"`    // warden wall time: spawn + exec inside the microVM
+	ExecDurationNs    uint64 `json:"exec_duration_ns"`    // warden wall time: spawn + exec inside the tinyVM
 }
 
 func exec(ctx context.Context, c *http.Client, cfg *config) ([]byte, http.Header, connStat, error) {
@@ -377,7 +377,7 @@ func runLoop(client *http.Client, cfg *config) {
 	fmt.Printf("  cadence   : 1 command / %s think-time, for %s; heartbeat / %s\n",
 		cfg.think, cfg.forDur, cfg.ping)
 	fmt.Println("  timings   : total = client total: request sent -> response received (whole chain)")
-	fmt.Println("              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the microVM (warden)")
+	fmt.Println("              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the tinyVM (warden)")
 	fmt.Println()
 
 	// Open THE connection.

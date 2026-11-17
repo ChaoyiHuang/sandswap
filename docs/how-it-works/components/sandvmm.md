@@ -9,7 +9,7 @@ grand_parent: How It Works
 
 ## 1. Overview
 
-sandvmm is the KVM virtual machine monitor: one process per microVM,
+sandvmm is the KVM virtual machine monitor: one process per tinyVM,
 running the guest on KVM and controlled by the sandlot over a Unix-socket
 API. It is a fork of Cloud Hypervisor, trimmed and extended for Sandswap.
 Source: `vmm/` (Rust). Provenance and the replacement contract:
@@ -17,7 +17,7 @@ Source: `vmm/` (Rust). Provenance and the replacement contract:
 
 ## 2. Key Responsibilities
 
-- **Boot microVMs**: direct PVH kernel + initramfs boot, no firmware.
+- **Boot tinyVMs**: direct PVH kernel + initramfs boot, no firmware.
   `vm.create` builds the VM paused; `vm.boot` starts the vCPUs.
 - **Host the permanent virtio-fs device**: tag `sandswap`, the shared
   volumes dir, `read_only=false`. Created once at boot, never hot-plugged.
@@ -61,7 +61,7 @@ Source: `vmm/` (Rust). Provenance and the replacement contract:
 **Outputs:**
 
 - API responses (non-2xx bodies surface verbatim in sandlot errors).
-- KVM state: the running microVM.
+- KVM state: the running tinyVM.
 - `<sandbox>/serial.log` — earlyprintk (earliest boot/panic).
 - `<sandbox>/console.log` — the guest's main output channel (hvc0: kernel
   log-buffer replay, later printk, warden logs) and the guest-side timing

@@ -18,7 +18,7 @@
 # metric names, and the canonical-terminology deny-list. Read-only, static,
 # stdlib-only, ~0.4 s — no root, no KVM, no stack. It is the FIRST row of the
 # battery: a broken doc is a release defect that should surface before any
-# microVM boots.
+# tinyVM boots.
 #
 # Usage: bash e2e/docs-truth.sh   (also a battery row; run-all.sh executes it)
 set -uo pipefail

@@ -23,7 +23,7 @@ import (
 
 // TestPidfdMonitorFiresOnExit verifies the centralized epoll monitor detects a
 // watched process's exit and invokes the onExit callback. This is the crash
-// detection path for re-adopted microVMs at scale (one epoll loop, zero idle
+// detection path for re-adopted tinyVMs at scale (one epoll loop, zero idle
 // CPU). Skipped on kernels without pidfd.
 func TestPidfdMonitorFiresOnExit(t *testing.T) {
 	mon, err := newPidfdMonitor(log.New(nil, "", 0))

@@ -556,7 +556,7 @@ ss_ensure_dev_nodes() {
         fi
     }
     _ensure_dev_node /dev/kvm        10 232 660   # KVM (group grant)
-    _ensure_dev_node /dev/net/tun    10 200 666   # TUN/TAP for microVM networking
+    _ensure_dev_node /dev/net/tun    10 200 666   # TUN/TAP for tinyVM networking
     _ensure_dev_node /dev/urandom     1   9 666   # Entropy source for virtio-rng
     _ensure_dev_node /dev/random      1   8 666   # Blocking entropy source
     # Load vhost-vsock kernel module for zero-VMEXIT vsock transport
@@ -999,7 +999,7 @@ ss_ensure_service_users() {
     fi
 
     # Feed the Go-side defaults: sandlot's config.go Defaults() reads these,
-    # so microvm.vmm_uid / vmm_gid / api_gid / vmm_groups always match the
+    # so tinyvm.vmm_uid / vmm_gid / api_gid / vmm_groups always match the
     # accounts THIS host actually has (exported into the service env through
     # ss_service_exec's exec chain / the systemd EnvironmentFile).
     export SANDSWAP_VMM_UID="$SS_UID_SANDVMM" \
@@ -1673,7 +1673,7 @@ ss_own_tls_keys() {
 # ═══════════════════════════════════════════════════════════════════════
 # Host networking (bridge + NAT) — ONE implementation
 # ═══════════════════════════════════════════════════════════════════════
-# microVMs reach the outside world through a host bridge + one nftables
+# tinyVMs reach the outside world through a host bridge + one nftables
 # masquerade rule (no dnsmasq, no per-VM daemon: sandlot assigns static guest
 # IPs and owns the TAP lifecycle). Two copies of this existed — the e2e
 # tc_setup_host_network and the standalone deploy/setup-network.sh — and the

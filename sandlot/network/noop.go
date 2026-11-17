@@ -17,7 +17,7 @@ import (
 	"sandlot/vmm"
 )
 
-// Noop is a NetworkProvider that keeps microVMs offline. It is the default
+// Noop is a NetworkProvider that keeps tinyVMs offline. It is the default
 // backend (--network-backend=none) and matches Sandswap's pre-networking
 // behavior: no net device, no warden.net_* cmdline params.
 type Noop struct{}

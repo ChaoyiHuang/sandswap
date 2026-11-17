@@ -39,7 +39,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 log_section "Phase 1: Deploy & Generate Config"

@@ -14,7 +14,7 @@
 // official Go SDKs instead of an agent framework:
 //   - github.com/openai/openai-go            (LLM backend)
 //   - github.com/modelcontextprotocol/go-sdk (MCP client)
-// The agent can execute code in KVM microVMs, read/write files, and manage
+// The agent can execute code in KVM tinyVMs, read/write files, and manage
 // background processes — all through the standard MCP protocol.
 // This is a functional twin of examples/eino-sandswap: identical modes, env
 // vars, routing rules, prompts, and log line shapes, so the e2e test
@@ -28,12 +28,12 @@
 // Dual-agent mode (VM reuse test):
 //	Set SANDSWAP_API_KEY_A and SANDSWAP_API_KEY_B — two agents alternate
 //	prompts over one shared pool (sequential by design), each with its own
-//	MCP session. They share the same microVM pool, testing virtio-fs
+//	MCP session. They share the same tinyVM pool, testing virtio-fs
 //	allowed_dirs hot-swap and agent switching on the same VM.
 //	Prompts are prefixed with "A:" or "B:" to route to the correct agent.
 // Multi-agent mode (N agents, VM reuse test):
 //	Set SANDSWAP_API_KEY_1 through SANDSWAP_API_KEY_N — N agents run,
-//	each with its own MCP session. They share the same microVM pool.
+//	each with its own MCP session. They share the same tinyVM pool.
 //	Prompts are prefixed with "1:", "2:", etc. to route to the correct agent.
 // Three LLM backends are supported (selected by environment variable), all
 // served through the OpenAI-compatible Chat Completions API:
@@ -246,7 +246,7 @@ func toOpenAITools(mcpTools []*mcp.Tool) []openai.ChatCompletionToolParam {
 const sandboxInstruction = `You are a sandbox assistant with access to a Sandswap sandbox.
 
 You can:
-- Execute code in an isolated KVM microVM (execute tool)
+- Execute code in an isolated KVM tinyVM (execute tool)
 - Read and write files in the sandbox (file_read, file_write tools)
 - List directory contents (file_list_dir)
 - Create directories (file_mkdir)
@@ -509,7 +509,7 @@ func truncate(s string, maxLen int) string {
 // Two agents (A and B) alternate prompts over one shared pool,
 // sequentially by design: each prompt finishes before the next one
 // starts. Each agent has its own MCP session and API key. They share
-// the same microVM pool — when agent A finishes, agent B reuses the
+// the same tinyVM pool — when agent A finishes, agent B reuses the
 // same VM (virtio-fs allowed_dirs hot-swap + bind mount switch).
 //
 // Input format: lines prefixed with "A:" or "B:" route to the
@@ -661,7 +661,7 @@ func runPipedDualAgent(ctx context.Context, mcpURL string, apiKeyA, apiKeyB stri
 // ── Multi-agent mode ─────────────────────────────────────────────
 //
 // N agents (1..N) run with their own MCP sessions and API keys.
-// They share the same microVM pool — agent switching triggers
+// They share the same tinyVM pool — agent switching triggers
 // virtio-fs allowed_dirs hot-swap on the same VM.
 //
 // Input format: lines prefixed with "1:", "2:", etc. route to the
@@ -882,7 +882,7 @@ func main() {
 	//
 	// Multi-agent mode: SANDSWAP_API_KEY_1 through SANDSWAP_API_KEY_N
 	//   N agents run, each with its own MCP session,
-	//   sharing the same microVM pool (tests VM reuse / agent switch).
+	//   sharing the same tinyVM pool (tests VM reuse / agent switch).
 	//
 	// Dual-agent mode: SANDSWAP_API_KEY_A + SANDSWAP_API_KEY_B
 	//   Two agents alternate prompts sequentially over one shared pool,

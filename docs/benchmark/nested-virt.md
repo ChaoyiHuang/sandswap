@@ -9,7 +9,7 @@ parent: Benchmark
 > This report covers the benchmark suite (http + mcp × single/distributed,
 > unmount) on a small nested-virt cloud VM. The question it answers: what do
 > the numbers look like when the host itself is a VM, and **why**? All
-> numbers are from real KVM microVMs (no mocks), read from the gateway's own
+> numbers are from real KVM tinyVMs (no mocks), read from the gateway's own
 > ns-precision metrics in every `/agent/execute` response.
 >
 > §1-§5 cover the executive summary, environment, HTTP path, MCP path and
@@ -57,7 +57,7 @@ measurements (§4, n=5, cold only).
 | CPU | Intel Xeon 2.30 GHz, 2 cores / 4 threads, 1 NUMA node, no cpufreq governor (GCP) |
 | Host kernel | 7.0.0-1014-gcp |
 | Guest kernel | 7.2.8 cloud-hypervisor config (PVH, minimized/hardened) |
-| microVM | 1 vCPU, 256 MiB, 3 exec slots (the benchmark's `bench` spec), pool of 3 |
+| tinyVM | 1 vCPU, 256 MiB, 3 exec slots (the benchmark's `bench` spec), pool of 3 |
 | CPU/NUMA pinning | **Disabled** — nested virt: the L1 vCPUs are already outer-scheduled |
 | Lease | sticky, 1 ms window |
 | VM recycle | `max_uses=100000` — no VM replacement inside a benchmark window |
@@ -259,9 +259,9 @@ set-fs, fork/execve, proc mounts) is ~2x the warm path.
 ### 6.3 Host weakness and CPU oversubscription
 
 The GCP VM has 4 vCPUs on 2 physical cores, shared with the host stack
-(gateway, sandlot, etcd, loadgen) and 3 microVMs. No pinning is possible
+(gateway, sandlot, etcd, loadgen) and 3 tinyVMs. No pinning is possible
 (the L1 vCPUs are already outer-scheduled). CPU contention between the
-stack processes and the microVMs adds jitter, visible in the cold-path
+stack processes and the tinyVMs adds jitter, visible in the cold-path
 maxima (18.9 ms http single, 26.0 ms mcp single vs P95 7.9/8.3 ms).
 
 ## 7. Reproduction

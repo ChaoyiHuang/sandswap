@@ -6,8 +6,8 @@ parent: How It Works
 
 # Isolation and Swap
 
-A microVM is expensive to boot and cheap to reuse. Sandswap scales by
-**time-sharing**: a pooled microVM serves one SandFS at a time and then
+A tinyVM is expensive to boot and cheap to reuse. Sandswap scales by
+**time-sharing**: a pooled tinyVM serves one SandFS at a time and then
 hands the machine to the next one, swapping the filesystem view for about
 the cost of a bind mount. The hard part is not the mount — it is the
 guarantee that comes with it: **the next SandFS starts on a machine with
@@ -23,14 +23,14 @@ still reach afterwards, and what it cannot.
 Neighbors: which gateway owns which SandFS is
 [Ownership & DNS](ownership-and-dns.md); what happens when a component
 fails mid-swap is [Resilience](resilience.md); pool states, verified
-creation and recycling are [microVM Lifecycle](vm-lifecycle.md); threats
+creation and recycling are [tinyVM Lifecycle](vm-lifecycle.md); threats
 that are *not* the in-VM isolation boundary (the host, the network, a
 compromised gateway) are [Threat Model](threat-model.md).
 
-## 1. One microVM, one SandFS at a time
+## 1. One tinyVM, one SandFS at a time
 
 ```
-One microVM's timeline — the same machine is used by A, returned to the
+One tinyVM's timeline — the same machine is used by A, returned to the
 idle pool, and then used by B:
 
                     (1) attach A        (2) swap out        (3) attach B
@@ -52,8 +52,8 @@ This VM is reused by B only after (2) completed; if the swap-out cannot be
 proven complete, the VM is destroyed and a replacement boots fresh (§6.6).
 
 The invariant is [Design Principles](design-principles.md) Principle 4 —
-**never double-mounted**: a SandFS is mounted on at most one microVM at any
-instant, and a microVM holds at most one SandFS at a time. It is enforced
+**never double-mounted**: a SandFS is mounted on at most one tinyVM at any
+instant, and a tinyVM holds at most one SandFS at a time. It is enforced
 at four levels, each of which can stop a violation on its own:
 
 | Level | Guard |
@@ -228,7 +228,7 @@ Two properties make this idempotent and race-free:
 
 ### 3.3 Swap out (the clearing sequence)
 
-The lease expired ([microVM Lifecycle](vm-lifecycle.md) §4); the warden
+The lease expired ([tinyVM Lifecycle](vm-lifecycle.md) §4); the warden
 runs the teardown in this order — each step must precede the next:
 
 ```
@@ -456,7 +456,7 @@ exposure:
   config (scoped `root:sandprov` 0640) and never reaches the daemon: the
   merged exec,prov sandlot carries the `sandprov` group to read the seed,
   but every sandvmm spawn REPLACES its supplementary-group set with exactly
-  `microvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when empty), so
+  `tinyvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when empty), so
   the daemon never inherits the grant.
   The sandfs id itself is deliberately *not* the name: `sandfs-` + 8 hex is
   32 bits — a `stat` loop finds some tenant of a 10 000-tenant node in well
@@ -629,7 +629,7 @@ could name, open, map, or observe. Resource by resource:
   timeout, and a short straggler reap. But a descendant that called
   `setsid()` escapes its process group — and sync execs deliberately never
   join the agent cgroup (moving a task into a cgroup costs milliseconds
-  inside a microVM, which would sit on the exec hot path). So at unmount
+  inside a tinyVM, which would sit on the exec hot path). So at unmount
   the warden runs the **rule-A sweep**: `SIGKILL` every live userspace
   process in the guest except PID 1. An unmounted VM contains nothing but
   the warden. Kernel threads are not targets (they ignore signals by
@@ -637,7 +637,7 @@ could name, open, map, or observe. Resource by resource:
   otherwise re-armed on them 8×25 ms per unmount), and a **zombie left
   above PID 1 fails the unmount outright**: like the D-state process that
   surfaces as `umount` `EBUSY`, it makes the warden return an error and
-  the sandlot **destroys** the microVM rather than reusing a guest whose
+  the sandlot **destroys** the tinyVM rather than reusing a guest whose
   process table is not provably clean (in a healthy guest the set is
   empty — the warden is PID 1 and a subreaper, so it waits for every
   child and reparented orphan).
@@ -661,7 +661,7 @@ could name, open, map, or observe. Resource by resource:
   `drop_caches` cannot touch them.
 - **`drop_caches=3`** evicts clean pagecache + dentries + inodes
   guest-wide. Linux has no per-mount drop, so this is broad — but it is
-  cheap on a microVM, and it is the step that removes the *clean* leftovers
+  cheap on a tinyVM, and it is the step that removes the *clean* leftovers
   of A's rootfs (source files, configs) and the directory metadata that
   would otherwise linger in slab caches until memory pressure. Best-effort
   by design: the completed unmount already made the bytes unreachable; the
@@ -779,7 +779,7 @@ and the last row is the design rule that makes the set closed: **a VM whose
 teardown cannot be proven is destroyed, never reused.** Destroying the KVM
 process kills every guest process including D-state ones; the cost is a
 one-time cold boot, off the request path
-([microVM Lifecycle](vm-lifecycle.md) §4).
+([tinyVM Lifecycle](vm-lifecycle.md) §4).
 
 ## 7. What agent code cannot reach
 
@@ -924,7 +924,7 @@ written as if a hostile peer could connect:
   the filter already allows, and can never widen it.
 - **One op carries a VM-wide side effect, not just a caller-local one**: a
   heartbeat (`OP_MEM_STATS`) resets the warden countdown anchor, the
-  last-resort mount release ([microVM Lifecycle](vm-lifecycle.md) §8). Only
+  last-resort mount release ([tinyVM Lifecycle](vm-lifecycle.md) §8). Only
   the sandlot is a legitimate sender, and the warden enforces it: **only a
   heartbeat whose peer is the host (CID 2) resets the anchor** — a
   guest-originated heartbeat is ignored (and logged at a bounded rate). The
@@ -934,7 +934,7 @@ written as if a hostile peer could connect:
 
 ### 7.4 The tenant network: one shared bridge, filtered
 
-The network is the one boundary that does NOT come from the microVM: every
+The network is the one boundary that does NOT come from the tinyVM: every
 VM's TAP is enslaved to one shared host bridge, so without a filter set all
 tenants are L2 neighbors — able to ARP-poison each other, to reach each
 other's guest kernel network stack directly (the same crafted-packet
@@ -988,7 +988,7 @@ read/write (`sandlot/provision/volume`).
 
 ## 9. In one paragraph
 
-A pooled microVM is time-shared across SandFS by swapping what it can see,
+A pooled tinyVM is time-shared across SandFS by swapping what it can see,
 never by rebooting: the sandlot drives the swap, the VMM's virtio-fs filter
 decides which host directories exist for the guest at all, and the warden —
 from inside — builds the guest mount stack, proves what it mounted, and at
@@ -996,6 +996,6 @@ release kills every process, detaches every mount, drops every cache,
 sweeps every kernel object and socket, before the filter is cleared. If any
 step cannot be proven complete, the VM is destroyed rather than reused.
 The result is the guarantee this page set out to explain: **agent B's
-execution on a reused microVM starts with zero residual state from agent
+execution on a reused tinyVM starts with zero residual state from agent
 A** — no process, no reachable page, no shared memory, no filesystem
 metadata, no network trace, and no path in any layer that names A at all.

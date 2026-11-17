@@ -107,7 +107,7 @@ func (s VMNetSpec) Validate() error {
 	return nil
 }
 
-// NetworkProvider provisions outbound networking for pooled microVMs.
+// NetworkProvider provisions outbound networking for pooled tinyVMs.
 //
 // Provision runs once per VM, before vm.create. Release runs at teardown.
 // Reclaim runs at sandlot startup for a re-adopted VM whose network resources

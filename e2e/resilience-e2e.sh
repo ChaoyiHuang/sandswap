@@ -13,7 +13,7 @@
 # test-resilience-e2e.sh - Sandswap resilience end-to-end test (real KVM deployment)
 # Runs the integration scenarios from docs/how-it-works/resilience.md (§8.1
 # sandlot tolerance/connect-clean, §8.8 request-path machinery) against a
-# live gateway + sandlot + microVM stack:
+# live gateway + sandlot + tinyVM stack:
 #   #2  concurrent cold mount -> MountLock (503 CONCURRENT_MOUNT or both 200, no leak)
 #   #3  bg exec + sync exec concurrent -> both 200, sync lease hit
 #   #8  bg exec lost: start bg -> kill sandlot -> reconnect -> status not running
@@ -55,7 +55,7 @@ restart_sandlot() {
     tc_log_step "Restarting sandlot..."
     # Kill ONLY the sandlot process. Do NOT call tc_kill_sandswap_procs - it
     # would kill the gateway (breaking all subsequent requests) AND the sandvmm
-    # microVMs (preventing re-adopt). sandlot has no Pdeathsig, so its sandvmm
+    # tinyVMs (preventing re-adopt). sandlot has no Pdeathsig, so its sandvmm
     # children stay alive and are re-adopted by the new sandlot via state.json.
     kill "${SANDLOT_PID:-}" 2>/dev/null || true
     wait "${SANDLOT_PID:-}" 2>/dev/null || true

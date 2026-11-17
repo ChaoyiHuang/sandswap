@@ -164,7 +164,7 @@ keep-alive, no ALPN).
 ## Sample output
 
 Numbers below come from a **local stub gateway** (fixed fake timings, no real
-sandlot/microVM) — the shape is what matters. For real measured end-to-end
+sandlot/tinyVM) — the shape is what matters. For real measured end-to-end
 figures see `docs/benchmark/baremetal.md` (bare-metal warm P50 ≈ 0.7 ms).
 
 ```
@@ -173,7 +173,7 @@ Sandswap keep-alive demo
   sandfs    : sandfs-abc
   transport : keep-alive (IdleConnTimeout=0, MaxIdleConnsPerHost=8)
   timings   : total = client total: request sent -> response received (whole chain)
-              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the microVM (warden)
+              gateway = gateway end-to-end (includes sandlot); sandlot (includes exec); exec = inside the tinyVM (warden)
 
 [1] GET /health — opens THE connection (dial + handshake, once)
   200 OK  total=  4.21ms  dial=  1.02ms  tls=  2.87ms  proto=HTTP/2.0  conn=NEW
@@ -203,11 +203,11 @@ total  (what the client waits for)
     waiting for the sandlot's reply
     └── sandlot dispatch→response (sandlot_duration_ns) — VM lookup,
         dispatch, waiting for the warden's reply
-        └── exec: warden spawn + run INSIDE the microVM (exec_duration_ns)
+        └── exec: warden spawn + run INSIDE the tinyVM (exec_duration_ns)
 ```
 
 Every command traverses the whole chain — client → gateway → sandlot → vsock
-→ warden → microVM → back — so the internal three layers run identically
+→ warden → tinyVM → back — so the internal three layers run identically
 whether the connection was reused or freshly dialed; reuse only shrinks the
 top branch of the tree.
 

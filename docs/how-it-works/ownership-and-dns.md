@@ -7,7 +7,7 @@ parent: How It Works
 # Ownership & DNS
 
 > This page covers the **normal path**: how a request is routed — sandns →
-> gateway → node → microVM — and the two facts (ownership, placement) the
+> gateway → node → tinyVM — and the two facts (ownership, placement) the
 > routing is built on. Everything that happens when a component *fails* is
 > [Resilience](resilience.md). The code is the only implementation truth;
 > this page covers the stable design and mechanisms.
@@ -21,7 +21,7 @@ sandns, ownership, and placement exist for one purpose: **minimal end-to-end
 latency** ([Design Principles](design-principles.md), Principle 2). Every
 design choice here serves that goal. In steady state a command is pure
 delivery —
-the request travels agent → sandns → gateway → node → microVM with no
+the request travels agent → sandns → gateway → node → tinyVM with no
 coordination on the command path: sandns hands it to the gateway that can
 serve it immediately, ownership keeps a sandfs pinned to one gateway, and
 placement keeps it pinned to one node, so nothing is re-decided per command;
@@ -135,11 +135,11 @@ without a poller.
 
 ## 3. The request path, end to end
 
-One command request, cold, from the agent to the microVM. Four hops, each
+One command request, cold, from the agent to the tinyVM. Four hops, each
 with one decision:
 
 ```
-agent ──sandns──▶ gateway ──node stream──▶ sandlot ──vsock──▶ microVM
+agent ──sandns──▶ gateway ──node stream──▶ sandlot ──vsock──▶ tinyVM
             step 1                  steps 2–3           step 4
 ```
 
@@ -217,7 +217,7 @@ clean count drops before a concurrent `Acquire` can read it. The gateway
 never tracks individual VMs — node capacity (per spec: total / clean /
 bound) is what the node's heartbeats report.
 
-### 3.4 Step 4 — the sandlot picks a microVM
+### 3.4 Step 4 — the sandlot picks a tinyVM
 
 The gateway sends the VMCommand over the node's gRPC stream. The sandlot
 resolves the target VM (`resolveVMForMount`):
@@ -228,8 +228,8 @@ resolves the target VM (`resolveVMForMount`):
   is picked and bound (best-fit, not first-fit: a small sandfs should not
   waste a large VM).
 
-The microVM lifecycle (states, verified creation, sticky lease, recycle,
-re-adopt) is [microVM Lifecycle](vm-lifecycle.md).
+The tinyVM lifecycle (states, verified creation, sticky lease, recycle,
+re-adopt) is [tinyVM Lifecycle](vm-lifecycle.md).
 
 ### 3.5 One DNS lookup, then a long-lived connection
 

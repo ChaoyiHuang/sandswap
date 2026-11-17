@@ -634,7 +634,7 @@ wait_clean "$POOL_SIZE" 60 || tc_log_warn "GatewayIPDNSEviction: pool not ready 
 #
 # Design — four premises, each with evidence observable inside the test, no assumptions:
 # ① The 3rd command parks the loop: -max-concurrent-commands 2 + 3 concurrent execs on [DIFFERENT
-#    sandfs instances] (3-VM pool; one-SandFS-one-microVM binds each to its own VM). It must span
+#    sandfs instances] (3-VM pool; one-SandFS-one-tinyVM binds each to its own VM). It must span
 #    sandfs instances: the gateway serializes cold mounts of the same sandfs behind a per-sandfs MountLock
 #    (execute.go "needsColdMount := !leaseHit") — while sleep-60 is in flight, the lease
 #    is never established, so later requests for the same sandfs all queue at the gateway and are never dispatched — the

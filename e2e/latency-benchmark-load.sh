@@ -10,11 +10,11 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0.
 #
-# latency-benchmark-load.sh — whole-host microVM reuse capacity under the
+# latency-benchmark-load.sh — whole-host tinyVM reuse capacity under the
 # realistic AI agent workload.
 #
 # Method:
-#   1. Measure a single microVM's no-background-load latency with
+#   1. Measure a single tinyVM's no-background-load latency with
 #      e2e/latency-benchmark-aiagent.sh in the one-machine-etcd topology, and
 #      take its gateway E2E P95 from that run as the latency baseline (warm
 #      and cold separately).
@@ -24,7 +24,7 @@
 #      (cold); the follow-ups are sent immediately after the previous response
 #      and are warm on the same VM under the benchmark's 1 ms sticky lease.
 #   3. Sweep the offered agent count. At every level the driver reports the
-#      completed cold mounts/s (VM reuses/s), the average per-microVM reuse
+#      completed cold mounts/s (VM reuses/s), the average per-tinyVM reuse
 #      rate (cold/s / pool), the warm share, and the gateway E2E P95 per class.
 #   4. The 1x capacity is the highest level whose cold AND warm gateway E2E
 #      (and business client, retries included) P95 stay within the no-load
@@ -32,7 +32,7 @@
 #      the baseline. A busy refusal (503 NO_AVAILABLE_SANDBOX) is retried by
 #      the client like a real agent, so it shows up as retry pressure, not a
 #      failed turn.
-#   5. Optional ideal probe (LOADTEST_WORKLOAD=ideal): one paced lane per microVM,
+#   5. Optional ideal probe (LOADTEST_WORKLOAD=ideal): one paced lane per tinyVM,
 #      no between-turn think gap, a fixed turn period. The period sweep's knee (zero BUSY,
 #      zero terminal) is the collision-free maximum reuse rate with the VMs
 #      continuously fed. It is an idealized capability number, not a business
@@ -101,12 +101,12 @@
 #                           requests per turn: N for a fixed count (1 = every
 #                           turn is a single cold request), or size:weight pairs
 #   LOADTEST_WORKLOAD=agents     agents = the realistic AI agent closed loop;
-#                           ideal = one paced lane per microVM with no think
+#                           ideal = one paced lane per tinyVM with no think
 #                           time and a fixed period (capability probe);
 #                           shaped = a full agent population queued per lane,
 #                           one in-flight request per VM (toll-booth shaper)
 #   LOADTEST_LANES=POOL_SIZE
-#                           ideal/shaped: paced lanes (one per microVM)
+#                           ideal/shaped: paced lanes (one per tinyVM)
 #   LOADTEST_TURN_PERIODS_MS="20 22 24 26 28 30 35"
 #                           ideal/shaped: turn-period sweep; the smallest
 #                           period with zero BUSY attempts is the ideal max
@@ -148,7 +148,7 @@
 #   BENCH_TEMPLATE_REF=rootfs:v1  flat busybox template
 #   EXEC_SLOTS=3            bench-spec exec slots
 #   NETWORK_BACKEND=bridge
-#   PIN_MODE=0              0 = host scheduler; 1 = bind every microVM's
+#   PIN_MODE=0              0 = host scheduler; 1 = bind every tinyVM's
 #                           sandvmm process (vCPU + host-side virtio-fs/API
 #                           threads) to its own host CPU slice and its
 #                           allocations to that slice's NUMA node.
@@ -213,15 +213,15 @@ SANDLOT_POOL="${SANDLOT_POOL:-small:${POOL_SIZE}}"
 PIN_VERIFY_EACH_LEVEL="${PIN_VERIFY_EACH_LEVEL:-1}"
 VM_MEMORY_MB="${VM_MEMORY_MB:-256}"
 BENCH_VCPUS="${BENCH_VCPUS:-1}"
-# Whole-physical-core VM slices: each microVM owns an entire physical core
+# Whole-physical-core VM slices: each tinyVM owns an entire physical core
 # (both SMT threads) so no two VMs share a core; the vCPU uses one thread and
 # the VM's own vhost/virtiofs threads the other. The stack roles
 # (loadgen/gateway/sandlot) are reserved whole cores independently.
 PIN_SLICE_CPUS="${PIN_SLICE_CPUS:-$(( BENCH_VCPUS < 2 ? 2 : BENCH_VCPUS * 2 ))}"
 NETWORK_BACKEND="${NETWORK_BACKEND:-bridge}"
 
-# Per-microVM CPU-slice + NUMA-memory binding (script-local, no product-code
-# change: sandlot's `microvm.vmm_binary` points at a generated numactl shim).
+# Per-tinyVM CPU-slice + NUMA-memory binding (script-local, no product-code
+# change: sandlot's `tinyvm.vmm_binary` points at a generated numactl shim).
 PIN_MODE="${PIN_MODE:-auto}"
 PIN_CPUS="${PIN_CPUS:-}"
 PIN_MAP="$DEPLOY_DIR/sandvmm-pinned.map"
@@ -312,7 +312,7 @@ LOADTEST_BUSY_RETRIES="${LOADTEST_BUSY_RETRIES:-50}"
 LOADTEST_BUSY_RETRY_BACKOFF_MS="${LOADTEST_BUSY_RETRY_BACKOFF_MS:-10}"
 LOADTEST_INTRA_TURN_GAP_MS="${LOADTEST_INTRA_TURN_GAP_MS:-0}"
 # Workload selector. agents = the realistic LLM closed loop (default).
-# ideal = one paced lane per microVM with no between-turn think gap, a fixed turn period,
+# ideal = one paced lane per tinyVM with no between-turn think gap, a fixed turn period,
 # and a period sweep: the smallest period with zero BUSY attempts is the
 # collision-free reuse rate with every VM continuously fed. This is an
 # idealized capability probe, not a business model.
@@ -603,7 +603,7 @@ snapshot_stats() {
 
 # ── CPU/NUMA pinning and the host-stack partition ─────────────────────────
 #
-# Benchmark-local, product-code-free: sandlot's `microvm.vmm_binary` accepts
+# Benchmark-local, product-code-free: sandlot's `tinyvm.vmm_binary` accepts
 # any executable, so the generated shim sits between sandlot and the real
 # sandvmm. Depending on the mode it execs the VMM under
 #
@@ -949,7 +949,7 @@ for n in node_ids:
         node_of[c] = n
 
 # Whole-physical-core slices (the default): each slice owns complete sibling
-# groups, so two microVMs can never share a physical core. A slice takes
+# groups, so two tinyVMs can never share a physical core. A slice takes
 # ceil(slice_cpus / threads-per-core) whole cores; --membind stays on the
 # slice's node because packing is per node.
 if slice_cpus >= 2:
@@ -1085,7 +1085,7 @@ for v in (real, numactl, arg):
         sys.exit(2)
 tmpl = r'''#!/bin/bash
 # Generated by e2e/latency-benchmark-load.sh.
-#   slice mode: pin this microVM's sandvmm process -- vCPU threads AND the
+#   slice mode: pin this tinyVM's sandvmm process -- vCPU threads AND the
 #     host-side virtio-fs/API threads -- to its own CPU slice, and bind every
 #     allocation made by the process (guest RAM included: it is mmap'd after
 #     this exec) to that slice's NUMA node. The slice is a pure function of
@@ -1801,13 +1801,13 @@ if [[ -n "$PIN_STACK_LOADGEN_CPUS" ]]; then
     log_pass "taskset present — host stack will be pinned to $PIN_RESERVED_CPUS"
 fi
 
-# ── Phase 1: single-microVM no-load reference ──────────────────────────────
+# ── Phase 1: single-tinyVM no-load reference ──────────────────────────────
 # The latency budget for the whole capacity run is the gateway E2E P95 that a
-# single microVM serves with no background load, measured by the AI agent
+# single tinyVM serves with no background load, measured by the AI agent
 # latency benchmark in the same one-machine-etcd topology. The load levels
 # then find the highest offered load whose gateway E2E stays within 1x and 2x
 # of that reference.
-log_section "Phase 1: Single-microVM no-load latency (latency-benchmark-aiagent.sh)"
+log_section "Phase 1: Single-tinyVM no-load latency (latency-benchmark-aiagent.sh)"
 WARM_GW_P95_MS="${WARM_GW_P95_MS:-}"
 COLD_GW_P95_MS="${COLD_GW_P95_MS:-}"
 WARM_CLIENT_P95_MS="${WARM_CLIENT_P95_MS:-}"
@@ -1859,7 +1859,7 @@ if [[ "$SKIP_ESTIMATE_BENCH" == "1" ]]; then
         log_warn "SKIP_ESTIMATE_BENCH=1 — using supplied no-load P95s: gateway warm/cold ${WARM_GW_P95_MS}/${COLD_GW_P95_MS}ms, client ${WARM_CLIENT_P95_MS}/${COLD_CLIENT_P95_MS}ms"
     fi
 else
-    # The reference must use the SAME microVM shape as the load fixture.
+    # The reference must use the SAME tinyVM shape as the load fixture.
     export TC_VCPUS="$BENCH_VCPUS"
     EST_DIR="$(mktemp -d /tmp/sandswap-load-ref.XXXXXX)"
     AI_LOG="$EST_DIR/aiagent-bench.log"
@@ -1924,7 +1924,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 tc_deploy_artifacts
 tc_gen_certs
@@ -2474,9 +2474,9 @@ if workload in ("ideal", "shaped"):
     rows.sort(key=lambda r: num(r, "period_ms"))
     gname = "ideal-max" if workload == "ideal" else "shaped-max"
     print("")
-    print("-- %s --" % ("ideal paced lanes (one per microVM, fixed period, no between-turn think gap)"
+    print("-- %s --" % ("ideal paced lanes (one per tinyVM, fixed period, no between-turn think gap)"
                         if workload == "ideal" else
-                        "shaped lanes (one per microVM; many AI agents queued per lane, one in-flight request per VM)"))
+                        "shaped lanes (one per tinyVM; many AI agents queued per lane, one in-flight request per VM)"))
     for r in rows:
         info("period=%.0fms" % num(r, "period_ms"),
              "agents=%s cold/s=%.2f (per-VM %.2f/s) warm/s=%.1f busy=%d terminal=%d | "

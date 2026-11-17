@@ -10,7 +10,7 @@
 // by the Apache License, Version 2.0.
 //
 // Sandswap warden — PID 1 entry point.
-// Boots as init (PID 1) inside the microVM: base mounts (proc/sys/dev),
+// Boots as init (PID 1) inside the tinyVM: base mounts (proc/sys/dev),
 // hostname, logger, guest eth0 setup (netlink), SIGCHLD reaper, then the raw
 // vsock server on port 1024 that serves mount/unmount/exec. On server exit the
 // VM is powered off. Sandswap is a pure chroot executor.

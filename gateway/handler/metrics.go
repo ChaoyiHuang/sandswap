@@ -106,9 +106,9 @@ func WriteMetricsText(rep StatsReport) string {
 	// Cluster totals.
 	writeMetric(&b, emitted, "sandswap_cluster_gateways", "Gateways visible in the stats view.", "gauge", "", float64(rep.Totals.GatewayCnt))
 	writeMetric(&b, emitted, "sandswap_cluster_nodes", "Sandlot nodes connected across gateways.", "gauge", "", float64(rep.Totals.NodeCount))
-	writeMetric(&b, emitted, "sandswap_cluster_clean_vms", "CLEAN microVMs across the cluster.", "gauge", "", float64(rep.Totals.CleanVMs))
-	writeMetric(&b, emitted, "sandswap_cluster_total_vms", "Total microVMs across the cluster.", "gauge", "", float64(rep.Totals.TotalVMs))
-	writeMetric(&b, emitted, "sandswap_cluster_in_use_vms", "Bound (in-use) microVMs across the cluster.", "gauge", "", float64(rep.Totals.InUseVMs))
+	writeMetric(&b, emitted, "sandswap_cluster_clean_vms", "CLEAN tinyVMs across the cluster.", "gauge", "", float64(rep.Totals.CleanVMs))
+	writeMetric(&b, emitted, "sandswap_cluster_total_vms", "Total tinyVMs across the cluster.", "gauge", "", float64(rep.Totals.TotalVMs))
+	writeMetric(&b, emitted, "sandswap_cluster_in_use_vms", "Bound (in-use) tinyVMs across the cluster.", "gauge", "", float64(rep.Totals.InUseVMs))
 
 	for _, g := range rep.Gateways {
 		gw := `gateway_id="` + escapeLabel(g.GatewayID) + `"`
@@ -121,11 +121,11 @@ func WriteMetricsText(rep StatsReport) string {
 		writeMetric(&b, emitted, "sandswap_gateway_nodes",
 			"Sandlot nodes connected to this gateway.", "gauge", gw, float64(g.NodeCount))
 		writeMetric(&b, emitted, "sandswap_gateway_clean_vms",
-			"CLEAN microVMs held by this gateway's nodes.", "gauge", gw, float64(g.CleanVMs))
+			"CLEAN tinyVMs held by this gateway's nodes.", "gauge", gw, float64(g.CleanVMs))
 		writeMetric(&b, emitted, "sandswap_gateway_total_vms",
-			"Total microVMs held by this gateway's nodes.", "gauge", gw, float64(g.TotalVMs))
+			"Total tinyVMs held by this gateway's nodes.", "gauge", gw, float64(g.TotalVMs))
 		writeMetric(&b, emitted, "sandswap_gateway_in_use_vms",
-			"Bound (in-use) microVMs (total minus clean).", "gauge", gw, float64(g.TotalVMs-g.CleanVMs))
+			"Bound (in-use) tinyVMs (total minus clean).", "gauge", gw, float64(g.TotalVMs-g.CleanVMs))
 		writeMetric(&b, emitted, "sandswap_gateway_agg_duty_long",
 			"Mean long-window duty across this gateway's nodes (0..1).", "gauge", gw, g.AggDutyLong)
 		writeMetric(&b, emitted, "sandswap_gateway_self_cpu_pct",
@@ -143,9 +143,9 @@ func WriteMetricsText(rep StatsReport) string {
 		for _, n := range g.Nodes {
 			nl := gw + `,node_id="` + escapeLabel(n.NodeID) + `"`
 			writeMetric(&b, emitted, "sandswap_node_clean_vms",
-				"CLEAN microVMs on the node.", "gauge", nl, float64(n.CleanVMs))
+				"CLEAN tinyVMs on the node.", "gauge", nl, float64(n.CleanVMs))
 			writeMetric(&b, emitted, "sandswap_node_total_vms",
-				"Total microVMs on the node.", "gauge", nl, float64(n.TotalVMs))
+				"Total tinyVMs on the node.", "gauge", nl, float64(n.TotalVMs))
 			writeMetric(&b, emitted, "sandswap_node_duty_long",
 				"Node long-window duty (0..1).", "gauge", nl, n.DutyLong)
 			writeMetric(&b, emitted, "sandswap_node_host_cpu_pct",

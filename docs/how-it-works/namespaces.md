@@ -10,7 +10,7 @@ Namespaces are the human-API tenancy dimension: they partition **agents**
 and **SandFS instances** on the human API so one tenant's operator (or
 agent) cannot see, create, or touch another tenant's resources. The
 **exec plane is untouched** — an agent's API key already scopes
-everything it can do (`/agent/execute`, `/agent/file`), and a microVM mounts
+everything it can do (`/agent/execute`, `/agent/file`), and a tinyVM mounts
 exactly one SandFS.
 
 The single most important fact about namespaces: **sandswap keeps no
@@ -100,7 +100,7 @@ index to keep consistent.
 
 The exec plane ignores the field entirely: `/agent/*` auth is the
 API-key digest lookup, scheduling/pool/lease/ownership never consult it,
-and the microVM neither knows nor cares. This is the deliberate blast-radius
+and the tinyVM neither knows nor cares. This is the deliberate blast-radius
 choice — tenancy is a control-plane concern only.
 
 ## 5. The `default` namespace

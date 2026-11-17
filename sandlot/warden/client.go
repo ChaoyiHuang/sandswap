@@ -10,7 +10,7 @@
 // by the Apache License, Version 2.0.
 //
 // Package warden provides a minimal raw-vsock client for communicating
-// with warden inside a running microVM.
+// with warden inside a running tinyVM.
 // Wire protocol (see warden/src/raw_server.rs), version 2:
 //	Request  = [u32 magic=0x53414e44][u8 version][u8 op][u32 body_len]
 //	           [u8 nonce[16]][u8 tag[32]][body]
@@ -456,7 +456,7 @@ func versionMismatch(theirs uint8) *ProtocolVersionError {
 	}
 }
 
-// Client is a vsock client connected to warden inside a microVM.
+// Client is a vsock client connected to warden inside a tinyVM.
 // A Client is NOT safe for concurrent use — the raw vsock protocol requires
 // request/response frames to be atomic on the connection. Callers must
 // serialize access (e.g., via VMState.execMu in stream/handler.go).

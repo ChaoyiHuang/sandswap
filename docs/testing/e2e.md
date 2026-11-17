@@ -8,7 +8,7 @@ parent: Testing
 
 > **Developer/test-only — not a production installer and not a production test suite.**
 > Everything under `e2e/` is a developer harness. The scripts deploy ephemeral
-> gateways/sandlots/microVMs, create and delete test agents and SandFS records,
+> gateways/sandlots/tinyVMs, create and delete test agents and SandFS records,
 > reset etcd state, use anonymous control planes, change host network/device
 > state (including `/dev/net/tun` modes and firewall rules), and may remove
 > `/run/sandswap` or test volumes. **Do not run them against a production host
@@ -50,7 +50,7 @@ root; **docker** = a docker daemon; **none** = binaries only.
 
 ## 1. Coordination layer (etcd)
 
-Real etcd, real gateway/sandns binaries, no microVMs — run without root
+Real etcd, real gateway/sandns binaries, no tinyVMs — run without root
 where the etcd ports are free (§1.7 brings its own ephemeral etcd and
 wants root for its dedicated ports).
 
@@ -181,7 +181,7 @@ which derives the truth from the code and fails on drift in BOTH
 directions: CLI flags, YAML config keys, HTTP routes, structured error
 codes, environment variables, MCP tool names, `/metrics` metric names,
 and the canonical-terminology deny-list. Read-only, stdlib-only, ~0.4 s —
-a broken doc is a release defect that surfaces before any microVM boots.
+a broken doc is a release defect that surfaces before any tinyVM boots.
 
 ### 3.7 `host-exec-paths.sh` — pinned host-utility paths
 
@@ -240,7 +240,7 @@ never prints "ok" from an unparsable mode.
 ### 4.1 `smoke.sh` — minimal full-stack smoke
 
 Run `sudo bash e2e/smoke.sh` · KVM · ~2–3 min. The recommended first run.
-Validates: real KVM microVMs end to end, guest egress probe (guest → TAP
+Validates: real KVM tinyVMs end to end, guest egress probe (guest → TAP
 → bridge → NAT → internet — the only test covering the full outbound
 path), shell file I/O, cross-agent isolation, persistence across hot
 switches, sticky lease asserted via the `X-Sandbox-Lease` header, and the
@@ -275,12 +275,12 @@ preserved partial output, never internals.
 ### 4.5 `mcp.sh` — MCP server end to end
 
 Run `sudo bash e2e/mcp.sh` · KVM. Validates the MCP client → gateway →
-gRPC → sandlot → VMM → microVM chain with all 12 MCP tools exercised.
+gRPC → sandlot → VMM → tinyVM chain with all 12 MCP tools exercised.
 
 ### 4.6 `eino-agent-mcp.sh` — LLM-driven framework agent
 
 Run `sudo bash e2e/eino-agent-mcp.sh` · KVM + a real LLM key
-(`DEEPSEEK_API_KEY`). Two agents sharing one microVM pool driven by a
+(`DEEPSEEK_API_KEY`). Two agents sharing one tinyVM pool driven by a
 real LLM: MCP tool discovery, code execution, file operations, virtio-fs
 `allowed_dirs` hot-switching. Auto-builds the Ubuntu rootfs. SKIPs loudly
 without a key.
@@ -289,7 +289,7 @@ without a key.
 
 Run `sudo bash e2e/multi-agents.sh` · KVM. A Task-Manager agent (SQLite)
 hands over to a Data-Analyst agent (Python) with realistic thinking
-delays: microVM reuse across switches, template dedup, and data
+delays: tinyVM reuse across switches, template dedup, and data
 persistence.
 
 ### 4.8 `single-node-multi-agent.sh` — eino acceptance on the deploy tree's single-node stack
@@ -398,7 +398,7 @@ cross-agent workspace isolation, environment variables.
 
 ### 6.2 `cross-tenant-residue.sh` — residue channels across a switch
 
-Run `sudo bash e2e/cross-tenant-residue.sh` · KVM. One microVM (pool
+Run `sudo bash e2e/cross-tenant-residue.sh` · KVM. One tinyVM (pool
 forced to 1) serves agent A then agent B; kernel objects and tmpfs/proc/
 dev state that could outlive the rule-A process sweep are pinned: SysV
 message queues / shared-memory segments (guest IPC namespace), POSIX
@@ -538,7 +538,7 @@ class-completeness denial (`mount_setattr`, `statmount`, `listmount`,
 
 ### 8.1b sandvmm per-thread seccomp — enforced by default
 
-`microvm.vmm_seccomp` defaults to `true` (Trap/SIGSYS enforcement).
+`tinyvm.vmm_seccomp` defaults to `true` (Trap/SIGSYS enforcement).
 `e2e/vmm-seccomp.sh` validates both phases: a log-mode run with the
 representative workload produces zero `RET_LOG` hits across the battery,
 and the enforce-mode battery stays green. The sweep's trapped set for the
@@ -586,7 +586,7 @@ leaks into a mounted SandFS or the shared volumes directory.
 
 ### 8.4 `vmm-api-auth.sh` — the per-VM sandvmm API token handshake
 
-Run `sudo bash e2e/vmm-api-auth.sh` · KVM (no microVM is created). The
+Run `sudo bash e2e/vmm-api-auth.sh` · KVM (no tinyVM is created). The
 optional `--api-token-fd` handshake, whose preface precedes whichever
 framing the connection then uses: default OFF (a VMM started without a
 token serves a tokenless raw `sandvmm.ping` — the default sandlot launch
@@ -644,7 +644,7 @@ stamp removal on unmount.
 Measurement, not pass/fail — these print distributions; only the marked
 hard-fail assertions gate. The published numbers live in the
 [Benchmark reports](../benchmark/index.md) (bare-metal and nested-virt
-latency, plus the two microVM-reuse capacity reports).
+latency, plus the two tinyVM-reuse capacity reports).
 
 ### 10.1 `latency-benchmark-aiagent.sh` — command-path latency
 
@@ -674,7 +674,7 @@ isolation. Read-only-rootfs enforcement is a hard FAIL, not a warning.
 `bash e2e/latency-benchmark-load.sh [--quick]` · KVM, self-contained
 (deploys and removes its own one-machine-etcd stack, §[topologies](../how-it-works/topologies.md)).
 Answers, from measurement plus clearly-stated model assumptions, how
-many small microVMs / ubuntu overlay SandFS instances a host supports,
+many small tinyVMs / ubuntu overlay SandFS instances a host supports,
 the warm and cold (every-request-cold) request rates, and whether lease
 expiries still fire at the configured 1 ms precision under load.
 
@@ -713,7 +713,7 @@ drives `latency-benchmark-load.sh`). The load benchmark fixes one core
 allocation; this driver is the search around it: a calibration run
 measures per-role peak CPU at a generous split, candidate splits assign
 DISJOINT whole cores to loadgen / gateway(+human+etcd) / sandlot(+prov) /
-the microVM pool, a validation run measures host and per-VM cold rates at
+the tinyVM pool, a validation run measures host and per-VM cold rates at
 each split, and the best is the largest host cold/s with zero terminal
 failures. The matrix runs the planner only; the published splits are in
 the capacity reports.

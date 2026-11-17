@@ -9,7 +9,7 @@ grand_parent: How It Works
 
 ## 1. Overview
 
-The warden is PID 1 inside every microVM: it mounts the agent's SandFS and
+The warden is PID 1 inside every tinyVM: it mounts the agent's SandFS and
 runs the agent's commands as its own children, enforcing the guest-side
 isolation profile. It is statically linked into a ~5 MB initramfs.
 Source: `warden/` (Rust, musl). It listens on vsock port 1024 for exactly

@@ -27,7 +27,7 @@
 #   HUMAN_URL       — human API base URL (/stats, /human/*)(default: http://localhost:3100)
 #   LEASE_MS        — sticky lease window                  (default: 100)
 #   MAX_LEASE_SEC   — max background exec lease            (default: 30)
-#   POOL_SIZE       — microVM pool size                    (default: 3)
+#   POOL_SIZE       — tinyVM pool size                    (default: 3)
 #   VM_MEMORY_MB    — per-VM memory                        (default: 256)
 #   SANDLOT_POOL    — sandlot pool spec                    (default: small:${POOL_SIZE})
 #   NETWORK_BACKEND — bridge|none                          (default: bridge)
@@ -677,7 +677,7 @@ gateway_addr: "localhost${STREAM_ADDR}"
 node_id: "${TC_NODE_ID:-test-node-1}"
 vmm_binary: "${TC_VMM_BINARY:-$DEPLOY_DIR/sandvmm}"
 
-microvm:
+tinyvm:
   kernel: "${TC_KERNEL:-$DEPLOY_DIR/vmlinux.bin}"
   initramfs: "${TC_INITRAMFS:-$DEPLOY_DIR/initramfs.cpio.gz}"
   default_vcpus: ${TC_VCPUS:-2}

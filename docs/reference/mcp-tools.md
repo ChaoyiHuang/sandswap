@@ -33,7 +33,7 @@ error behavior.
 
 All tools resolve the caller's agent from the request's API key and go
 through the same handler pipeline as the HTTP API — file and exec
-operations always run inside a microVM, never on the gateway host.
+operations always run inside a tinyVM, never on the gateway host.
 `sandfs_id` is required on every per-sandfs tool; there is no
 auto-resolution.
 

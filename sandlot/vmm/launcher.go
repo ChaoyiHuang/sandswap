@@ -37,7 +37,7 @@ import (
 // The VMM's BackendFsConfig defaults read_only=true, so we override explicitly.
 const virtioFsReadOnly = false
 
-// Config holds the parameters for launching a microVM.
+// Config holds the parameters for launching a tinyVM.
 type Config struct {
 	ID            string
 	KernelPath    string
@@ -62,7 +62,7 @@ type Config struct {
 	// the VMM as --api-allowed-uid; embedded mode derives it from the
 	// launcher's euid, boxout sets it to its -allowed-uid.
 	APIAllowedUID uint32
-	// SeccompMode is the sandvmm --seccomp value (microvm.vmm_seccomp):
+	// SeccompMode is the sandvmm --seccomp value (tinyvm.vmm_seccomp):
 	// "true" (default) enforces the v28 per-thread allow-lists (Trap/SIGSYS);
 	// "log" installs them in audit mode; "false" is the explicit escape
 	// hatch. "process" (KillProcess) is NOT accepted by sandvmm: it installs
@@ -71,7 +71,7 @@ type Config struct {
 	// Empty is normalized to "true" at spawn.
 	SeccompMode string
 	// VMMAPIAuth enables the per-VM API token/challenge handshake on
-	// the canonical VMM API socket (microvm.vmm_api_auth / -vmm-api-auth,
+	// the canonical VMM API socket (tinyvm.vmm_api_auth / -vmm-api-auth,
 	// default true — DefaultVMMAPIAuth). When on, Launch mints a 32-byte random
 	// token, persists it 0600 under <sandbox>/state for re-adopt, and passes it
 	// over an inherited fd; the client proves the peer knows it before the
@@ -117,7 +117,7 @@ type Config struct {
 	// effective cmdline is persisted in state.json, so the posture stays
 	// auditable per VM). Default false (=0): the guest kernel builds with
 	// INIT_ON_FREE_DEFAULT_ON, whose boot-time bulk clear of ALL guest RAM is
-	// purely redundant in a fresh microVM — the VMM's guest RAM is host
+	// purely redundant in a fresh tinyVM — the VMM's guest RAM is host
 	// anonymous mmap (untouched pages are already host-zero) and no tenant
 	// has run yet — while the measured cost is linear in RAM (~0.65ms/MB on
 	// nested virt: ~330ms at 512MB, ~2.4s at 2GB; RAM-independent boot with
@@ -139,7 +139,7 @@ type Config struct {
 	WardenSessionKey string
 }
 
-// RunningVM represents a launched microVM.
+// RunningVM represents a launched tinyVM.
 type RunningVM struct {
 	ID        string
 	APISocket string
@@ -203,7 +203,7 @@ type AttachConfig struct {
 // Attach re-attaches to an already-running sandvmm process by its API socket.
 // It builds a RunningVM handle (readopted=true, no *exec.Cmd) and confirms the
 // VMM is still alive via Ping. Used by ReadoptVMs at sandlot startup to reclaim
-// microVMs that survived a sandlot restart.
+// tinyVMs that survived a sandlot restart.
 func Attach(ctx context.Context, cfg AttachConfig, logger *log.Logger) (*RunningVM, error) {
 	token, terr := ReadAPIToken(cfg.SandboxDir)
 	if terr != nil {
@@ -600,7 +600,7 @@ func Launch(ctx context.Context, cfg Config, logger *log.Logger) (*RunningVM, er
 		allowedUID = uint32(os.Geteuid())
 	}
 	args = append(args, "--api-allowed-uid", strconv.FormatUint(uint64(allowedUID), 10))
-	// Per-VM canonical-API authentication token (microvm.vmm_api_auth /
+	// Per-VM canonical-API authentication token (tinyvm.vmm_api_auth /
 	// -vmm-api-auth, default ON — see DefaultVMMAPIAuth). When enabled:
 	// generated here, persisted 0600 in the sandlot-private state dir
 	// (re-adopt), and delivered to the VMM over an inherited fd
@@ -654,7 +654,7 @@ func Launch(ctx context.Context, cfg Config, logger *log.Logger) (*RunningVM, er
 	cmd.Stderr = os.Stderr
 
 	// Put sandvmm in its own process group so terminal SIGINT to sandlot is
-	// not propagated to the microVM (a Ctrl-C at the sandlot prompt must not
+	// not propagated to the tinyVM (a Ctrl-C at the sandlot prompt must not
 	// kill running VMs). CRITICAL: we deliberately do NOT set Pdeathsig —
 	// sandvmm must survive a sandlot crash/restart so it can be re-adopted;
 	// Pdeathsig would SIGKILL every VM the instant sandlot dies, defeating
@@ -834,7 +834,7 @@ func buildVMCreateConfig(cfg Config, serialLog, consoleLog string) map[string]in
 func buildCmdline(cfg Config) string {
 	cmdline := cfg.KernelCmdline
 	// Free-wipe posture is EXPLICIT on every boot, not inherited from the
-	// kernel config's INIT_ON_FREE_DEFAULT_ON: the knob (microvm.init_on_free,
+	// kernel config's INIT_ON_FREE_DEFAULT_ON: the knob (tinyvm.init_on_free,
 	// default false) is the deployment's authority, and writing it out makes
 	// the persisted effective cmdline record the posture per VM. Appended
 	// AFTER the base so an operator-provided init_on_free= in the base cannot
@@ -991,7 +991,7 @@ func SandboxDirMode(vmmUID uint32) (mode os.FileMode, setgid bool) {
 	return 0711, false
 }
 
-// seccompModeOr normalizes microvm.vmm_seccomp for the --seccomp argument.
+// seccompModeOr normalizes tinyvm.vmm_seccomp for the --seccomp argument.
 // Empty is the documented default: "true" enforces the v28 per-thread
 // allow-lists (the gate `e2e/vmm-seccomp.sh` passed both phases before the
 // flip). "log" is the audit mode; the config layer validates the value set.

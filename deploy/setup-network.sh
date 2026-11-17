@@ -10,12 +10,12 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0.
 #
-# setup-network.sh — one-time host setup for Sandswap microVM outbound networking
+# setup-network.sh — one-time host setup for Sandswap tinyVM outbound networking
 # (bridge + kernel NAT backend).
 # Creates a host bridge, enables IP forwarding, and installs a single nftables
-# masquerade rule so pooled microVMs (each with a virtio-net TAP enslaved to
+# masquerade rule so pooled tinyVMs (each with a virtio-net TAP enslaved to
 # the bridge) can reach the outside world. No dnsmasq, no per-VM daemon —
-# microVMs use static IPs assigned by sandlot; the TAP lifecycle is owned by
+# tinyVMs use static IPs assigned by sandlot; the TAP lifecycle is owned by
 # sandlot/VMM, this script only sets up the shared bridge + NAT once.
 # Idempotent: safe to re-run. Override defaults via env vars:
 #   BRIDGE=br-sandswap SUBNET=10.188.0.0/16 GATEWAY=10.188.0.1 UPLINK=eth0 \

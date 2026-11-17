@@ -6,7 +6,7 @@
 > installer and not a production test suite. The scripts are deliberately
 > destructive and assume a disposable host/cluster:
 >
-> - they deploy and tear down gateways, sandlots and microVMs;
+> - they deploy and tear down gateways, sandlots and tinyVMs;
 > - they create/delete test agents and SandFS records, and reset etcd state;
 > - they start gateways with `-allow-anonymous-human`;
 > - they change host networking and device state (`/dev/net/tun` modes,

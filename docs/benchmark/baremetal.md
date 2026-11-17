@@ -9,7 +9,7 @@ parent: Benchmark
 > Bare-metal KVM on a TencentOS Server 4 cloud bare-metal host, measured
 > with the prebuilt release package; raw logs are in
 > `baremetal-raw/` beside this report.
-> All numbers are from real KVM microVMs (no mocks), read from the gateway's
+> All numbers are from real KVM tinyVMs (no mocks), read from the gateway's
 > own ns-precision metrics in every `/agent/execute` response.
 >
 > Companions: [the nested-virtualization run](nested-virt.md)
@@ -37,7 +37,7 @@ the per-topology blocks and `baremetal-raw/`). `gateway` = the gateway E2E
 metric. The `mcp` rows exclude the LLM-driven tool-call measurements (§4,
 n=5, cold only). Every run in this report is **CPU/NUMA pinned** (§2):
 the host stack (gateway, sandlot, benchmark client) runs on eight whole
-physical cores (16-23 and their SMT siblings 64-71), and each microVM owns
+physical cores (16-23 and their SMT siblings 64-71), and each tinyVM owns
 one whole physical core (13/61, 14/62, 15/63) — vCPU and vhost/virtiofs
 threads stay on that core, never spanning two physical cores.
 
@@ -74,8 +74,8 @@ threads stay on that core, never spanning two physical cores.
 | Host kernel | 6.6.117-45.14.2.tl4.x86_64 (TencentOS Server 4) |
 | Guest kernel | **7.2.8** minimized cloud-hypervisor tree (`vmlinux` ELF+PVH; `CONFIG_IPV6=y`, `CONFIG_INET_DIAG_DESTROY=y`, `INIT_ON_ALLOC_DEFAULT_ON=y`, runtime `init_on_free=0`), `clocksource=kvm-clock`, hrtimers ON |
 | Binaries | prebuilt release package — [reproducing.md](reproducing.md) Path 2, scripts bundled with the binaries; cloud-vendor monitoring agents (barad/stargate) stopped for the run |
-| CPU / NUMA pinning | **On (bare metal)**: host stack (gateway, sandlot, benchmark client) on eight whole physical cores — 16-23 and their SMT siblings 64-71; each microVM on **one whole physical core** (13/61, 14/62, 15/63 — both SMT threads) with `numactl --membind=0`; driven by `e2e/pin.sh` (`PIN_MODE=auto`; nested virt is not pinned, `PIN_MODE=0` disables) |
-| microVM | **1 vCPU**, 256 MiB, 5 MiB initramfs, pool of 3 pre-warmed CLEAN VMs |
+| CPU / NUMA pinning | **On (bare metal)**: host stack (gateway, sandlot, benchmark client) on eight whole physical cores — 16-23 and their SMT siblings 64-71; each tinyVM on **one whole physical core** (13/61, 14/62, 15/63 — both SMT threads) with `numactl --membind=0`; driven by `e2e/pin.sh` (`PIN_MODE=auto`; nested virt is not pinned, `PIN_MODE=0` disables) |
+| tinyVM | **1 vCPU**, 256 MiB, 5 MiB initramfs, pool of 3 pre-warmed CLEAN VMs |
 | Lease | sticky, 100 ms window |
 | VM recycle | `max_uses=100000` — no VM replacement occurs inside a benchmark window |
 | Topologies | single-node (combined gateway) and distributed (etcd + exec gateway + human gateway) |
@@ -320,7 +320,7 @@ together) on a host with the cloud-vendor monitoring agents stopped.
 
 **CPU/NUMA pinning is used on bare metal** (`e2e/pin.sh`): the host stack
 (gateway, sandlot, benchmark client) is pinned to eight whole physical cores
-(16-23 and their SMT siblings 64-71), and every microVM to its own whole
+(16-23 and their SMT siblings 64-71), and every tinyVM to its own whole
 physical core (13/61, 14/62, 15/63), with `numactl --membind`. A 1-vCPU VM
 uses one SMT thread; its vhost/virtiofs threads use the other, so the VM
 never spans two physical cores. Nested-virt hosts are not pinned. Set

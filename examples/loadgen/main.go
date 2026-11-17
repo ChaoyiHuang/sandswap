@@ -30,7 +30,7 @@
 // policy and surfaces the 503 as an error.
 //
 // -workload ideal is the capability probe, not a business model: one paced
-// lane per microVM, each issuing a turn every -period-ms with no between-turn
+// lane per tinyVM, each issuing a turn every -period-ms with no between-turn
 // think gap.
 // A period sweep finds the smallest period at which the pool still refuses
 // nothing — the collision-free maximum reuse rate with the VMs continuously
@@ -107,7 +107,7 @@ type options struct {
 	agents      string
 	agentCount  int
 	workload    string        // "agents" (closed loop) | "ideal" | "shaped" (paced lanes)
-	lanes       int           // ideal/shaped: one lane per microVM
+	lanes       int           // ideal/shaped: one lane per tinyVM
 	laneAgents  int           // shaped: AI agents aggregated per lane
 	hold        time.Duration // shaped: extra VM-occupation budget after sticky
 	period      time.Duration
@@ -226,8 +226,8 @@ func main() {
 		gateway     = flag.String("gateway", "http://localhost:3001", "exec gateway base URL")
 		agents      = flag.String("agents", "", "agent list file: lines \"agent_id api_key sandfs_id\"")
 		agentCount  = flag.Int("agent-count", 0, "number of agents to drive (0 = all lines)")
-		workload    = flag.String("workload", "agents", "workload: agents (AI agent closed loop), ideal (one paced lane per microVM) or shaped (many agents queued per lane, one in-flight request per microVM)")
-		lanes       = flag.Int("lanes", 0, "ideal/shaped workload: paced lanes, one per microVM (0 = -agent-count)")
+		workload    = flag.String("workload", "agents", "workload: agents (AI agent closed loop), ideal (one paced lane per tinyVM) or shaped (many agents queued per lane, one in-flight request per tinyVM)")
+		lanes       = flag.Int("lanes", 0, "ideal/shaped workload: paced lanes, one per tinyVM (0 = -agent-count)")
 		laneAgents  = flag.Int("lane-agents", 1, "shaped workload: AI agents aggregated behind each lane (size ~ lane_rate x mean think)")
 		holdMS      = flag.Int("hold-ms", 12, "shaped workload: hold the lane's VM slot for sticky+hold after the last response (the async unmount budget)")
 		periodMS    = flag.Int("period-ms", 0, "ideal/shaped workload: fixed turn period in ms (required)")
@@ -344,7 +344,7 @@ func main() {
 			"loadgen: WARNING: -intra-gap-ms %d >= -sticky-ms %d — follow-up requests will be cold, not warm\n",
 			opts.intraGap.Milliseconds(), opts.sticky.Milliseconds())
 	}
-	// The ideal workload drives one paced lane per microVM. -lanes 0 means
+	// The ideal workload drives one paced lane per tinyVM. -lanes 0 means
 	// "one lane per loaded agent"; -agent-count still bounds the file slice.
 	if opts.workload == "ideal" {
 		if opts.lanes == 0 {
@@ -630,7 +630,7 @@ func runTurn(client *http.Client, opts options, a agentTarget, idx int, rng *ran
 	return out
 }
 
-// runIdeal is the capability probe: one paced lane per microVM, each issuing
+// runIdeal is the capability probe: one paced lane per tinyVM, each issuing
 // a turn every -period-ms with no between-turn think gap. The lanes are
 // staggered across
 // one period so the pool is fed evenly. There is no over-offer — the caller
@@ -715,7 +715,7 @@ type shapedTurn struct {
 // runShaped is the traffic-shaped capability probe: every lane aggregates
 // MANY AI agents (each with its own sandfs and think time), but the lane
 // releases requests to the gateway one at a time — one in-flight cold per
-// microVM slot, self-clocked on the previous response plus the sticky window
+// tinyVM slot, self-clocked on the previous response plus the sticky window
 // plus -hold-ms (the slot's unmount budget).
 // Agent turns queue at the lane like cars at a toll gate; the gate opens at
 // the VM's cycle rate. Unlike -workload ideal (one agent per lane), the

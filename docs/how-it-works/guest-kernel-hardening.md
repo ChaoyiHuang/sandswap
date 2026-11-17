@@ -16,7 +16,7 @@ kernel objects cleared at every unmount, and the reuse and network
 bounds that shrink the blast radius.
 [Isolation and Swap](isolation-and-swap.md) covers the swap machinery that assumes
 this boundary holds; [Threat Model](threat-model.md) covers the
-adversaries outside the microVM.
+adversaries outside the tinyVM.
 
 ## 1. The kernel is a trust root
 
@@ -123,7 +123,7 @@ denied syscall returns EPERM in a live guest.
   allocations are zeroed, so the cross-tenant freed-page channel stays
   closed. The free-time wipe is overridden off by default through an
   explicit `init_on_free=0` on every VM's kernel command line
-  (`microvm.init_on_free`, default off): a fresh microVM's RAM is host
+  (`tinyvm.init_on_free`, default off): a fresh tinyVM's RAM is host
   anonymous mmap, so `INIT_ON_FREE`'s wipe-on-free is pure redundancy
   measured linear in RAM. High-security deployments set it back on.
 
@@ -221,7 +221,7 @@ namespace; only the agent's own volume carries data across.
   the fleet. The number is bounded by the VM's reuse history, not by a
   small constant — the recycle counter allows many commands and pool VMs
   are long-lived, so this is a real per-VM exposure, not a theoretical one.
-- **Can it reach other microVMs through virtio-fs?** Not directly. Each
+- **Can it reach other tinyVMs through virtio-fs?** Not directly. Each
   VM has its own sandvmm/VMM process, no shared memory, a per-VM vsock CID
   whose uniqueness vhost-vsock enforces in-kernel, vsockguard denying uid
   987 the warden port, and `ptrace_scope`. A guest→VMM exploit would land
@@ -230,7 +230,7 @@ namespace; only the agent's own volume carries data across.
   address another guest's vsock. Reaching other VMs requires a further
   host-level compromise (host root or a fleet-wide VMM escape), which is
   outside the guest-kernel boundary and the KVM trust model.
-- **Can every microVM be compromised?** Not from one guest kernel. The
+- **Can every tinyVM be compromised?** Not from one guest kernel. The
   implant is per-VM: an attacker can only plant it in VMs their own SandFS
   is scheduled on, and it spreads to later tenants only through those VMs'
   reuse. It does not fan out to arbitrary tenants' VMs. A fleet-wide
@@ -244,7 +244,7 @@ direction in which an implant travels through VM reuse:
 
 | Parameter | What it bounds | Default |
 |---|---|---|
-| `recycle.affinity_vms` | an agent keeps landing on the microVMs it has already used (best-effort, up to N per sandfs) — one agent's footprint, and one implant's landing sites, stay on few VMs | 3 |
+| `recycle.affinity_vms` | an agent keeps landing on the tinyVMs it has already used (best-effort, up to N per sandfs) — one agent's footprint, and one implant's landing sites, stay on few VMs | 3 |
 | `recycle.max_distinct_agents` | a VM is destroyed once it has served this many different agents — the fan-in of later tenants an implant can read | 300 |
 | `recycle.max_mounts` | a VM is destroyed after this many mount generations (one per successful cold attach; warm ops do not count) | 10000 |
 | `recycle.max_uses` | a VM is destroyed after this many commands — execs and file ops, warm and cold | 100000 |
@@ -259,7 +259,7 @@ VMs on the same path.
   lease-based) exists as a technical option but is **not** the recommended
   general answer: a multi-command lease pays a cold boot per command while
   the exposure is already bounded to one VM's reuse chain.
-- **TODO — make destroy-after-every-use practical**: a microVM boot is
+- **TODO — make destroy-after-every-use practical**: a tinyVM boot is
   only the kernel and the warden, so it is inherently lightweight. Once
   technical work brings the boot down to the millisecond range — on the
   order of the swap-out cleanup itself — destroying the VM after every
@@ -272,7 +272,7 @@ VMs on the same path.
   a planned feature, not a shipped control; deployments that need that
   isolation today use a dedicated cluster or a lower mount cap.
 
-The network bounds the blast radius from the other side. A microVM has
+The network bounds the blast radius from the other side. A tinyVM has
 **egress-only** traffic: there is no inbound path for an outside prober
 to reach the guest kernel's network stacks. On the way out, every
 attachment carries an unforgeable per-agent identity (the

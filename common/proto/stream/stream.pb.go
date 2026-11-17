@@ -337,7 +337,7 @@ type NodeHello struct {
 	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	TotalCpus     uint32                 `protobuf:"varint,3,opt,name=total_cpus,json=totalCpus,proto3" json:"total_cpus,omitempty"`
 	TotalMemoryMb uint64                 `protobuf:"varint,4,opt,name=total_memory_mb,json=totalMemoryMb,proto3" json:"total_memory_mb,omitempty"`
-	// active_vm_ids is the set of microVM IDs currently live on the node at
+	// active_vm_ids is the set of tinyVM IDs currently live on the node at
 	// (re)connect — i.e. re-adopted survivors of a sandlot restart plus any
 	// freshly created since. The gateway reconciles its pool against this list:
 	// drop pool entries not live, reset survivors to CLEAN, and register any
@@ -373,7 +373,7 @@ type NodeHello struct {
 	// clear log instead of confusing runtime errors). Distinct from the
 	// build-info `version` string above, which is never used for decisions.
 	ProtocolVersion uint32 `protobuf:"varint,11,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// roles is the set of capabilities this instance serves: "exec" (microVM
+	// roles is the set of capabilities this instance serves: "exec" (tinyVM
 	// lifecycle, mounts, exec/file ops) and/or "prov" (sandfs + template
 	// lifecycle on shared storage — the prov role). EMPTY means
 	// ["exec"]: a build from before roles existed is an exec node, so an
@@ -582,7 +582,7 @@ func (x *NodeTiming) GetIsolationSec() uint32 {
 	return 0
 }
 
-// VMInfo describes a single microVM on the node, including its spec.
+// VMInfo describes a single tinyVM on the node, including its spec.
 type VMInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	VmId  string                 `protobuf:"bytes,1,opt,name=vm_id,json=vmId,proto3" json:"vm_id,omitempty"`

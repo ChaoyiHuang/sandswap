@@ -27,8 +27,8 @@ trying things out locally first, see the
 
 ## 1. Deployment model
 
-The exec sandlot owns the microVM lifecycle directly — there is no
-containerd/shim layer: it spawns one sandvmm process per microVM over a
+The exec sandlot owns the tinyVM lifecycle directly — there is no
+containerd/shim layer: it spawns one sandvmm process per tinyVM over a
 Unix-socket HTTP API, provisions networking, and performs the SandFS
 mounts. Sandlot dials the gateway; the gateway never connects in. Bare
 metal is Sandswap's natural deployment environment.
@@ -677,7 +677,7 @@ node_id: "sandlot-X"
 vm_mode: embedded
 vmm_binary: /usr/local/bin/sandswap-sandvmm
 
-microvm:
+tinyvm:
   kernel: /usr/local/lib/sandswap/guest/vmlinux.bin
   initramfs: /usr/local/lib/sandswap/guest/initramfs.cpio.gz
   default_vcpus: 2

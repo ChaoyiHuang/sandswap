@@ -19,7 +19,7 @@ External Agent (HTTP)
 │  - /human/sandfs    │                        │  └─────┬──────┘  │
 │  - registry          │                        │        │KVM     │
 │  - pool manager      │                        │  ┌─────▼──────┐  │
-│  - lease manager     │                        │  │  microVM   │  │
+│  - lease manager     │                        │  │  tinyVM   │  │
 └──────────────────────┘                        │  │  warden    │  │
                                                 │  └───────────┘  │
                                                 └──────────────────┘

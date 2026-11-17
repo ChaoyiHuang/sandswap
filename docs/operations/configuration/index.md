@@ -26,7 +26,7 @@ the codebase:
 |---|---|---|
 | gateway | CLI flags + optional YAML (`-config`) | [Gateway](gateway.md) |
 | sandlot | CLI flags + optional YAML (`-config`) | [Sandlot](sandlot.md) |
-| boxout | CLI flags + shared sandlot YAML (`microvm.*` subset hot-reloads) | [Boxout](boxout.md) |
+| boxout | CLI flags + shared sandlot YAML (`tinyvm.*` subset hot-reloads) | [Boxout](boxout.md) |
 | sandns | YAML config file (hot-reloadable sections) | [Sandns](sandns.md) |
 | warden | kernel cmdline + environment variables | [Warden](warden.md) |
 
@@ -93,9 +93,9 @@ whether an owner is dead.
 | Component | Hot-reloads | Restart-required |
 |---|---|---|
 | gateway | `lease.*`, `exec.*` (incl. background-lease cap), `sched.*`, `shed.*`, `selfload.*`, `staleness.*` (incl. `etcd_fence_sec`), `ownership.cache_ttl_sec`, `unmount_stats.*`, MCP instructions-file **content** (path is restart) | listeners/TLS, etcd, stream transport, identity loading/store, authn, top level (`vol_root`/`mode`/`gateway_id`/…) |
-| sandlot | `microvm.kernel`/`initramfs`/`default_vcpus`/`default_memory_mb` (new VMs only), `pool` (resize both directions), `recycle.*`, `provision.volume_seed*` (rotation stage/abort/promote) | `gateway_addr`/`node_id`/`vm_mode`, `microvm.volumes_dir`/`overlayfs_templates`/`warden_*`, `specs`, `instance.*`, `stream.*`, `resilience.*`, `network.*`, `tls.*`, `provision.*` (incl. the OCI registry + its credentials) |
+| sandlot | `tinyvm.kernel`/`initramfs`/`default_vcpus`/`default_memory_mb` (new VMs only), `pool` (resize both directions), `recycle.*`, `provision.volume_seed*` (rotation stage/abort/promote) | `gateway_addr`/`node_id`/`vm_mode`, `tinyvm.volumes_dir`/`overlayfs_templates`/`warden_*`, `specs`, `instance.*`, `stream.*`, `resilience.*`, `network.*`, `tls.*`, `provision.*` (incl. the OCI registry + its credentials) |
 | sandns | `scheduling.*`, `staleness.*` (file watcher; k8s ConfigMap atomic updates work) | `listen_addr`, `domains.*`, `etcd*`, `ttl`, `sticky_*`, `forwarders`, `owners.*` + the other sizing knobs (`sticky_max`, `max_concurrent_queries`, `forward_concurrency`, `tcp_max_conns`) |
 | warden | nothing — boot-time only (a change lands on the next VM via pool recycling) | everything |
-| boxout | the `microvm.*` subset sandlot also classifies hot (kernel/initramfs/default resources — tracked from the shared sandlot YAML so `create_vm`'s parameter whitelist stays in sync) | everything else (network, socket, allowed-uid) |
+| boxout | the `tinyvm.*` subset sandlot also classifies hot (kernel/initramfs/default resources — tracked from the shared sandlot YAML so `create_vm`'s parameter whitelist stays in sync) | everything else (network, socket, allowed-uid) |
 
 Details and per-knob semantics: the component pages above.

@@ -12,7 +12,7 @@
 #
 # smoke.sh — End-to-end functional smoke test (real KVM, no mocks).
 # The fastest full-stack check that the deployed system actually works:
-#   - deploy + start gateway/sandlot, real KVM microVMs
+#   - deploy + start gateway/sandlot, real KVM tinyVMs
 #   - guest OUTBOUND networking (guest -> TAP -> bridge -> NAT -> internet),
 #     the only e2e that exercises the full egress path
 #   - shell file I/O inside the sandbox, persistence across hot-swap switches
@@ -53,7 +53,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -164,13 +164,13 @@ else: print(d)
 log_section "Phase 4.5: Outbound Networking Check"
 # ══════════════════════════════════════════════════════════════════
 #
-# With NETWORK_BACKEND=bridge, each microVM gets a virtio-net TAP on the host
+# With NETWORK_BACKEND=bridge, each tinyVM gets a virtio-net TAP on the host
 # bridge with kernel NAT. Verify the guest can actually reach the outside world
 # by fetching a URL from inside the VM (single reachability check — covers the
 # full guest eth0 -> TAP -> bridge -> masquerade -> uplink -> internet path,
 # plus DNS via the injected /etc/resolv.conf). Skipped when offline (none).
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
-    log_info "Probing outbound HTTP from inside a microVM (busybox wget example.com)..."
+    log_info "Probing outbound HTTP from inside a tinyVM (busybox wget example.com)..."
     # Up to 3 attempts: transient UDP/DNS loss (external resolver jitter, host
     # conntrack churn after stack churn) must not fail the e2e suite — this
     # phase verifies the outbound PATH, not external DNS reliability.
@@ -499,7 +499,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 
 # The test is complete. Kill every sandswap-related process (gateway, sandlot,
-# and any residual sandvmm microVM monitors) and verify none survive.
+# and any residual sandvmm tinyVM monitors) and verify none survive.
 log_step "Killing all sandswap processes after test completion..."
 kill ${GATEWAY_PID:-} 2>/dev/null || true
 kill ${SANDLOT_PID:-} 2>/dev/null || true

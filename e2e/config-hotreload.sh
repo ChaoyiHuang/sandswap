@@ -65,7 +65,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -801,25 +801,25 @@ tc_gen_sandlot_config "$SANDLOT_CONFIG"
 log_section "Phase 9d: warden cmdline fields are restart-gated (debug NOT hot-loadable)"
 # ══════════════════════════════════════════════════════════════════
 
-# microvm.warden_log / warden_max_exec_timeout_sec are restart-REQUIRED by
+# tinyvm.warden_log / warden_max_exec_timeout_sec are restart-REQUIRED by
 # design: warden debug lines drain the guest console (hvc0 now; historically
 # the serial UART) on the measured path, and an online flip would enable them
 # across every new VM at fleet scale. The edit must therefore produce a
 # restart-required warning and reach NO VM — not even one created after it.
-log_step "Editing microvm.warden_log=debug + warden_max_exec_timeout_sec=299 (must NOT hot-apply)..."
+log_step "Editing tinyvm.warden_log=debug + warden_max_exec_timeout_sec=299 (must NOT hot-apply)..."
 TC_WARDEN_MAX_EXEC=299
 TC_WARDEN_LOG=debug
 tc_gen_sandlot_config "$SANDLOT_CONFIG"
 sleep 2
-if grep -q '"field":"microvm.warden_log"' "$LOG_DIR/sandlot.log" 2>/dev/null; then
+if grep -q '"field":"tinyvm.warden_log"' "$LOG_DIR/sandlot.log" 2>/dev/null; then
     pass "warden_log edit logged as restart-required (debug stays restart-gated)"
 else
-    fail "no restart-required warning for microvm.warden_log (classification regressed?)"
+    fail "no restart-required warning for tinyvm.warden_log (classification regressed?)"
 fi
-if grep -q '"field":"microvm.warden_max_exec_timeout_sec"' "$LOG_DIR/sandlot.log" 2>/dev/null; then
+if grep -q '"field":"tinyvm.warden_max_exec_timeout_sec"' "$LOG_DIR/sandlot.log" 2>/dev/null; then
     pass "warden_max_exec_timeout_sec edit logged as restart-required"
 else
-    fail "no restart-required warning for microvm.warden_max_exec_timeout_sec"
+    fail "no restart-required warning for tinyvm.warden_max_exec_timeout_sec"
 fi
 
 # A VM created after the edit must still carry NEITHER value: scale the pool

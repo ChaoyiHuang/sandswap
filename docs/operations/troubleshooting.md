@@ -85,7 +85,7 @@ the [field notes](../deployment/install-baremetal.md#16-troubleshooting).
   they persist; the sandlot tolerates the drop, reconnects, and service
   continues in place within seconds. In-flight sync commands usually complete
   too: the sandlot deliberately holds the mounts for the tolerance window
-  (`-tolerance-sec`, default 300 s) so commands running inside the microVM
+  (`-tolerance-sec`, default 300 s) so commands running inside the tinyVM
   finish unaffected — the gateway being down does not touch them. `/ready`
   gates agent traffic until the startup full-load finishes.
 - **Sandlot restart** — surviving sandvmm children stay alive

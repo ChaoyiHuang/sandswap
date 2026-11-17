@@ -40,7 +40,7 @@ type recordingClient struct {
 	killCalls   int
 }
 
-func (c *recordingClient) DestroyMicroVM(ctx context.Context, nodeAddr, vmID string) error {
+func (c *recordingClient) DestroyTinyVM(ctx context.Context, nodeAddr, vmID string) error {
 	return nil
 }
 func (c *recordingClient) UnmountRootfs(ctx context.Context, nodeAddr, vmID, volumePath, volumeEpoch string) (pool.UnmountResult, error) {

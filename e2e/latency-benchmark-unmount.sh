@@ -523,7 +523,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 tc_deploy_artifacts
 if [[ "$PIN_MODE" == "1" ]]; then
@@ -547,7 +547,7 @@ log_section "Phase 3: Start sandlot (connects to gateway, mTLS)"
 # enabler on/off comparisons: "-binding-backend=shm -egress-baseline on").
 # Benchmark VM shape: exactly 1 vCPU / 256 MiB / 3 exec slots, injected as
 # a named `bench` spec (same as the aiagent/load benchmarks) so the unmount
-# measurements use the same microVM shape. One vCPU leaves the second SMT
+# measurements use the same tinyVM shape. One vCPU leaves the second SMT
 # thread of its physical core for the vhost/virtiofs threads.
 UNMOUNT_CFG="$DEPLOY_DIR/sandlot-unmount.yaml"
 tc_gen_sandlot_config "$UNMOUNT_CFG"

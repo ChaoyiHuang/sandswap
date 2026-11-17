@@ -17,7 +17,7 @@
 #  3. L1 retry on transport error
 #  4. L2 cleanup after failure (EnterCleaning → ExitCleaning)
 #  5. resilienceError structured response (error_code, retryable, retry_after_ms)
-#  6. MountLock failure releases microVM
+#  6. MountLock failure releases tinyVM
 #  7. onExpiry panic recovery
 #  8. Body size limit (10MB execute, 50MB file)
 #  9. Multiple sandfs concurrent execution allowed

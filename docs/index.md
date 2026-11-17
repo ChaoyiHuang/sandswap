@@ -3,18 +3,18 @@ title: Home
 layout: home
 nav_order: 1
 description: >-
-  Compute-disk decoupled AI agent microVM sandbox: 183 reuse/sec,
-  ~2.3 ms cold, ~0.96 ms warm. ~6ms microVM rotation cuts agent execution
+  Compute-disk decoupled AI agent tinyVM sandbox: 183 reuse/sec,
+  ~2.3 ms cold, ~0.96 ms warm. ~6ms tinyVM rotation cuts agent execution
   costs by 50x–100x.
 ---
 
 # Sandswap
 
-Compute-disk decoupled **microVM sandboxes for AI agents**
+Compute-disk decoupled **tinyVM sandboxes for AI agents**
 delivering **~2.3 ms cold**, **~0.96 ms warm** execution latency and
-**183 reuses/sec** per microVM. By keeping microVMs tiny (only kernel + PID 1
+**183 reuses/sec** per tinyVM. By keeping tinyVMs tiny (only kernel + PID 1
 warden) and hot-swapping directory-based **SandFS** rootfs after
-configurable idle (min 1 ms), ideally it achieves **~6 ms cross-agent microVM
+configurable idle (min 1 ms), ideally it achieves **~6 ms cross-agent tinyVM
 rotation — slashing AI agent command execution costs by 50x–100x**.
 
 
@@ -26,8 +26,8 @@ Source code, issues, and releases live on GitHub:
 - **[Benchmark](benchmark/index.md)**
   - [Benchmark Report — Bare Metal](benchmark/baremetal.md)
   - [Benchmark Report — Nested Virtualization](benchmark/nested-virt.md)
-  - [Benchmark Report — Bare Metal: microVM Reuse Capacity](benchmark/baremetal-load.md)
-  - [Benchmark Report — Nested-virt: microVM Reuse Capacity](benchmark/nested-virt-load.md)
+  - [Benchmark Report — Bare Metal: tinyVM Reuse Capacity](benchmark/baremetal-load.md)
+  - [Benchmark Report — Nested-virt: tinyVM Reuse Capacity](benchmark/nested-virt-load.md)
   - [Reproducing the Benchmarks](benchmark/reproducing.md)
 - **[How It Works](how-it-works/index.md)**
   - [Concepts & Terms](how-it-works/concepts.md)

@@ -104,7 +104,7 @@ DEPLOY_DIR="$REPO_ROOT/deploy/baremetal"
 log "[2/6] Preparing host..."
 # The exec instance below is configured with 10.188.1.0/24 / gw 10.188.1.1, so
 # the bridge must carry THAT gateway address (setup-host's default is
-# 10.188.0.0/16 / 10.188.0.1; a mismatch leaves every microVM's default route
+# 10.188.0.0/16 / 10.188.0.1; a mismatch leaves every tinyVM's default route
 # pointing at an address nobody answers ARP for). setup-host persists the
 # addressing into /etc/sandswap/network.env, which the boot-time
 # sandswap-network.service reads back.

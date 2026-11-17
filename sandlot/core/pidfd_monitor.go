@@ -19,7 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// pidfdMonitor watches the sandvmm processes of re-adopted microVMs for exit
+// pidfdMonitor watches the sandvmm processes of re-adopted tinyVMs for exit
 // using a SINGLE epoll loop, scaling to tens of thousands of VMs with O(1)
 // per-exit cost and ~zero CPU when idle. This replaces the naive per-VM
 // Poll(pidfd, tick) approach, whose syscall rate scaled linearly with VM count

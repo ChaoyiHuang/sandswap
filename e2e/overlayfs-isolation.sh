@@ -111,7 +111,7 @@ tc_clean_environment
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 # A previous NFS-profile run leaves the templates export MOUNTED at
 # $TEMPLATE_DIR; `ss_prepare_shared_dir`'s rm -rf would then fail EBUSY and

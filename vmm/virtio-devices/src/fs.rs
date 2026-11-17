@@ -1154,7 +1154,7 @@ impl Fs {
             .unwrap_or_default();
         let alias = backendfs_config.alias.clone();
         // A guest FUSE_DESTROY tears the export down for good: the hook makes
-        // the VMM exit so the owner destroys and replaces the microVM instead
+        // the VMM exit so the owner destroys and replaces the tinyVM instead
         // of living with a device that has no valid export.
         let destroy_hook: Option<Arc<dyn Fn() + Send + Sync>> =
             self.exit_evt.try_clone().ok().map(|evt| {
@@ -1366,7 +1366,7 @@ impl VirtioDevice for Fs {
         // generation alias and the tripped reuse counters. A guest-triggered
         // reset would leave the VM without a valid export, so the reset is
         // TERMINAL — signal the VMM to exit and let the owner destroy and
-        // replace the microVM.
+        // replace the tinyVM.
         let _ = self.exit_evt.write(1);
 
         event!("virtio-device", "reset", "id", &self.id);

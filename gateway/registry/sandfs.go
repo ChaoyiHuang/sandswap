@@ -11,7 +11,7 @@
 
 // Package registry manages SandFS (sandbox filesystem) identity and storage mapping.
 // Each SandFS has a unique ID, an owner Agent, and a persistent directory on shared
-// storage that serves as the microVM's root filesystem (mounted via virtio-fs + OverlayFS).
+// storage that serves as the tinyVM's root filesystem (mounted via virtio-fs + OverlayFS).
 // Registry delegates auth/identity operations to identity.Store and delegates
 // every shared-storage MANIPULATION to the storage plane (gateway/storage.Ops
 // — ProvisionCommands over the node stream to prov-role sandlot instances;

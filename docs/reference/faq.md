@@ -11,13 +11,13 @@ page with the full story; the [Quick Start](../getting-started/index.md) has the
 
 ## What is a SandFS? How is it different from a container or a VM?
 
-A SandFS is a persistent, per-agent sandbox: a filesystem plus the microVM it
-runs in. One SandFS maps to exactly one KVM microVM at a time — hardware-level
+A SandFS is a persistent, per-agent sandbox: a filesystem plus the tinyVM it
+runs in. One SandFS maps to exactly one KVM tinyVM at a time — hardware-level
 isolation, unlike containers, which share the host kernel. Unlike an ordinary
 VM, it is pooled and warm: your files live on shared storage and reach the VM
 through one virtio-fs device, and switching which filesystem the VM sees is an
 `allowed_dirs` hot-swap plus bind-mount — milliseconds, no VM rebuild, no disk
-image. A SandFS is never mounted on two microVMs at once
+image. A SandFS is never mounted on two tinyVMs at once
 ([Design Principles](../how-it-works/design-principles.md), principle 4).
 
 ## Do I need to change my agent's code?
@@ -97,7 +97,7 @@ template), then run production SandFS instances from it in overlay mode. See
 No — every SandFS has exactly one owner (`agent_id` at creation; another
 agent's request for it gets the same `404 "sandfs not found"` as an unknown
 id). "Cross-agent switching" is the platform's internal mechanism for
-reusing a microVM between different agents' SandFS instances — with full
+reusing a tinyVM between different agents' SandFS instances — with full
 memory clearing between them — not a sharing feature. Give each agent its own
 SandFS. Creation semantics: [Human API](../reference/human-api.md).
 
@@ -111,7 +111,7 @@ the mode table are under [Operations](../operations/index.md).
 
 ## Is it safe to run untrusted agent code?
 
-That is the design center. Executed code runs in a KVM microVM under layered
+That is the design center. Executed code runs in a KVM tinyVM under layered
 in-guest defenses (chroot, capability drops, deny-list seccomp, per-agent
 cgroup with memory cap, masked `/proc`, minimal `/dev`), behind a VMM-level
 `allowed_dirs` filter, with a clearing chain on every agent switch that

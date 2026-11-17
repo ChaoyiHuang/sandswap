@@ -13,7 +13,7 @@
 # pin.sh — shared bare-metal CPU/NUMA pinning for the latency benchmarks.
 #
 # The bare-metal reports are measured with the host stack (gateway, sandlot,
-# benchmark client) on a small set of whole physical cores and every microVM
+# benchmark client) on a small set of whole physical cores and every tinyVM
 # on its own CPU slice of the SAME NUMA node, with the VM's guest RAM bound to
 # that node (numactl --physcpubind/--membind).  An unpinned run leaves the
 # placement to the host scheduler; the same binary then varies by 0.1ms+ warm
@@ -65,7 +65,7 @@ tc_pin_resolve_mode() {
 #   - the <slices> VM slices immediately before them. A slice owns COMPLETE
 #     physical cores: <slice_cpus> logical CPUs are rounded up to whole
 #     sibling groups (2 logical CPUs = one whole core on an SMT host), so a
-#     microVM never spans two physical cores. This is what keeps a VM's
+#     tinyVM never spans two physical cores. This is what keeps a VM's
 #     vCPU/vhost/virtiofs threads on one core and avoids cross-core
 #     scheduling jitter.
 # <slice_cpus>=1 is the logical-core mapping (one thread per VM, one VM per

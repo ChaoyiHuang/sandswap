@@ -953,7 +953,7 @@ k8s_phase_host_prep() {
         echo "kernel.yama.ptrace_scope = $PTRACE_NOW"
         echo "# perf_event_paranoid >= 2: blocks non-root eBPF kprobe tracing"
         echo "kernel.perf_event_paranoid = $PARANOID_NOW"
-        echo "# ip_forward: microVM outbound NAT via host bridge"
+        echo "# ip_forward: tinyVM outbound NAT via host bridge"
         echo "net.ipv4.ip_forward = 1"
     } > "$SYSCTL_FILE"
     se_record KEEP sysctl-file "$SYSCTL_FILE"
@@ -961,7 +961,7 @@ k8s_phase_host_prep() {
     sysctl -p "$SYSCTL_FILE" 2>/dev/null || true
     log_pass "Host security sysctls set ($SYSCTL_FILE)"
 
-    # Host bridge for microVM outbound networking
+    # Host bridge for tinyVM outbound networking
     log_step "Setting up host network bridge..."
     if bash "$ROOT/deploy/setup-network.sh" 2>&1; then
         se_record KEEP bridge br-sandswap
@@ -1130,8 +1130,8 @@ k8s_phase_apply() {
     fi
 
     # The sandlot ConfigMap carries the sandvmm identity-split keys
-    # (microvm.vmm_uid/gid/groups/api_gid). The child's supplementary groups
-    # are REPLACED by the setpriv spawn, so microvm.vmm_groups must carry the
+    # (tinyvm.vmm_uid/gid/groups/api_gid). The child's supplementary groups
+    # are REPLACED by the setpriv spawn, so tinyvm.vmm_groups must carry the
     # HOST kvm gid (not a name — the image's /etc/group kvm gid rarely
     # matches the host's) — inject it the same way as the DaemonSet
     # supplementalGroups, in BOTH modes (boxout's 987 child needs /dev/kvm
@@ -2033,7 +2033,7 @@ k8s_phase_overlay_template() {
 # Non-LLM verification of the affinity path:
 #   - owner-aware DNS: the per-sandfs URL resolves (via sandswap-sandns) and,
 #     after the first execute, to the OWNER gateway
-#   - execute through the in-cluster path: a real microVM exec
+#   - execute through the in-cluster path: a real tinyVM exec
 #   - 307: with a 2nd gateway replica, a non-owner request redirects to owner
 
 verify_affinity() {
@@ -2061,13 +2061,23 @@ verify_affinity() {
         fail=1
     fi
 
-    # Execute through the in-cluster path (real microVM).
+    # Execute through the in-cluster path (real tinyVM). After an idle
+    # stretch the VM pool may be drained: the API answers retryable
+    # NO_AVAILABLE_SANDBOX + retry_after_ms while the sandlot scales the
+    # pool back up (VMs verify within seconds), so honor the retry
+    # contract instead of failing the check on the first answer.
     gw_ip=$($KUBECTL get pod -n "$NAMESPACE" -l app=gateway -o jsonpath='{.items[0].status.podIP}')
-    local exec_out
-    exec_out=$(timeout 90 curl -sk --resolve "$sf.sandfs.sandswap.local:3000:$gw_ip" \
-        -X POST "https://$sf.sandfs.sandswap.local:3000/agent/execute" \
-        -H "Authorization: Bearer $key" -H "Content-Type: application/json" \
-        -d "{\"sandfs_id\":\"$sf\",\"code\":\"echo affinity_self_test_ok\",\"language\":\"shell\"}" 2>/dev/null)
+    local exec_out=""
+    local try
+    for try in $(seq 1 30); do
+        exec_out=$(timeout 90 curl -sk --resolve "$sf.sandfs.sandswap.local:3000:$gw_ip" \
+            -X POST "https://$sf.sandfs.sandswap.local:3000/agent/execute" \
+            -H "Authorization: Bearer $key" -H "Content-Type: application/json" \
+            -d "{\"sandfs_id\":\"$sf\",\"code\":\"echo affinity_self_test_ok\",\"language\":\"shell\"}" 2>/dev/null)
+        echo "$exec_out" | grep -q 'affinity_self_test_ok' && break
+        echo "$exec_out" | grep -q 'NO_AVAILABLE_SANDBOX' || break
+        sleep 2
+    done
     if echo "$exec_out" | grep -q 'affinity_self_test_ok'; then
         log_pass "in-cluster execute via sandfs URL: OK"
     else

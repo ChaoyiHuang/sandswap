@@ -11,7 +11,7 @@
 //
 // Gateway is the centralized entry point for AI sandfs sandbox execution.
 // It provides HTTP API, manages sandfs identity,
-// and orchestrates the distributed Clean microVM pool across compute nodes.
+// and orchestrates the distributed Clean tinyVM pool across compute nodes.
 
 package main
 

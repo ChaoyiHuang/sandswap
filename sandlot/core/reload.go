@@ -40,9 +40,9 @@ func StartConfigReload(cfg *sandlotconfig.SandlotConfig, liveConfig *config.Watc
 
 	slogLogger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	rw, err := config.NewReloadWatcher(cfg.ConfigFilePath, sandlotconfig.NewReloadCallback(liveConfig, &sandlotconfig.HotReloadTargets{
-		UpdateVMMConfig: func(microCfg sandlotconfig.MicroVMConfig) {
+		UpdateVMMConfig: func(tinyCfg sandlotconfig.TinyVMConfig) {
 			// Partial application from the LIVE config: only the four
-			// hot-reloadable microvm fields ever change here. Restart-required
+			// hot-reloadable tinyvm fields ever change here. Restart-required
 			// fields (volumes_dir, overlayfs_templates, the warden cmdline
 			// params) keep their startup values — rebuilding the whole
 			// vmm.Config from the reloaded file would silently apply them too
@@ -55,15 +55,15 @@ func StartConfigReload(cfg *sandlotconfig.SandlotConfig, liveConfig *config.Watc
 			// path across every new VM at fleet scale; the restart is the
 			// safety gate.
 			next := handler.CurrentVMMConfig()
-			next.KernelPath = microCfg.Kernel
-			next.InitramfsPath = microCfg.Initramfs
-			next.VCPUs = microCfg.DefaultVCPUs
-			next.MemoryMB = microCfg.DefaultMemoryMB
+			next.KernelPath = tinyCfg.Kernel
+			next.InitramfsPath = tinyCfg.Initramfs
+			next.VCPUs = tinyCfg.DefaultVCPUs
+			next.MemoryMB = tinyCfg.DefaultMemoryMB
 			next.WardenCountdownSec = 0 // keep the startup countdown
 			handler.UpdateVMMConfig(next)
 			slogLogger.Info("vmm config hot-reloaded (affects new VMs only)",
-				"kernel", microCfg.Kernel, "initramfs", microCfg.Initramfs,
-				"vcpus", microCfg.DefaultVCPUs, "memoryMB", microCfg.DefaultMemoryMB)
+				"kernel", tinyCfg.Kernel, "initramfs", tinyCfg.Initramfs,
+				"vcpus", tinyCfg.DefaultVCPUs, "memoryMB", tinyCfg.DefaultMemoryMB)
 		},
 		UpdateRecycleConfig: func(rc sandlotconfig.RecycleConfig) {
 			handler.UpdateRecycleConfig(rc.MaxUses, rc.MemPercent, rc.MemAbsMB, rc.MinIdleFloorFrac)

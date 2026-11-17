@@ -84,7 +84,7 @@ pub struct Sandbox {
     /// Per-agent cgroup, created LAZILY by the first background exec (the
     /// cgroup's only consumer: memory cap + cgroup.kill clearing), taken and
     /// removed at unmount_workspace. Sync-only mounts never create one (the
-    /// cgroupfs mkdir + memory.max write costs ms inside a KVM microVM and
+    /// cgroupfs mkdir + memory.max write costs ms inside a KVM tinyVM and
     /// sync execs do not join the cgroup). None until the first background
     /// exec, or if cgroups are unavailable. Holds the AgentCgroup alive for
     /// the agent's lease.

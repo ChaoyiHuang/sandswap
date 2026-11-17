@@ -14,8 +14,8 @@ One page per binary: responsibilities, interfaces, workflow, and state.
 | Component | Role | Page |
 |---|---|---|
 | Gateway | the entry point: agent API, identity/ownership, pool scheduling | [Gateway](gateway.md) |
-| Sandlot | the per-node daemon: warm microVM pool, rootfs hot-swap, mounts, execs (prov role: storage) | [Sandlot](sandlot.md) |
+| Sandlot | the per-node daemon: warm tinyVM pool, rootfs hot-swap, mounts, execs (prov role: storage) | [Sandlot](sandlot.md) |
 | Boxout | the privileged K8s sidecar: sandvmm lifecycle, networking, mounts for an unprivileged sandlot | [Boxout](boxout.md) |
-| Sandvmm | the KVM VMM, one process per microVM, driven over a Unix-socket API | [Sandvmm](sandvmm.md) |
-| Warden | PID 1 in the microVM: mounts the SandFS, runs the agent's commands | [Warden](warden.md) |
+| Sandvmm | the KVM VMM, one process per tinyVM, driven over a Unix-socket API | [Sandvmm](sandvmm.md) |
+| Warden | PID 1 in the tinyVM: mounts the SandFS, runs the agent's commands | [Warden](warden.md) |
 | Sandns | the owner-aware DNS service for distributed deployments | [Sandns](sandns.md) |

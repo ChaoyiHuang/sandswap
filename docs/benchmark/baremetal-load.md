@@ -1,20 +1,20 @@
 ---
-title: "Benchmark Report — Bare Metal: microVM Reuse Capacity"
+title: "Benchmark Report — Bare Metal: tinyVM Reuse Capacity"
 nav_order: 3
 parent: Benchmark
 ---
 
-# Benchmark report — bare metal: microVM reuse capacity
+# Benchmark report — bare metal: tinyVM reuse capacity
 
 > Bare-metal KVM on a TencentOS Server 4 cloud bare-metal host: the ideal
-> paced-lane test (one lane per microVM, continuously fed), the traffic-shaped
+> paced-lane test (one lane per tinyVM, continuously fed), the traffic-shaped
 > test (a full agent population queued behind one in-flight request per VM),
-> and the realistic AI agent business capacity. Every role and every microVM
+> and the realistic AI agent business capacity. Every role and every tinyVM
 > is pinned to disjoint whole physical cores, and the same 36-core VM pool is
-> measured under two mappings — one microVM per whole physical core, and one
-> microVM per logical CPU (two VMs per physical core via SMT). Each result is
-> reported as host and per-microVM cold reuses/s; the agent-population tests
-> additionally report how many agents one microVM serves. The ideal and shaped
+> measured under two mappings — one tinyVM per whole physical core, and one
+> tinyVM per logical CPU (two VMs per physical core via SMT). Each result is
+> reported as host and per-tinyVM cold reuses/s; the agent-population tests
+> additionally report how many agents one tinyVM serves. The ideal and shaped
 > tests
 > are run in two turn shapes — **pure cold** (one request per turn) and
 > **mixed** (1-3 requests per turn, the follow-ups warm) — and the two
@@ -60,8 +60,8 @@ queue and do not add useful capacity.
 
 **Two mappings.** SMT (simultaneous multi-threading) is the CPU feature that
 runs two threads on one physical core. The physical-core mapping gives one
-microVM both threads of a whole core; it is the deployment recommendation. The
-logical-core mapping gives each microVM one thread, so two VMs share a core;
+tinyVM both threads of a whole core; it is the deployment recommendation. The
+logical-core mapping gives each tinyVM one thread, so two VMs share a core;
 it is reported only for comparison. It halves the per-VM rate, adds no host
 capacity, and in the ideal test cannot hold a latency tier (all P95s are
 25-51 ms). It is not a production configuration; no mixed SMT run was taken
@@ -70,9 +70,9 @@ the mixed workload would only add load to the same saturated stack.
 
 ## Summary
 
-### Ideal capability (one lane per microVM, continuously paced)
+### Ideal capability (one lane per tinyVM, continuously paced)
 
-| Workload | Mapping | Per microVM | Host | Knee period |
+| Workload | Mapping | Per tinyVM | Host | Knee period |
 |---|---|---:|---:|---:|
 | Pure cold | Physical core (32 VMs) | **183.95 cold/s** | **5886.50 cold/s** | 5 ms |
 | Mixed (1-3 requests/turn) | Physical core (32 VMs) | **155.96 cold/s + 132.25 warm/s** | **4990.83 cold/s + 4231.90 warm/s** | 6 ms |
@@ -90,7 +90,7 @@ the ideal reuse capability for Poisson-distribution AI agent requests.
 
 ### Traffic-shaped capability (a full agent population per lane, one in-flight request per VM)
 
-| Workload | Mapping | Per microVM | Host | Knee period | Agents | Agents per microVM |
+| Workload | Mapping | Per tinyVM | Host | Knee period | Agents | Agents per tinyVM |
 |---|---|---:|---:|---:|---:|---:|
 | Pure cold | Physical core (32 VMs) | **53.06 cold/s** | **1697.80 cold/s** | 8 ms | 2048 | **64** |
 | Mixed (1-3 requests/turn) | Physical core (32 VMs) | **39.73 cold/s + 33.66 warm/s** | **1271.50 cold/s + 1077.00 warm/s** | 12 ms | 1536 | **48** |
@@ -98,17 +98,17 @@ the ideal reuse capability for Poisson-distribution AI agent requests.
 
 The agents are realistic — each thinks 0.9-1.5 s between turns — but the
 shaper partitions the population across lanes, and each lane merges its whole
-set of agents onto one microVM slot: individually an agent offers well under
+set of agents onto one tinyVM slot: individually an agent offers well under
 one request per think gap, and only the aggregation of 25-64 agents per lane
 (sized to each mapping's service ceiling) keeps a single VM's reuse
 capability as full as the 2.0x tier allows.
 
-**Agents per microVM** is the same knee seen from the agent side: with a
-0.9-1.5 s think gap (mean 1.2 s), a microVM switching at 53.06 cold/s keeps
+**Agents per tinyVM** is the same knee seen from the agent side: with a
+0.9-1.5 s think gap (mean 1.2 s), a tinyVM switching at 53.06 cold/s keeps
 53.06 x 1.2 ≈ 64 agents continuously served — exactly the population the
 shaper sizes onto each lane (`-lane-agents` ≈ lane rate x mean think). The
 mixed and SMT rows convert the same way (39.73 x 1.2 ≈ 48 agents, 20.74 x
-1.2 ≈ 25); one step up, 72 agents per microVM, would demand 59.63 cold/s of
+1.2 ≈ 25); one step up, 72 agents per tinyVM, would demand 59.63 cold/s of
 the VM and pushes the gateway cold P95 past the 2.0x budget (§4.1).
 
 The shaped knee is the highest offered population whose cold (and, for the
@@ -129,9 +129,9 @@ refusals are part of the shaper's flow control.
 
 `No-failure maximum` is the highest offered level at which every request
 completed (busy refusals retried like a real agent). The parenthetical agent
-counts also give the population one microVM serves (agents ÷ pool — here
+counts also give the population one tinyVM serves (agents ÷ pool — here
 agents are not pinned to a VM, so it is a normalization of the same
-capacity): at the 2x tier one physical-core microVM serves 37.5 agents, and
+capacity): at the 2x tier one physical-core tinyVM serves 37.5 agents, and
 the shaped admission of §4 raises that to 64 (53.06 vs 31.20 cold/s). The latency tiers are
 multiples of the no-load baseline P95 (the table at the top of this report) for
 BOTH classes (warm and cold) and both surfaces (gateway E2E and client):
@@ -157,16 +157,16 @@ VMs (§2.4).
 | Binaries | prebuilt release package: static host binaries, guest kernel, initramfs, templates and vendored etcd (the benchmark scripts are bundled in the same package) |
 | Host stack allocation | **12 whole physical cores**, disjoint per role: loadgen 0-3 (SMT siblings 48-51), gateway + human gateway + etcd 4-7 (52-55), sandlot + provision instance 8-11 (56-59) |
 | VM pool cores | the remaining **36 whole physical cores** (12-47 and 60-95) |
-| Physical-core mapping | one microVM per whole core: `POOL_SIZE=32`, 36 slices (`PIN_SLICE_CPUS=2`); 4 spare slices absorb a rare boot-failure replacement |
-| Logical-core mapping | one microVM per logical CPU: `POOL_SIZE=64`, 72 slices (`PIN_SLICE_CPUS=1`), two VMs share each physical core's SMT threads; 8 spare slices |
-| microVM | 1 vCPU, 256 MiB, 5 MiB initramfs, 3 exec slots, flat `rootfs:v1` busybox template |
+| Physical-core mapping | one tinyVM per whole core: `POOL_SIZE=32`, 36 slices (`PIN_SLICE_CPUS=2`); 4 spare slices absorb a rare boot-failure replacement |
+| Logical-core mapping | one tinyVM per logical CPU: `POOL_SIZE=64`, 72 slices (`PIN_SLICE_CPUS=1`), two VMs share each physical core's SMT threads; 8 spare slices |
+| tinyVM | 1 vCPU, 256 MiB, 5 MiB initramfs, 3 exec slots, flat `rootfs:v1` busybox template |
 | Lease | sticky, 1 ms window |
 | VM recycle | `capacity` policy: every lifetime cap and memory recycle disabled, so no VM replacement occurs inside a measurement window |
 | Background | cloud-vendor monitoring agents stopped for the run |
 
 ## 2. Measurement modes and method
 
-### 2.1 Baseline (one microVM, no background load)
+### 2.1 Baseline (one tinyVM, no background load)
 
 `e2e/latency-benchmark-aiagent.sh http distributed`, `WARM_N=100 COLD_N=50
 BENCH_VERBOSE=1`, on the otherwise idle host: warm gateway E2E P95 **0.868 ms**,
@@ -175,7 +175,7 @@ values are the reference for every latency tier below.
 
 ### 2.2 Ideal paced-lane test
 
-`LOADTEST_WORKLOAD=ideal`: one lane per microVM, each issuing a turn every
+`LOADTEST_WORKLOAD=ideal`: one lane per tinyVM, each issuing a turn every
 `period` with no between-turn think gap. The next turn never starts inside the
 previous lease's sticky window; if a turn overruns the period the lane
 self-clocks on the previous response plus the sticky window, so every turn's
@@ -236,7 +236,7 @@ business capacity.
 
 ### 2.5 Capacity definitions
 
-Per level the run reports completed cold reuses/s, the per-microVM rate, the
+Per level the run reports completed cold reuses/s, the per-tinyVM rate, the
 warm share, retry pressure, and the gateway E2E / client P95 of both classes.
 The capacity points are:
 
@@ -251,7 +251,7 @@ The capacity points are:
 
 All capacity runs use the `capacity` policy: every lifetime cap (max uses /
 mounts / distinct agents) and guest-memory recycle are disabled, so every
-measured microVM stays in service for the whole run. VM replacement inside a
+measured tinyVM stays in service for the whole run. VM replacement inside a
 window would otherwise fold boot-cold into the switch measurements.
 
 ### 2.7 Bare-metal specifics (what a nested-virt run cannot reproduce)
@@ -262,14 +262,14 @@ window would otherwise fold boot-cold into the switch measurements.
    runs are unpinned because the L1 vCPUs are already scheduled by the outer
    hypervisor; here the placement is part of the measured configuration.
 2. **Two mappings over the same core pool.** The physical-core mapping gives
-   each microVM both SMT threads of a core; the vCPU and the host-side
+   each tinyVM both SMT threads of a core; the vCPU and the host-side
    virtio-fs/API threads share those two threads and never span two cores. The
-   logical-core mapping gives each microVM one logical CPU, so two VMs share a
+   logical-core mapping gives each tinyVM one logical CPU, so two VMs share a
    core's SMT threads. This is the main knob a nested-virt host cannot
    exercise: the two mappings differ by a factor of two in VM count on the
    same silicon, and the per-VM rates differ accordingly (§8.1). The result is
    that the SMT mapping is not a deployment option.
-3. **NUMA binding per VM slice.** Each microVM's sandvmm and its allocations
+3. **NUMA binding per VM slice.** Each tinyVM's sandvmm and its allocations
    are bound to the NUMA node of its slice (`numactl --membind`), so the
    measured memory locality is fixed rather than host-scheduler dependent.
 4. **The near-baseline tier.** The 1.05x tier (5 % tolerance) is only
@@ -293,7 +293,7 @@ window would otherwise fold boot-cold into the switch measurements.
 6. **Host throughput scales with the pool; the per-VM rate does not.** The
    host totals below are for a 32-VM (physical) or 64-VM (SMT) pool on 36
    reserved cores. A production host sizes the pool to its remaining cores,
-   and the per-microVM reuse rate is the number that transfers.
+   and the per-tinyVM reuse rate is the number that transfers.
 
 ## 3. Ideal capability
 
@@ -498,11 +498,11 @@ recommendation.
   follow-ups are cheap server-side (1.7-1.8 ms P95 at the knee) but they hold
   the VM slot, so the shaper must offer a smaller population to stay inside
   the same latency budget.
-- **Agents per microVM.** An agent offers one cold turn per 0.9-1.5 s think
+- **Agents per tinyVM.** An agent offers one cold turn per 0.9-1.5 s think
   gap (mean 1.2 s), so the per-VM cold rate converts directly into the agent
-  population one microVM serves: 53.06/s ↔ 64 agents, 39.73/s ↔ 48 and
+  population one tinyVM serves: 53.06/s ↔ 64 agents, 39.73/s ↔ 48 and
   20.74/s ↔ 25 — the per-lane populations of the knee rows. The next
-  population step, 72 agents per microVM, would demand 59.63 cold/s and
+  population step, 72 agents per tinyVM, would demand 59.63 cold/s and
   lands 4 % over the 2.0x gateway budget (§4.1).
 - Shaped vs ideal: the hold (VM-slot release cost) plus the admission queue
   costs ~71 % of the physical pure-cold ideal rate (53.06 vs 183.95) and ~75 %
@@ -557,7 +557,7 @@ cells (warm/cold x gateway/client).
 | Pure cold | Logical (comparison only) | none | none | 1200 agents / 998.2 cold/s | 2400 agents / 1905.6 cold/s |
 
 The 1.05x tier is not reached by any offered level: the no-load baseline is
-measured on an idle stack with three microVMs, while any multi-VM load adds
+measured on an idle stack with three tinyVMs, while any multi-VM load adds
 ~0.2 ms to the warm path and ~1 ms to the cold path — the 5 % tolerance is
 below that floor. The 1.5x capacity point is the physical mixed mapping at
 50 agents; the physical pure-cold run misses it by 3 % at 50 agents
@@ -594,13 +594,13 @@ A production fleet runs the agents (loadgen) remotely and usually the gateway
 on another host; this same-host run reserves loadgen+gateway cores on the VM
 host and is therefore a conservative lower bound for the compute host. A
 `NO_AVAILABLE_SANDBOX` in a multi-node fleet can be routed to another node,
-raising effective capacity. The per-microVM rate is the number that transfers
+raising effective capacity. The per-tinyVM rate is the number that transfers
 to a production host.
 
 ## 7. Approaching the ideal rate in production
 
 The ideal test is a ceiling obtained by keeping exactly one cold request in
-flight per microVM slot and releasing the next after the previous response
+flight per tinyVM slot and releasing the next after the previous response
 plus the sticky window. A production client reaches it with a client-side
 traffic shaper / admission layer with the same rule;
 `examples/loadgen -workload ideal` is the reference client. The shaped test
@@ -641,7 +641,7 @@ gateway at 81 % of their 8-logical-CPU budgets, so the extra VMs only queue.
 The per-VM loss from sharing a core's SMT threads (0.33-0.53) is the second
 effect. The pure-cold 2x host total is identical (998.2 vs 998.5) with twice
 the VM count, which makes the point: SMT doubles the number of VMs, not the
-host's capacity. Use one microVM per whole physical core.
+host's capacity. Use one tinyVM per whole physical core.
 
 ### 8.2 Where the latency goes
 
@@ -676,7 +676,7 @@ latency tiers (not the no-failure maximum) are the business-capacity measure.
 
 The same three models on a two-vCPU nested host (see the nested report) run at
 67.4/s (ideal), 52.6/s (shaped) and 40.9/s (realistic pure-cold no-failure)
-per microVM with no pinning. On this bare-metal host the physical-core
+per tinyVM with no pinning. On this bare-metal host the physical-core
 mapping reaches 183.95/s, 53.06/s and 70.32/s per VM respectively. The ideal
 ceiling is 2.7x higher here because each VM owns a whole physical core
 instead of an outer-scheduled L1 vCPU; the shaped and realistic rates are
@@ -719,7 +719,7 @@ The exact commands, environment and per-run parameters behind every table are
 in **`baremetal-load-raw/MANIFEST.md`**. In short:
 
 ```bash
-# 1. Baseline (idle host, one microVM) — take its four P95s
+# 1. Baseline (idle host, one tinyVM) — take its four P95s
 WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
   bash e2e/latency-benchmark-aiagent.sh http distributed
 

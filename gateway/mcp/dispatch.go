@@ -23,7 +23,7 @@ import (
 )
 
 // dispatchToolCall routes a tool call to the appropriate handler.
-// All file/execute operations go through the microVM — no direct filesystem access.
+// All file/execute operations go through the tinyVM — no direct filesystem access.
 func (s *MCPServer) dispatchToolCall(ctx context.Context, conn *mcpConnection, toolName string, args map[string]interface{}) (*mcpToolCallResult, error) {
 	switch toolName {
 	case "execute":

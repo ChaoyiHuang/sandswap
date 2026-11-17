@@ -1,7 +1,7 @@
 # Sandswap
 
 <div align="center">
-  <b>183x MicroVM Reuse per Second. AI Agent Rotation ~6 ms<br/>
+  <b>183x TinyVM Reuse per Second · AI Agent Rotation ~6 ms<br/>
      Warm ~0.958 ms · Cold ~2.323 ms · Swap (async.) ~3.106 ms<br/>
   (benchmarked on bare-metal KVM)</b>
 </div>
@@ -12,7 +12,7 @@
                               └─────┘  (multi-gateway deployments only)
   ┌- - - - - - - - - - - - - - ┘ 
   ▼
-AI agents ──HTTP/MCP──► gateway ──gRPC stream──► sandlot (node) ──KVM──► microVM
+AI agents ──HTTP/MCP──► gateway ──gRPC stream──► sandlot (node) ──KVM──► tinyVM
                            │                        │                       │
                   auth · pool · lease      virtio-fs allow-dir       warden (PID 1)
                    ownership (etcd)       vsock exec/mount/swap       agent sandfs
@@ -20,10 +20,10 @@ AI agents ──HTTP/MCP──► gateway ──gRPC stream──► sandlot (no
 
 ## Under the hood
 
-A compute-and-disk decoupled microVM architecture built from scratch
+A compute-and-disk decoupled tinyVM architecture built from scratch
 for AI Agents:
 
-- ⚡ **Pure-compute microVM**: Only a custom hardened guest kernel + PID 1
+- ⚡ **Pure-compute tinyVM**: Only a custom hardened guest kernel + PID 1
   warden. Zero baked-in rootfs.
 - ⚡ **Dynamic SandFS swap**: The agent's rootfs directory (SandFS) is mounted
   via virtio-fs allow-dirs on demand (~2.3 ms cold, ~0.96 ms warm), keeping
@@ -37,9 +37,9 @@ for AI Agents:
   warden, purpose-built sandvmm, and host defenses enforce 4-layer
   isolation — matching or exceeding traditional VMs.
 
-In bare-metal KVM benchmarks, a single microVM can be reused ideally up to
+In bare-metal KVM benchmarks, a single tinyVM can be reused ideally up to
 183 times per second. An agent's reasoning takes seconds while commands
-run in milliseconds, so one microVM rotates across 50–100 agents —
+run in milliseconds, so one tinyVM rotates across 50–100 agents —
 cutting sandbox cost by 50–100x.
 
 Agents run commands over two surfaces with identical semantics — HTTPS

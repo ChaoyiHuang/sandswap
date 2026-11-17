@@ -15,7 +15,7 @@ parent: How It Works
 
 ## 1. Problem
 
-Every Sandswap microVM's warden listens on **vsock port 1024**. Its per-frame
+Every Sandswap tinyVM's warden listens on **vsock port 1024**. Its per-frame
 authentication (a 32-byte per-VM session key, delivered over the first host
 connection; every request carries a tag verified before the body is read) is
 what actually stops a caller who has not been handed the key. vsockguard is

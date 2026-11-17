@@ -195,14 +195,14 @@ func main() {
 
 	if *allowInsecureVolumes {
 		logger.Printf("WARNING: -allow-insecure-volumes set — guest-planted setuid bits and device nodes on the volumes tree are LIVE (invariant 8 violated). Dev/test only.")
-	} else if err := server.VolumesMountGate(cfg.MicroVM.VolumesDir); err != nil {
+	} else if err := server.VolumesMountGate(cfg.TinyVM.VolumesDir); err != nil {
 		logger.Printf("WARNING: %v (create_vm will refuse until the mount is fixed)", err)
 	}
 
 	// Build network provider (shared factory with sandlot's embedded mode —
 	// boxout is the privileged side in k8s, so the baseline and the backend
 	// are installed HERE)
-	netProv, err := network.BuildProvider(cfg.Network, cfg.MicroVM.VMMUid, logger)
+	netProv, err := network.BuildProvider(cfg.Network, cfg.TinyVM.VMMUid, logger)
 	if err != nil {
 		logger.Fatalf("%v", err)
 	}
@@ -248,13 +248,13 @@ func main() {
 
 	// VMM config from sandlot config
 	vmmCfg := vmm.Config{
-		KernelPath:    cfg.MicroVM.Kernel,
-		InitramfsPath: cfg.MicroVM.Initramfs,
-		VCPUs:         cfg.MicroVM.DefaultVCPUs,
-		MemoryMB:      cfg.MicroVM.DefaultMemoryMB,
+		KernelPath:    cfg.TinyVM.Kernel,
+		InitramfsPath: cfg.TinyVM.Initramfs,
+		VCPUs:         cfg.TinyVM.DefaultVCPUs,
+		MemoryMB:      cfg.TinyVM.DefaultMemoryMB,
 		VMMBinary:     cfg.VMMBinary,
-		VolumesDir:    cfg.MicroVM.VolumesDir,
-		TemplatesDir:  cfg.MicroVM.OverlayFSTemplates,
+		VolumesDir:    cfg.TinyVM.VolumesDir,
+		TemplatesDir:  cfg.TinyVM.OverlayFSTemplates,
 		// sandvmm identity split — the same wiring as the embedded launcher
 		// (cmd/main.go): the VMM child drops to the dedicated uid/gid and
 		// creates its API sockets 0660 owner:vmm-gid with the APIGID group
@@ -264,18 +264,18 @@ func main() {
 		// rest of the identity block: UpdateVMMConfig deliberately does NOT
 		// hot-apply these — a live ownership change would strand
 		// already-running VMs on the old identity.
-		VMMUID:      cfg.MicroVM.VMMUid,
-		VMMGID:      cfg.MicroVM.VMMGid,
-		VMMGroups:   resolveVMMGroups(cfg.MicroVM.VMMGroups, cfg.MicroVM.APIGid, logger),
-		APIGID:      cfg.MicroVM.APIGid,
-		SeccompMode: cfg.MicroVM.VMMSeccomp,
-		VMMAPIAuth:  cfg.MicroVM.VMMAPIAuth,
-		// Guest free-wipe posture from the shared YAML (microvm.init_on_free;
+		VMMUID:      cfg.TinyVM.VMMUid,
+		VMMGID:      cfg.TinyVM.VMMGid,
+		VMMGroups:   resolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger),
+		APIGID:      cfg.TinyVM.APIGid,
+		SeccompMode: cfg.TinyVM.VMMSeccomp,
+		VMMAPIAuth:  cfg.TinyVM.VMMAPIAuth,
+		// Guest free-wipe posture from the shared YAML (tinyvm.init_on_free;
 		// default false = init_on_free=0 on every VM cmdline). Restart-required
 		// like the rest of this block: the create_vm request does not carry it
 		// and the hot-reload subset (kernel/initramfs/vcpus/mem) deliberately
 		// excludes posture knobs.
-		InitOnFree: cfg.MicroVM.InitOnFree,
+		InitOnFree: cfg.TinyVM.InitOnFree,
 	}
 
 	// Ensure the sandbox root dir is traversable by sandlot (allowed UID).
@@ -311,9 +311,9 @@ func main() {
 	// remount per volume after restart, never correctness).
 	srv.SetOverlayStatePath(filepath.Join(core.StateRootFor(sandboxRoot), "boxout-overlays.json"))
 
-	// Hot-reload the microvm subset from the shared sandlot config file.
+	// Hot-reload the tinyvm subset from the shared sandlot config file.
 	// boxout's create_vm whitelist compares kernel/initramfs against its own
-	// vmmCfg: without this watcher, a sandlot-side microvm hot-reload (new
+	// vmmCfg: without this watcher, a sandlot-side tinyvm hot-reload (new
 	// kernel path) would have every subsequent create_vm REJECTED until
 	// boxout restarts. The two processes watch the same file independently,
 	// so a reload can land here up to ~one watch-interval after sandlot's —
@@ -508,7 +508,7 @@ func secureListeningSocket(path string, uid int, logger *log.Logger) error {
 }
 
 // startConfigReload watches the sandlot config file and hot-applies the
-// microvm subset (kernel, initramfs, default resources). Everything else is
+// tinyvm subset (kernel, initramfs, default resources). Everything else is
 // logged as restart-required — the same classification sandlot applies, so
 // the two processes stay consistent.
 func startConfigReload(cfg sandlotconfig.SandlotConfig, srv *server.Server, logger *log.Logger) *config.ReloadWatcher {
@@ -542,13 +542,13 @@ func startConfigReload(cfg sandlotconfig.SandlotConfig, srv *server.Server, logg
 		cs := watchableCfg.Swap(newCfg).Diff(newCfg)
 		for _, fc := range cs.HotReload {
 			switch fc.Name {
-			case "microvm.kernel", "microvm.initramfs",
-				"microvm.default_vcpus", "microvm.default_memory_mb":
-				srv.UpdateVMMConfig(newCfg.MicroVM.Kernel, newCfg.MicroVM.Initramfs,
-					newCfg.MicroVM.DefaultVCPUs, newCfg.MicroVM.DefaultMemoryMB)
+			case "tinyvm.kernel", "tinyvm.initramfs",
+				"tinyvm.default_vcpus", "tinyvm.default_memory_mb":
+				srv.UpdateVMMConfig(newCfg.TinyVM.Kernel, newCfg.TinyVM.Initramfs,
+					newCfg.TinyVM.DefaultVCPUs, newCfg.TinyVM.DefaultMemoryMB)
 			}
-			// microvm.warden_* are restart-required (the shared classifier
-			// marks only microvm.{kernel,initramfs,default_vcpus,
+			// tinyvm.warden_* are restart-required (the shared classifier
+			// marks only tinyvm.{kernel,initramfs,default_vcpus,
 			// default_memory_mb} hot) and are deliberately not applied
 			// here: the warden cmdline (countdown / max exec timeout / log)
 			// is built per create_vm from this vmmCfg, so a hot-applied
@@ -562,14 +562,14 @@ func startConfigReload(cfg sandlotconfig.SandlotConfig, srv *server.Server, logg
 		}
 	})
 	if err != nil {
-		logger.Printf("warning: failed to watch config %s: %v (microvm hot-reload disabled)", cfg.ConfigFilePath, err)
+		logger.Printf("warning: failed to watch config %s: %v (tinyvm hot-reload disabled)", cfg.ConfigFilePath, err)
 		return nil
 	}
-	logger.Printf("config hot-reload watcher started (microvm.* only): %s", cfg.ConfigFilePath)
+	logger.Printf("config hot-reload watcher started (tinyvm.* only): %s", cfg.ConfigFilePath)
 	return nil
 }
 
-// resolveVMMGroups turns the microvm.vmm_groups spec (comma-separated
+// resolveVMMGroups turns the tinyvm.vmm_groups spec (comma-separated
 // numeric gids or group NAMES) into the sandvmm child's supplementary group
 // list — same contract as the embedded side's resolver (cmd/main.go), kept
 // local because the boxout module cannot import sandlot's package main.
@@ -598,7 +598,7 @@ func resolveVMMGroups(spec string, apiGid uint32, logger *log.Logger) []uint32 {
 		}
 		g, err := user.LookupGroup(tok)
 		if err != nil {
-			logger.Printf("warning: microvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
+			logger.Printf("warning: tinyvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
 			continue
 		}
 		if n, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {

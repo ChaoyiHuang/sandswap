@@ -172,7 +172,7 @@ func TestWaitReadoptCleanup(t *testing.T) {
 
 // The /proc identity checks must accept BOTH shipped VMM binary names: the
 // build output (`sandvmm`, used by dev/e2e and the k8s image) and the installed
-// bare-metal name (`sandswap-sandvmm`, what microvm.vmm_binary points at).
+// bare-metal name (`sandswap-sandvmm`, what tinyvm.vmm_binary points at).
 func TestIsSandvmmBinaryName(t *testing.T) {
 	for _, ok := range []string{"sandvmm", "sandswap-sandvmm", "sandswap-sandvmm (deleted)", "sandvmm (deleted)"} {
 		if !isSandvmmBinaryName(ok) {

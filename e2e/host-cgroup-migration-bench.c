@@ -13,7 +13,7 @@
  * host-cgroup-migration-bench.c — reference baseline for cgroup v2 task
  * migration cost on the BARE-METAL host kernel.
  *
- * Why this exists: inside KVM microVMs, a real cgroup v2 task migration
+ * Why this exists: inside KVM tinyVMs, a real cgroup v2 task migration
  * (writing a pid into cgroup.procs) measured 8-20 ms on CH v6.2 AND v6.16.9
  * guest kernels, while the identical operation on the bare-metal host kernel
  * takes ~5 µs (first migration ~5 ms — one-time lazy init). That 1000x gap

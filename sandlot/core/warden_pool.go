@@ -19,7 +19,7 @@ import (
 )
 
 // wardenPool is a per-VM pool of warden vsock connections enabling parallel
-// sync commands on one microVM.
+// sync commands on one tinyVM.
 //
 // The raw vsock frame protocol carries no correlation ID — responses can only
 // be matched positionally — so one connection serves exactly ONE in-flight

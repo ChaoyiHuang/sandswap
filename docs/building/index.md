@@ -191,7 +191,7 @@ Everything lands in `output/`. The runtime pairing:
 
 | Artifact | Role |
 |---|---|
-| `output/vmlinux.bin` + `output/initramfs.cpio.gz` | what sandlot boots every microVM with (`-kernel` / `-initramfs`) |
+| `output/vmlinux.bin` + `output/initramfs.cpio.gz` | what sandlot boots every tinyVM with (`-kernel` / `-initramfs`) |
 | `output/sandvmm` | the VMM binary per node (`-vmm-binary`) |
 | `output/{gateway,sandlot,boxout,sandns}` | the services (`boxout` for K8s boxout mode, `sandns` for distributed) |
 | `output/sandctl` | the operator CLI |

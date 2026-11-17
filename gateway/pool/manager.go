@@ -11,7 +11,7 @@
 //
 // Package pool manages compute nodes (sandlots) and their per-spec VM capacity.
 // Under delegation the gateway no longer
-// tracks individual microVMs: sandlot owns the VM pool + VM<->sandfs binding.
+// tracks individual tinyVMs: sandlot owns the VM pool + VM<->sandfs binding.
 // The gateway selects a NODE for a cold mount based on the node's per-spec clean
 // capacity (reported by sandlot heartbeats) and routes workload RPCs by
 // sandfs_id; sandlot resolves the sandfs to a VM locally.

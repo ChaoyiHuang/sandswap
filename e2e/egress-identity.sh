@@ -12,7 +12,7 @@
 #
 # egress-identity.sh — Conformance e2e for the Sandswap egress identity
 # enabler (docs/how-it-works/egress-enabler.md).
-# Verifies, against a REAL gateway + sandlot + microVM:
+# Verifies, against a REAL gateway + sandlot + tinyVM:
 #   C1. a cold mount publishes (tap-ifindex -> agent/sandfs) to the binding
 #       region, with mount_epoch >= 1;
 #   C2. the network baseline installed the per-tap chain (anti-spoof +

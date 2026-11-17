@@ -25,7 +25,7 @@ import (
 type HotReloadTargets struct {
 	// UpdateVMMConfig updates the VMM config (kernel, initramfs, vcpus, memory).
 	// Affects new VMs only. Nil = not available.
-	UpdateVMMConfig func(cfg MicroVMConfig)
+	UpdateVMMConfig func(cfg TinyVMConfig)
 	// UpdateRecycleConfig updates the recycle parameters.
 	UpdateRecycleConfig func(cfg RecycleConfig)
 	// ReconcileSeeds is called when a seed key changed in the config file. It
@@ -84,10 +84,10 @@ func ApplyHotReload(old, new SandlotConfig, targets *HotReloadTargets, logger *s
 	// Apply hot-reloadable changes.
 	for _, fc := range cs.HotReload {
 		switch fc.Name {
-		case "microvm.kernel", "microvm.initramfs",
-			"microvm.default_vcpus", "microvm.default_memory_mb":
+		case "tinyvm.kernel", "tinyvm.initramfs",
+			"tinyvm.default_vcpus", "tinyvm.default_memory_mb":
 			if targets.UpdateVMMConfig != nil {
-				targets.UpdateVMMConfig(new.MicroVM)
+				targets.UpdateVMMConfig(new.TinyVM)
 			}
 		case "pool":
 			if targets.UpdatePoolTarget != nil {

@@ -283,7 +283,7 @@ func New(cfg sandlotconfig.SandlotConfig, vmmCfg vmm.Config, netProv vmm.Network
 	}
 }
 
-// UpdateVMMConfig applies a hot-reloaded microvm subset to the server's VMM
+// UpdateVMMConfig applies a hot-reloaded tinyvm subset to the server's VMM
 // defaults: only the hot-reloadable fields (kernel, initramfs, default
 // resources). Restart-required fields (volumes_dir, overlayfs_templates) keep
 // their startup values — boxout must stay field-for-field consistent with the
@@ -805,17 +805,17 @@ func (s *Server) handleCreateVM(ctx context.Context, req map[string]any) map[str
 	}
 
 	// The sandvmm identity fields (VMMUID/VMMGID/VMMGroups/APIGID) flow in
-	// from the shared sandlot config this sidecar watches (microvm.* hot
+	// from the shared sandlot config this sidecar watches (tinyvm.* hot
 	// reload) — boxout runs as root, so the uid transition needs no
 	// capabilities here. The API sockets end up owned by the sandvmm
 	// identity with the APIGID group grant; sandlot connects as a member
-	// of that group (k8s: set microvm.api_gid / vmm_groups to the pod's
+	// of that group (k8s: set tinyvm.api_gid / vmm_groups to the pod's
 	// shared group, e.g. fsGroup).
 
 	// The canonical API socket admits only the sandlot identity (plus root):
 	// the VMM enforces this via SO_PEERCRED. Every sandvmm shares the VMM
 	// uid, so this is what stops a compromised sibling from querying another
-	// VM's API. The optional per-VM token (microvm.vmm_api_auth) additionally
+	// VM's API. The optional per-VM token (tinyvm.vmm_api_auth) additionally
 	// stops a fake/squatted listener from impersonating the server.
 	cfg.APIAllowedUID = s.allowedUID
 

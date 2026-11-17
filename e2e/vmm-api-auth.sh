@@ -17,7 +17,7 @@
 #      processed (the server closes on the first two bytes).
 #
 # The preface is transport-independent (it precedes whichever framing —
-# raw or HTTP — the connection then uses). No microVM is created; KVM +
+# raw or HTTP — the connection then uses). No tinyVM is created; KVM +
 # output/sandvmm are required.
 set -euo pipefail
 

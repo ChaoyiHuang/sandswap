@@ -1,21 +1,21 @@
 ---
-title: "Benchmark Report — Nested-virt: microVM Reuse Capacity"
+title: "Benchmark Report — Nested-virt: tinyVM Reuse Capacity"
 nav_order: 4
 parent: Benchmark
 ---
 
-# Benchmark report — nested-virt: microVM reuse capacity
+# Benchmark report — nested-virt: tinyVM reuse capacity
 
-> Three models on the same two-microVM nested-virtualization host: the ideal
+> Three models on the same two-tinyVM nested-virtualization host: the ideal
 > paced-lane ceiling, the traffic-shaped test (a real agent population
 > behind a per-slot admission queue), and the realistic AI agent business
-> capacity. Each reported as host and per-microVM cold reuses/s.
+> capacity. Each reported as host and per-tinyVM cold reuses/s.
 
 ## Summary
 
-### Ideal capability (one lane per microVM, continuously paced)
+### Ideal capability (one lane per tinyVM, continuously paced)
 
-| Workload | Per microVM | Host |
+| Workload | Per tinyVM | Host |
 |---|---:|---:|
 | Pure cold | **67.4 reuses/s** | **134.75 reuses/s** |
 | Mixed (1-3 requests/turn) | **57.2 cold reuses/s** | **114.45 cold/s** (210 requests/s total) |
@@ -25,7 +25,7 @@ noise tolerance; see §3.3).
 
 ### Traffic-shaped capability (many agents per lane, paced admission)
 
-| Workload | Per microVM | Host |
+| Workload | Per tinyVM | Host |
 |---|---:|---:|
 | Pure cold | **52.6 reuses/s** | **105.20 reuses/s** |
 | Mixed (1-3 requests/turn) | **44.7 cold reuses/s** | **89.35 cold/s** (166 requests/s total) |
@@ -48,8 +48,8 @@ cold P95 inside 2x.
 gateway and client P95 stay within twice the no-load baseline. No offered
 load holds the raw 1x budget; 1x is the no-load floor.
 
-**These are single-host numbers from a two-microVM nested VM.** A production
-bare-metal host sizes its pool to the remaining cores — dozens of microVMs,
+**These are single-host numbers from a two-tinyVM nested VM.** A production
+bare-metal host sizes its pool to the remaining cores — dozens of tinyVMs,
 an order of magnitude more than the two here — and in a multi-node fleet a
 `NO_AVAILABLE_SANDBOX` is routed to another node. Both effects raise the real
 capacity. "Realistic" describes the request pattern, not a business forecast —
@@ -65,12 +65,12 @@ the traffic model is deliberately simple (§2.4). See
 | RAM | 5 GiB |
 | Guest | 1 vCPU / 256 MiB / 3 exec slots (the benchmark's `bench` spec) |
 | Stack | one-machine-etcd: exec gateway :3001 + human gateway :3100 + etcd, one merged exec,prov sandlot |
-| VM pool | 2 microVMs (the other two vCPUs carry the host stack) |
+| VM pool | 2 tinyVMs (the other two vCPUs carry the host stack) |
 | Pinning | none (`PIN_MODE=0`): the L1 vCPUs are already scheduled by the outer hypervisor |
 
 ## 2. Measurement modes and method
 
-### 2.1 Baseline (single microVM, no background load)
+### 2.1 Baseline (single tinyVM, no background load)
 
 Measured first, with the same flat busybox fixture (`rootfs:v1`), the same
 one-machine-etcd topology and the same 1 vCPU / 256 MiB / 3 exec-slot bench
@@ -89,7 +89,7 @@ load tiers use 1x and 2x those numbers.
 The realistic agent model (§2.4) is demand-shaped: the offered cold rate is
 roughly `agents / think`, so the pool is only as busy as the business asks,
 and a busy refusal is the arrival-collision tail. The driver also supports a
-separate capability test, `-workload ideal`: **one paced lane per microVM**,
+separate capability test, `-workload ideal`: **one paced lane per tinyVM**,
 paced continuously with no between-turn think gap (the agent's own LLM think
 time is simply not part of the gateway load). Each lane issues a turn every
 configured period. The next turn never starts inside the previous lease's
@@ -152,7 +152,7 @@ traffic — per-agent sandfs, think gaps between turns, multi-request turns,
 client-side retry on busy — and nothing beyond that. The traffic model is
 deliberately simple: uniform think times, one fixed turn mix, the same tiny
 exec on one flat volume per request, no payload or burstiness diversity. It
-also runs against this host's two-microVM pool, an order of magnitude
+also runs against this host's two-tinyVM pool, an order of magnitude
 smaller than a production node (§6). The numbers are a repeatable test
 model, not a representation of real business capacity.
 
@@ -402,7 +402,7 @@ The realistic numbers in §5 are a **lower bound for a production host**, for
 two structural reasons:
 
 1. **The pool is much larger on bare metal.** A production node sizes its
-   microVM pool to the remaining cores after the stack — dozens of microVMs,
+   tinyVM pool to the remaining cores after the stack — dozens of tinyVMs,
    an order of magnitude more than the two here. The cold-arrival collision
    tail is an Erlang-B effect: the probability that every VM is in a switch
    window at an arrival falls steeply as the pool grows. A large pool runs
@@ -415,25 +415,25 @@ two structural reasons:
 
 The ideal test in §3 is the per-VM capability that survives both effects:
 it removes demand shaping and the small-pool collision tail, and measures
-what one microVM can do when continuously fed.
+what one tinyVM can do when continuously fed.
 
 ## 7. Approaching the ideal rate in production
 
 The ideal paced-lane test is a client-side pacing model: one lane per
-microVM, and the next request is released only after the previous response
+tinyVM, and the next request is released only after the previous response
 plus the sticky/unmount budget. A production deployment can approach the
 same reuse rate by adding a **traffic shaper / admission layer in front of
 sandswap**:
 
 - buffer the agent requests instead of firing them straight at the gateway;
-- keep one in-flight cold request per microVM slot;
+- keep one in-flight cold request per tinyVM slot;
 - release the next request for a slot when the previous response has returned
   and the switch budget (sticky window + unmount) has elapsed;
 - forward the shaped stream to the gateway.
 
 `examples/loadgen` with `-workload shaped` is the reference implementation of
 exactly this shaper: a real agent population queues at one admission point
-per microVM slot, and the slot is held for the sticky window plus the
+per tinyVM slot, and the slot is held for the sticky window plus the
 measured unmount budget between turns. On this host it recovers +29% (cold)
 / +36% (mixed) cold reuse over the unshaped business workload with the
 client P95 still inside the 2x budget (§4). The trade-off is explicit:
@@ -463,16 +463,16 @@ realistic model in §5 is what the host delivers.
 - **The per-VM reuse rate is a latency trade-off.** At the 2x tier each VM
   serves 4.2 (mixed) or 10.3 (cold-only) cold switches/s. At the no-failure
   maximum it serves 32.9 or 40.9/s, in the shaped test 44.7-52.6/s, and at
-  the ideal ceiling 57.2-67.4/s. The host's microVM reuse capacity is a
+  the ideal ceiling 57.2-67.4/s. The host's tinyVM reuse capacity is a
   curve, not a single number; the ideal test is the top, the 2x point is
   the low-latency end.
 - **The pool, not the host stack, is the limit.** A bare-metal pool with
-  dozens of microVMs has the same per-VM turnaround but far more slots,
+  dozens of tinyVMs has the same per-VM turnaround but far more slots,
   which is what the bare-metal capacity run measures.
 
 ## 9. Reproduction
 
-Baseline (one microVM, no background load, 100 samples per class):
+Baseline (one tinyVM, no background load, 100 samples per class):
 
 ```bash
 WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \

@@ -9,7 +9,7 @@ grand_parent: How It Works
 
 ## 1. Overview
 
-Sandlot is the per-node daemon: it keeps a pool of warm microVMs ready,
+Sandlot is the per-node daemon: it keeps a pool of warm tinyVMs ready,
 performs the rootfs hot-swap that *is* agent switching, and does the
 control plane's sandfs/template storage work in its prov role. It dials
 the gateway — the gateway never dials in. Source: `sandlot/` (Go).
