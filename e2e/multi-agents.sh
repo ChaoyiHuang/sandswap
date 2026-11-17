@@ -42,7 +42,7 @@ LOG_DIR="${LOG_DIR:-/tmp/sandswap-logs}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:3001}"
 DEPLOY_DIR="${DEPLOY_DIR:-/var/lib/sandswap}"
 TEMPLATE_DIR="${TEMPLATE_DIR:-/tmp/sandswap-templates}"
-# Force sandlot -pool "medium:1" so both agents reuse the same microVM
+# Force sandlot -pool "medium:1" so both agents reuse the same tinyVM
 SANDLOT_POOL="medium:1"
 NETWORK_BACKEND="${NETWORK_BACKEND:-bridge}"
 source "$ROOT/e2e/common.sh"
@@ -206,7 +206,7 @@ tc_clean_environment
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -454,7 +454,7 @@ log_section "Phase 4: Agent A — Cold Start + SQLite Queries"
 log_info "Read-only overlay: warden mounts rootfs/ (read-only merged view of lowerdir)"
 log_info "Writable paths: /workspace (writable bind mount), /home/agent (writable bind mount), /tmp (tmpfs)"
 
-log_step "A1: Cold start — first query (triggers microVM boot + read-only overlay mount)..."
+log_step "A1: Cold start — first query (triggers tinyVM boot + read-only overlay mount)..."
 A1_STDOUT=""
 for attempt in 1 2 3; do
     exec_code "$KEY_A" "uname -r && sqlite3 /workspace/test.db 'SELECT COUNT(*) FROM transactions;'" "A1: Cold start + query 20 records (attempt $attempt)" >/dev/null
@@ -462,14 +462,14 @@ for attempt in 1 2 3; do
     # A versioned kernel release (x.y.z) proves the guest actually answered —
     # NOT a hardcoded "6.2.0", which false-failed on every kernel rebuild.
     echo "$A1_STDOUT" | grep -Eq '^[0-9]+\.[0-9]+' && break
-    log_warn "A1 attempt $attempt: microVM not ready yet, retrying..."
+    log_warn "A1 attempt $attempt: tinyVM not ready yet, retrying..."
     sleep 2
 done
 KERNEL_REL=$(echo "$A1_STDOUT" | head -1)
 if echo "$KERNEL_REL" | grep -Eq '^[0-9]+\.[0-9]+'; then
-    pass "A1: microVM kernel running (release: $KERNEL_REL)"
+    pass "A1: tinyVM kernel running (release: $KERNEL_REL)"
 else
-    fail "A1: microVM did not report a kernel release (got: '$KERNEL_REL')"
+    fail "A1: tinyVM did not report a kernel release (got: '$KERNEL_REL')"
 fi
 assert_contains "A1: 20 pre-loaded records found" "$A1_STDOUT" "20"
 
@@ -664,7 +664,7 @@ log_section "Phase 10: Read-Only Overlay Isolation & Dedup Verification"
 log_info "Verifying read-only overlay + writable workspace/home isolation and dedup properties..."
 
 # 1. Workspace isolation: Each agent's writes go only to its own workspace/.
-# Note: If Agent C writes to /workspace/test.db inside the microVM, it will
+# Note: If Agent C writes to /workspace/test.db inside the tinyVM, it will
 # create its OWN test.db in its workspace/ directory (writable bind mount). This is
 # correct behavior — the key isolation property is that Agent C cannot see Agent A's
 # test.db DATA, not that the filename doesn't exist.

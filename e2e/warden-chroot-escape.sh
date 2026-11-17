@@ -72,7 +72,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/e2e/common.sh"
 
-# One microVM: the forced replacement (fresh warden) is deterministic and
+# One tinyVM: the forced replacement (fresh warden) is deterministic and
 # every exec lands on it — the whole drill depends on that.
 # shellcheck disable=SC2034  # SANDLOT_POOL is consumed by the sourced common.sh
 SANDLOT_POOL="medium:1"
@@ -167,7 +167,7 @@ tc_ensure_dev_nodes
 tc_setup_host_network
 
 # ══════════════════════════════════════════════════════════════
-tc_log_section "Phase 1: Stack up (gateway + sandlot + one microVM)"
+tc_log_section "Phase 1: Stack up (gateway + sandlot + one tinyVM)"
 # ══════════════════════════════════════════════════════════════
 tc_clean_environment
 tc_deploy_artifacts

@@ -193,7 +193,7 @@ done
 # have vacated the residue/isolation assertions above).
 VM_PID_AFTER=$(tc_run_vm_pids | head -n1)
 if [[ "$VM_PID_AFTER" == "$VM_PID_BEFORE" ]]; then
-    tc_pass "same-VM control: all rounds ran on one microVM (sandvmm pid $VM_PID_BEFORE)"
+    tc_pass "same-VM control: all rounds ran on one tinyVM (sandvmm pid $VM_PID_BEFORE)"
 else
     tc_fail "VM RECYCLED mid-drill ($VM_PID_BEFORE → $VM_PID_AFTER) — the round assertions are vacuous; re-run"
 fi

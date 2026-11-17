@@ -1,9 +1,9 @@
 ---
-title: Raw logs — bare-metal microVM reuse capacity benchmark
+title: Raw logs — bare-metal tinyVM reuse capacity benchmark
 nav_exclude: true
 ---
 
-# Raw logs — bare-metal microVM reuse capacity benchmark
+# Raw logs — bare-metal tinyVM reuse capacity benchmark
 
 Raw stdout/stderr of the `e2e/latency-benchmark-aiagent.sh` and
 `e2e/latency-benchmark-load.sh` runs that back
@@ -24,8 +24,8 @@ Raw stdout/stderr of the `e2e/latency-benchmark-aiagent.sh` and
 
 `PIN_MODE=1 PIN_STACK_LAYOUT="loadgen:0-3,48-51;gateway:4-7,52-55;sandlot:8-11,56-59" PIN_RESERVE_CORES=12 PIN_VERIFY_EACH_LEVEL=0`
 
-- Physical-core mapping: `POOL_SIZE=32 PIN_SLICE_CPUS=2` (one microVM per whole core, 36 slices, 4 spare).
-- Logical-core (SMT) mapping: `POOL_SIZE=64 PIN_SLICE_CPUS=1` (one microVM per logical CPU, 72 slices, 8 spare).
+- Physical-core mapping: `POOL_SIZE=32 PIN_SLICE_CPUS=2` (one tinyVM per whole core, 36 slices, 4 spare).
+- Logical-core (SMT) mapping: `POOL_SIZE=64 PIN_SLICE_CPUS=1` (one tinyVM per logical CPU, 72 slices, 8 spare).
 
 ## Files
 

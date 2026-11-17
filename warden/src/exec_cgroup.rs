@@ -46,7 +46,7 @@ pub fn is_cgroup_v2() -> bool {
 // ── Sync-exec per-process memory cap (RLIMIT_AS) ──────────────────────
 //
 // Sync execs do NOT join the per-agent cgroup: a cgroup v2 task migration is
-// ms-scale inside the microVM and sits on the exec hot
+// ms-scale inside the tinyVM and sits on the exec hot
 // path. Their per-exec balloon guard is instead a setrlimit(RLIMIT_AS) in
 // pre_exec — one syscall, inherited by the whole child tree. Same knob and
 // same value formula as the cgroup cap: MemTotal × agent_mem_percent / 100
@@ -317,7 +317,7 @@ impl AgentCgroup {
     /// log and return — the caller proceeds to umount. If umount also fails
     /// with EBUSY (the D-state process still holds files open), the warden
     /// returns an error, causing the gateway to destroy the VM entirely.
-    /// This guarantees the exclusive-ownership invariant: one microVM = one
+    /// This guarantees the exclusive-ownership invariant: one tinyVM = one
     /// SandFS at a time. The destroyed VM's resources are released by the
     /// kernel, killing the D-state process along with it.
     pub fn kill_and_reap(&self, timeout: std::time::Duration) {

@@ -44,7 +44,7 @@ kernel or sysctl change:
 
 ### 2.1 Kernel version and KVM/vhost-vsock devices
 
-Every node that runs microVMs (exec sandlot nodes, both modes) needs:
+Every node that runs tinyVMs (exec sandlot nodes, both modes) needs:
 
 - kernel ≥ 5.10;
 - `/dev/kvm` (hardware virtualization);
@@ -367,7 +367,7 @@ themselves — separate containers, not host accounts.
 ## 4. vsock transport protection
 
 The warden vsock transport is what carries mount and exec commands to every
-microVM, so it is the primary target for a non-root local user on an exec
+tinyVM, so it is the primary target for a non-root local user on an exec
 sandlot node. Two attack classes shape the requirements of this section:
 
 - **Active impersonation** — a non-root local user `connect()`s to a warden
@@ -699,7 +699,7 @@ Thirteen checks. Checks the transport invariants 1–4 (sysctls, service
 account, device admissions incl. the exact `/dev/kvm` shape and
 `/dev/net/tun`, per-OWNER vsock device ownership), the volumes mount flags
 (§5) and **share-root permissions resolved from the configured sandlot
-YAMLs** (every `microvm.volumes_dir` / template directory found, not a
+YAMLs** (every `tinyvm.volumes_dir` / template directory found, not a
 hard-coded `/var/lib/sandswap`), the volume-seed scope (fails when a
 sandvmm process can read it), whether the vsockguard BPF hook is actually
 pinned and matches the sandlot UID (check 10), the boxout socket scoping

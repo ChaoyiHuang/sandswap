@@ -740,7 +740,7 @@ node_id: "${node_id}"
 vm_mode: embedded
 vmm_binary: ${SANDSWAP_BIN}/sandswap-sandvmm
 
-microvm:
+tinyvm:
   kernel: $(sandswap_guest_artifact vmlinux.bin)
   initramfs: $(sandswap_guest_artifact initramfs.cpio.gz)
   default_vcpus: ${SANDSWAP_DEFAULT_VCPUS:-2}

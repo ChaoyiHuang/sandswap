@@ -45,7 +45,7 @@ default. Source: `boxout/` (Go, one binary). See [Topologies](../topologies.md).
   challenge-response (fresh nonces both directions, token never on the
   wire) runs before any request is read.
 - The shared sandlot YAML: boxout watches it and hot-applies the
-  `microvm.*` subset, so its create_vm parameter whitelist tracks the
+  `tinyvm.*` subset, so its create_vm parameter whitelist tracks the
   sandlot's live values.
 - Its own flags (socket path, allowed UID).
 
@@ -77,7 +77,7 @@ Sandlot (UID 65536)       Boxout (UID 0)            Host
    enforce the entry's owner/mode/inode, load the shared YAML.
 2. **Verify every request**: read the peer's UID via SO_PEERCRED, reject
    anything but the configured sandlot UID.
-3. **Whitelist parameters**: only the `microvm.*` values the shared YAML
+3. **Whitelist parameters**: only the `tinyvm.*` values the shared YAML
    allows pass through — the caller cannot smuggle arbitrary kernel
    paths, memory sizes, binaries, or guest addresses. Pre-configured
    kernel/initramfs only; vcpus/memory/CID are range- and

@@ -1,12 +1,12 @@
 ---
-title: microVM Lifecycle
+title: tinyVM Lifecycle
 nav_order: 7
 parent: How It Works
 ---
 
-# microVM Lifecycle
+# tinyVM Lifecycle
 
-A microVM is the unit of compute: one kernel, one warden, bound to one
+A tinyVM is the unit of compute: one kernel, one warden, bound to one
 SandFS at a time. Nodes keep a pool of them warm so a request never waits
 for a boot.
 
@@ -61,14 +61,14 @@ back to CLEAN    DESTROYED (recycle,
   absolute run-time cap that status polls do not extend).
 - **RELEASING** — the lease expired; the unmount runs asynchronously,
   off the request path. The VM returns to CLEAN — or is destroyed, for
-  any of the reasons in [What ends a microVM's
-  life](#9-what-ends-a-microvms-life).
+  any of the reasons in [What ends a tinyVM's
+  life](#9-what-ends-a-tinyvms-life).
 
 A cold request always goes CLEAN → IN USE: the VM is bound and the SandFS
 mounted before the first command runs. LEASED is only ever reached from
 IN USE, when the last command finishes and the sticky window opens.
 
-One SandFS runs on one microVM, but its commands are not serialized:
+One SandFS runs on one tinyVM, but its commands are not serialized:
 sync execs and file ops run in parallel up to the spec's `exec_slots`
 (the per-VM warden connection pool; defaults small=3, medium=4, large=5,
 configurable per spec in the `specs` config). Mounts and unmounts,
@@ -77,7 +77,7 @@ waits for in-flight commands to drain before killing the process group.
 
 ## 2. Birth: verified creation
 
-Every microVM is created through a single verified path, and only a VM
+Every tinyVM is created through a single verified path, and only a VM
 that passes it enters the pool:
 
 1. **Memory admission** — the host reserves the VM's full memory before
@@ -192,7 +192,7 @@ deployment is never starved. The pool refills asynchronously.
 
 ## 7. Re-adopt: surviving a sandlot restart
 
-microVMs run as independent host processes and do not die with the
+tinyVMs run as independent host processes and do not die with the
 sandlot. If the sandlot crashes, is OOM-killed, or is upgraded, its VMs
 keep running. On restart, the sandlot re-adopts them:
 
@@ -237,7 +237,7 @@ known deadline (`T_warden`); and the gateway's ownership timing
 (`T_safe`) is sized so ownership never moves before both have had their
 chance.
 
-## 9. What ends a microVM's life
+## 9. What ends a tinyVM's life
 
 | Reason | What happens |
 |---|---|

@@ -10,7 +10,7 @@
 // by the Apache License, Version 2.0.
 //
 // Package network provides pluggable outbound-networking backends for pooled
-// Sandswap microVMs. The default backend (BridgeNAT) gives each VM a virtio-net
+// Sandswap tinyVMs. The default backend (BridgeNAT) gives each VM a virtio-net
 // TAP enslaved to a host bridge, with kernel NAT and a static guest IP — no
 // DHCP daemon, no per-VM process. See vmm.NetworkProvider for the contract.
 

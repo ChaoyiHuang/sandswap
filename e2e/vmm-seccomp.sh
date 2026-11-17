@@ -12,16 +12,16 @@
 #
 # vmm-seccomp.sh — the seccomp-enforcement gate: prove the sandvmm per-thread seccomp
 # allow-lists are complete enough to ENFORCE before flipping the default
-# (microvm.vmm_seccomp log → true). Two phases, one battery:
+# (tinyvm.vmm_seccomp log → true). Two phases, one battery:
 #
 #   PHASE 1 (audit-clean): run the representative VM battery with
-#     microvm.vmm_seccomp=log and assert the kernel log shows ZERO
+#     tinyvm.vmm_seccomp=log and assert the kernel log shows ZERO
 #     SECCOMP_RET_LOG hits from the sandvmm process — every allow-list gap
 #     is visible there as "audit" lines naming the trapped syscall+thread.
 #     A non-empty gap list FAILS: enforcement would SIGSYS those threads.
 #
 #   PHASE 2 (enforce-green): re-run the same battery with
-#     microvm.vmm_seccomp=true and assert every op succeeds (no thread
+#     tinyvm.vmm_seccomp=true and assert every op succeeds (no thread
 #     death, no VM destroy churn).
 #
 # Only when BOTH pass is the default flip (launcher.go seccompModeOr +
@@ -49,7 +49,7 @@ log_step "vmm-seccomp: PHASE 1 — audit-clean (log mode, zero RET_LOG hits)"
 # boot, cold mount+exec, file ops incl. chmod/chown-bearing paths (write with
 # mode, mkdir), stat/list, unmount/switch, vsock probes.
 #
-# The seccomp mode is a YAML key (microvm.vmm_seccomp) — the sandlot has no
+# The seccomp mode is a YAML key (tinyvm.vmm_seccomp) — the sandlot has no
 # CLI flag for it, so the battery runs the deployed sandlot in CONFIG-FILE
 # mode with the key injected into the harness-generated config. (Passing a
 # nonexistent -vmm-seccomp flag kills the sandlot at the usage dump and makes
@@ -68,7 +68,7 @@ run_battery() { # <mode> — runs the battery; non-zero when the battery failed
     # parses an EMPTY file ("EOF").
     CERT_DIR="${CERT_DIR:-$DEPLOY_DIR/certs}"
     tc_gen_sandlot_config "$cfg"
-    sed -i "s/^microvm:\$/microvm:\n  vmm_seccomp: \"$mode\"/" "$cfg"
+    sed -i "s/^tinyvm:\$/tinyvm:\n  vmm_seccomp: \"$mode\"/" "$cfg"
     chmod 0644 "$cfg"   # the sandlot reads it as uid 985 (mktemp is 0600 root)
     TC_SANDLOT_CONFIG="$cfg" bash "$ROOT/e2e/smoke.sh"
     local rc=$?
@@ -109,5 +109,5 @@ log_step "vmm-seccomp: PHASE 1 clean — no RET_LOG hits across the battery"
 
 log_step "vmm-seccomp: PHASE 2 — enforce-green (true mode, battery must pass)"
 run_battery "true" || { tc_log_error "PHASE 2 FAILED: the battery failed under enforce mode"; exit 1; }
-log_step "vmm-seccomp: BOTH PHASES GREEN — the microvm.vmm_seccomp default flip (log→true) is now unblocked (sandlot/vmm/launcher.go seccompModeOr + config validation, same commit as docs)"
+log_step "vmm-seccomp: BOTH PHASES GREEN — the tinyvm.vmm_seccomp default flip (log→true) is now unblocked (sandlot/vmm/launcher.go seccompModeOr + config validation, same commit as docs)"
 exit 0

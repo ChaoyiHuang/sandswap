@@ -1,6 +1,6 @@
 # warden
 
-Warden runs as **PID 1 (init)** inside each Sandswap KVM microVM. Over a raw
+Warden runs as **PID 1 (init)** inside each Sandswap KVM tinyVM. Over a raw
 vsock protocol (port 1024) it mounts the agent's rootfs (virtio-fs bind or
 read-only overlay + writable workspace/home), executes commands — sync and background —
 inside a hardened chroot, serves file I/O, and tears everything down at agent

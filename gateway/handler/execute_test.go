@@ -261,7 +261,7 @@ func TestExecuteWithValidKey(t *testing.T) {
 		t.Errorf("expected exit 0, got %d", execResp.ExitCode)
 	}
 
-	// Verify no microVM ID is exposed in the external response.
+	// Verify no tinyVM ID is exposed in the external response.
 	if vmID := execW.Header().Get("X-Sandbox-VMID"); vmID != "" {
 		t.Errorf("X-Sandbox-VMID should not be exposed to external callers, got %q", vmID)
 	}

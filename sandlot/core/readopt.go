@@ -33,7 +33,7 @@ import (
 
 // --- startup re-adopt & orphan sweep ---
 
-// ReadoptVMs scans for surviving microVMs and re-adopts the live ones.
+// ReadoptVMs scans for surviving tinyVMs and re-adopts the live ones.
 // Delegates the privileged scanning (/proc, vmm.Attach) to h.vm.ReadoptVMs,
 // then builds VMState for each live VM (warden connection cache, CID reservation,
 // pidfd monitoring).
@@ -515,7 +515,7 @@ func PersistedNetSpec(sandboxRoot, vmID string) (*vmm.VMNetSpec, bool) {
 // --- /proc helpers & orphan cleanup ---
 
 // SandvmmIdentity is the process identity the orphan/re-adopt sweep may act
-// on. UID is microvm.vmm_uid (987 in production; 0 = same-identity dev runs).
+// on. UID is tinyvm.vmm_uid (987 in production; 0 = same-identity dev runs).
 // BinaryPath/BinaryDev/BinaryIno identify the configured sandvmm executable:
 // argv[0] and the executable's basename are forgeable by any local user, so
 // the name is a cheap prefilter only — the executable image (dev,ino) is the
@@ -559,7 +559,7 @@ func NewSandvmmIdentity(uid uint32, binary string) SandvmmIdentity {
 func (id SandvmmIdentity) hasBinaryProof() bool { return id.BinaryIno != 0 }
 
 // sandvmmIdentity resolves this instance's expected process identity from the
-// current microVM config. Resolved per control-plane use (one stat) so a
+// current tinyVM config. Resolved per control-plane use (one stat) so a
 // hot-reloaded vmm_binary/vmm_uid is honored.
 func (h *Handler) sandvmmIdentity() SandvmmIdentity {
 	cfg := h.CurrentVMMConfig()
@@ -1134,7 +1134,7 @@ func parsePID(name string) (int, bool) {
 // isSandvmmBinaryName reports whether base names a sandvmm executable: the
 // build output (`sandvmm` — dev, e2e and the k8s image) and the installed
 // binary name (`sandswap-sandvmm`, what the bare-metal deployers install and
-// microvm.vmm_binary points at). The process image name is what /proc/<pid>/exe
+// tinyvm.vmm_binary points at). The process image name is what /proc/<pid>/exe
 // resolves to; argv[0] is forgeable.
 func isSandvmmBinaryName(base string) bool {
 	base = strings.TrimSuffix(base, " (deleted)")

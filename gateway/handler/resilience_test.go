@@ -46,7 +46,7 @@ type failingClient struct {
 	lastReq      pool.ExecRequest
 }
 
-func (c *failingClient) DestroyMicroVM(ctx context.Context, nodeAddr, vmID string) error {
+func (c *failingClient) DestroyTinyVM(ctx context.Context, nodeAddr, vmID string) error {
 	return nil
 }
 func (c *failingClient) UnmountRootfs(ctx context.Context, nodeAddr, vmID, volumePath, volumeEpoch string) (pool.UnmountResult, error) {
@@ -386,8 +386,8 @@ func TestResilienceErrorStructure(t *testing.T) {
 	}
 }
 
-// TestMountLockFailureReleasesMicroVM verifies that when MountLock.Acquire fails
-// (concurrent mount in progress), the already-acquired microVM is released back
+// TestMountLockFailureReleasesTinyVM verifies that when MountLock.Acquire fails
+// (concurrent mount in progress), the already-acquired tinyVM is released back
 // to the pool instead of being leaked.
 // TestMountLockAcquireWaitSemantics verifies the basic MountLock acquire/release
 // semantics (non-blocking Acquire for tests).

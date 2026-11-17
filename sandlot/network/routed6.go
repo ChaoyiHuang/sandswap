@@ -25,16 +25,16 @@ import (
 )
 
 // RoutedIPv6 is the NetworkProvider for the identity-in-address pattern
-// (docs/how-it-works/egress-enabler.md): each microVM TAP gets its own
+// (docs/how-it-works/egress-enabler.md): each tinyVM TAP gets its own
 // routed /64 carved from a site prefix — NO shared L2, so neighbor-discovery
-// spoofing cannot exist by construction. The microVM gets a static IPv6
+// spoofing cannot exist by construction. The tinyVM gets a static IPv6
 // address; egress steers to a central policy point by source-prefix policy
 // routing.
 //
 // Addressing plan (default prefix fd00:5341:4e44::/48 — "SAND" in ASCII hex):
 //
-//	fd00:5341:4e44:<subnet>:<IID>   microVM address (one /64 per TAP)
-//	fd00:5341:4e44:<subnet>::1      host-side TAP address = the microVM's gateway
+//	fd00:5341:4e44:<subnet>:<IID>   tinyVM address (one /64 per TAP)
+//	fd00:5341:4e44:<subnet>::1      host-side TAP address = the tinyVM's gateway
 //
 // Subnet indices are the 16 bits right after the prefix; prefixes must be a
 // multiple of 8 bits and ≤ /48 — the address is <prefix | 16-bit subnet |
@@ -360,7 +360,7 @@ func stampPlumbingBatch(tapName string, subnet *net.IPNet) string {
 }
 
 // Provision allocates a subnet, creates + addresses the TAP, and returns the
-// net spec with the microVM's static IPv6 (the fixed all-zero boot IID at
+// net spec with the tinyVM's static IPv6 (the fixed all-zero boot IID at
 // this stage — the identity is not known until mount).
 func (r *RoutedIPv6) Provision(_ context.Context, vmID string) (vmm.VMNetSpec, error) {
 	sub, err := r.allocateSubnet()

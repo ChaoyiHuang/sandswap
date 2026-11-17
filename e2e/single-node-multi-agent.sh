@@ -202,7 +202,7 @@ chmod a+r "$DEPLOY_DIR/vmlinux.bin" "$DEPLOY_DIR/initramfs.cpio.gz" 2>/dev/null 
 # writes perf_event_paranoid only when the running value is below the floor.
 sandswap_install_sysctls
 
-# Host bridge for microVM outbound networking
+# Host bridge for tinyVM outbound networking
 log_step "Setting up host network bridge..."
 if bash "$ROOT/deploy/setup-network.sh" 2>&1; then
     log_pass "Host network bridge ready"

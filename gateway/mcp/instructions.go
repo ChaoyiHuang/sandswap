@@ -37,10 +37,10 @@ import (
 // and in custom instruction files — so the agent-visible numbers always match
 // the enforced ones no matter what -max-exec-timeout-sec / -sticky-ms (or a
 // hot-reload) set them to.
-const DefaultInstructions = `Sandswap runs your commands in hardware-isolated microVM sandboxes. A SandFS is your persistent workspace: a directory on shared storage that follows you across calls — the microVM itself holds nothing.
+const DefaultInstructions = `Sandswap runs your commands in hardware-isolated tinyVM sandboxes. A SandFS is your persistent workspace: a directory on shared storage that follows you across calls — the tinyVM itself holds nothing.
 
 How it works:
-- Every call is stateless: your API key + sandfs_id selects the sandbox; the SandFS is mounted into a microVM and your code runs inside it.
+- Every call is stateless: your API key + sandfs_id selects the sandbox; the SandFS is mounted into a tinyVM and your code runs inside it.
 - A call reusing the still-mounted sandbox is warm (~0.96 ms mount+exec); a fresh mount is cold (~2.3 ms). After ~{{sticky_ms}} ms of idleness the sandbox is swapped out asynchronously, off the response path.
 
 Choosing a SandFS:
@@ -49,7 +49,7 @@ Choosing a SandFS:
 
 Working efficiently:
 - Sync execs are HARD-CAPPED at {{max_exec_timeout_sec}} seconds: a larger requested timeout is clamped and the command killed at the cap. Any command that may run longer — builds, test suites, package installs, training — MUST use background:true (with lease_duration) and be polled via exec_status.
-- Reasoning between steps may let the sandbox swap out. PREFER letting it swap when you can tolerate a cold remount (~2.3 ms): a swapped-out sandbox returns its microVM to the shared pool for other agents — better resource reuse. Only for latency-critical sequences should you hold the warm path across a pause: start a background exec (e.g. sleep 60, optionally with lease_duration) — the sandbox stays mounted until it ends.
+- Reasoning between steps may let the sandbox swap out. PREFER letting it swap when you can tolerate a cold remount (~2.3 ms): a swapped-out sandbox returns its tinyVM to the shared pool for other agents — better resource reuse. Only for latency-critical sequences should you hold the warm path across a pause: start a background exec (e.g. sleep 60, optionally with lease_duration) — the sandbox stays mounted until it ends.
 - For long work use background:true: you get an exec_id to poll with exec_status (lease_duration caps the total runtime; exec_kill cancels). A status of "not_found" means the handle was lost — stop polling; re-create the job if its work is not already in the workspace.
 - Read the SandFS's self-description before exploring blindly. Two independent READMEs with two access paths: "cat /README.md" via EXEC (base-template/environment docs; read-only in overlay-mode SandFS) — the file tools CANNOT see the sandbox root, a leading "/" in a file-tool path is silently re-based onto /workspace — and /workspace/README.md via the FILE TOOLS (this instance's current task state). On conflict: /workspace = task state, / = environment layout.
 - Workspace files persist across switches, restarts, and aborts. Checkpoint idempotently (temp file + rename, progress markers) so interrupted work can resume.

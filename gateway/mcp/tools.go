@@ -51,7 +51,7 @@ func (s *MCPServer) buildToolsList(agentID string) []mcpTool {
 		sandfsIDProp["enum"] = sandfsEnum
 	}
 
-	// Abort contract. In-flight commands keep running inside the microVM
+	// Abort contract. In-flight commands keep running inside the tinyVM
 	// through a gateway outage (T_tolerance is their grace window), so a short
 	// blip or a rolling restart usually lets a sync command finish — but a
 	// reconnect, a long outage, or the etcd-partition self-fence releases the
@@ -87,7 +87,7 @@ func (s *MCPServer) buildToolsList(agentID string) []mcpTool {
 		},
 		{
 			Name:        "file_read",
-			Description: "Read a file from a SandFS sandbox (goes through microVM isolation)",
+			Description: "Read a file from a SandFS sandbox (goes through tinyVM isolation)",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -101,7 +101,7 @@ func (s *MCPServer) buildToolsList(agentID string) []mcpTool {
 		},
 		{
 			Name:        "file_write",
-			Description: "Write a file in a SandFS sandbox (goes through microVM isolation)",
+			Description: "Write a file in a SandFS sandbox (goes through tinyVM isolation)",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -205,7 +205,7 @@ func (s *MCPServer) buildToolsList(agentID string) []mcpTool {
 		},
 		{
 			Name:        "list_sandfs",
-			Description: "List available SandFS sandboxes with descriptions (from identity store, no microVM access)",
+			Description: "List available SandFS sandboxes with descriptions (from identity store, no tinyVM access)",
 			InputSchema: map[string]interface{}{
 				"type":       "object",
 				"properties": map[string]interface{}{},

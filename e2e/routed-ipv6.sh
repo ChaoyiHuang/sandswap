@@ -12,7 +12,7 @@
 #
 # routed-ipv6.sh — Guest-side e2e for the routed-IPv6 network backend with
 # identity-in-address stamping (docs/how-it-works/egress-enabler.md).
-# Boots REAL microVMs with -network-backend=routed-ipv6 and verifies the full
+# Boots REAL tinyVMs with -network-backend=routed-ipv6 and verifies the full
 # chain: provider → kernel cmdline → warden netlink → guest IPv6 up:
 #   V1. guest eth0 carries a static v6 address inside the site prefix;
 #   V2. the guest's default route points at the host-side TAP gateway (::1);
@@ -71,7 +71,7 @@ tc_ensure_dev_nodes
 # must fail at preflight, not mid-test. nc is deliberately NOT a host
 # prerequisite: the host-side listener is python3 (nc flavor semantics caused
 # the historical bind-race false fails) and the guest-side TCP probe uses the
-# busybox nc applet inside the microVM — no host nc binary is ever executed.
+# busybox nc applet inside the tinyVM — no host nc binary is ever executed.
 tc_check_tools curl python3 nft conntrack
 # The guest needs a v6-capable kernel: the upstream prebuilt ships
 # CONFIG_IPV6 unset (CH guests normally don't route v6), and a missing guest
@@ -291,7 +291,7 @@ PING_OUT=$(exec_guest "timeout 3 ping -6 -c1 -W2 $GW 2>&1 || true")
 # ICMPv6 echo to the host is INFORMATIONAL, not gating: the guard's allow row
 # provably admits the request (its counter increments), and NDP liveness is
 # already pinned by V2 (REACHABLE neighbor + working default route). On the
-# microVM stack the echo REPLY path has a pre-existing NDP/MAC wrinkle — the
+# tinyVM stack the echo REPLY path has a pre-existing NDP/MAC wrinkle — the
 # warden rebinds eth0's MAC after the kernel autoconfigured a first
 # link-local, leaving TWO link-locals on the device — so a missing echo reply
 # here does not indict the guard. Gating on it conflated two failures once.

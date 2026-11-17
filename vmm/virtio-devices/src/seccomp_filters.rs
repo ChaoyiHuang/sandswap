@@ -546,7 +546,7 @@ mod tests {
     /// server issues from the device thread and its children — pinned after
     /// the filter audit found enforce mode ("true") trapping them
     /// one by one (launcher.go's seccomp note). Removing any entry re-opens
-    /// the gap that keeps `microvm.vmm_seccomp` stuck on "log"; if a removal
+    /// the gap that keeps `tinyvm.vmm_seccomp` stuck on "log"; if a removal
     /// is ever deliberate, the e2e enforce-mode battery must be re-run first.
     #[test]
     fn virtio_fs_rules_cover_audit_named_gaps() {

@@ -31,8 +31,8 @@ import (
 	"sandlot/provision/volname"
 )
 
-// MicroVMConfig holds the microVM hardware parameters.
-type MicroVMConfig struct {
+// TinyVMConfig holds the tinyVM hardware parameters.
+type TinyVMConfig struct {
 	Kernel             string `yaml:"kernel"`
 	Initramfs          string `yaml:"initramfs"`
 	DefaultVCPUs       uint32 `yaml:"default_vcpus"`
@@ -91,7 +91,7 @@ type MicroVMConfig struct {
 	WardenLogLevel string `yaml:"warden_log"`
 	// InitOnFree re-enables the guest kernel's free-time page wipe
 	// (init_on_free=1 on every VM's kernel cmdline). Default false: a fresh
-	// microVM's RAM is host anonymous mmap (untouched pages already
+	// tinyVM's RAM is host anonymous mmap (untouched pages already
 	// host-zero) and the kernel config's INIT_ON_FREE_DEFAULT_ON boot-time
 	// bulk clear costs ~0.65ms/MB of pure redundancy (boot becomes
 	// RAM-independent with the override); init_on_alloc stays on either way
@@ -103,7 +103,7 @@ type MicroVMConfig struct {
 	InitOnFree bool `yaml:"init_on_free"`
 }
 
-// SpecEntry defines a single microVM spec's resource parameters.
+// SpecEntry defines a single tinyVM spec's resource parameters.
 type SpecEntry struct {
 	VCPUs    uint32 `yaml:"vcpus"`
 	MemoryMB uint64 `yaml:"memory_mb"`
@@ -173,10 +173,10 @@ func (r RecycleConfig) Validate() error {
 // stretches a pool scale-up across every boot in sequence. Both values are
 // restart-required (they size the batch worker pools at startup).
 type ConcurrencyConfig struct {
-	// VMCreate is the maximum number of microVMs booting at once during a
+	// VMCreate is the maximum number of tinyVMs booting at once during a
 	// pool scale-up, reconcile fill, or startup pre-create. Default 5.
 	VMCreate int `yaml:"vm_create"`
-	// VMDestroy is the maximum number of idle microVMs destroyed at once
+	// VMDestroy is the maximum number of idle tinyVMs destroyed at once
 	// during a pool scale-down. Default 10.
 	VMDestroy int `yaml:"vm_destroy"`
 }
@@ -194,8 +194,8 @@ func (c ConcurrencyConfig) Validate() error {
 	return nil
 }
 
-// MinBootMemoryMB is the minimum memory (MiB) for a microVM to boot the kernel
-// + warden and run a minimal workload. Specs (and the microvm default) below
+// MinBootMemoryMB is the minimum memory (MiB) for a tinyVM to boot the kernel
+// + warden and run a minimal workload. Specs (and the tinyvm default) below
 // this are rejected at validation/parse time rather than failing later inside
 // KVM with a confusing per-VM error.
 const MinBootMemoryMB = 64
@@ -211,7 +211,7 @@ const MaxExecSlots = 12
 // every hot-reload application (an invalid edit is rejected whole — same rule
 // as startup — and the watchable config keeps the last good value):
 //   - recycle: see RecycleConfig.Validate
-//   - microvm defaults: vcpus/memory must be >= 1 (memory >= MinBootMemoryMB).
+//   - tinyvm defaults: vcpus/memory must be >= 1 (memory >= MinBootMemoryMB).
 //     The CLI flag path converts int → uint32/uint64, where a typo'd negative
 //     silently wraps to an absurd value and every VM creation fails with a
 //     confusing KVM error; 0 fails the same way without the confusion.
@@ -234,23 +234,23 @@ func (c SandlotConfig) Validate() error {
 	default:
 		return fmt.Errorf("setfs_transport must be \"raw\" or \"http\", got %q", c.SetFsTransport)
 	}
-	if c.MicroVM.DefaultVCPUs < 1 {
-		return fmt.Errorf("microvm.default_vcpus must be >= 1, got %d", c.MicroVM.DefaultVCPUs)
+	if c.TinyVM.DefaultVCPUs < 1 {
+		return fmt.Errorf("tinyvm.default_vcpus must be >= 1, got %d", c.TinyVM.DefaultVCPUs)
 	}
-	if c.MicroVM.DefaultMemoryMB < MinBootMemoryMB {
-		return fmt.Errorf("microvm.default_memory_mb must be >= %d (a smaller VM cannot boot the kernel + warden), got %d",
-			MinBootMemoryMB, c.MicroVM.DefaultMemoryMB)
+	if c.TinyVM.DefaultMemoryMB < MinBootMemoryMB {
+		return fmt.Errorf("tinyvm.default_memory_mb must be >= %d (a smaller VM cannot boot the kernel + warden), got %d",
+			MinBootMemoryMB, c.TinyVM.DefaultMemoryMB)
 	}
-	if (c.MicroVM.VMMUid == 0) != (c.MicroVM.VMMGid == 0) {
-		return fmt.Errorf("microvm.vmm_uid and microvm.vmm_gid must be set together (got uid=%d gid=%d)", c.MicroVM.VMMUid, c.MicroVM.VMMGid)
+	if (c.TinyVM.VMMUid == 0) != (c.TinyVM.VMMGid == 0) {
+		return fmt.Errorf("tinyvm.vmm_uid and tinyvm.vmm_gid must be set together (got uid=%d gid=%d)", c.TinyVM.VMMUid, c.TinyVM.VMMGid)
 	}
-	if c.MicroVM.VMMUid > 0 && c.MicroVM.APIGid == 0 {
-		return fmt.Errorf("microvm.api_gid must be > 0 when vmm_uid is set (sandlot could not connect to the 0600 owner-only API sockets of a different identity)")
+	if c.TinyVM.VMMUid > 0 && c.TinyVM.APIGid == 0 {
+		return fmt.Errorf("tinyvm.api_gid must be > 0 when vmm_uid is set (sandlot could not connect to the 0600 owner-only API sockets of a different identity)")
 	}
-	switch c.MicroVM.VMMSeccomp {
+	switch c.TinyVM.VMMSeccomp {
 	case "", "true", "false", "log":
 	default:
-		return fmt.Errorf("microvm.vmm_seccomp %q: must be true|false|log (log = audit, true = enforce); the upstream KillProcess mode is unsupported because it installs empty per-thread filters", c.MicroVM.VMMSeccomp)
+		return fmt.Errorf("tinyvm.vmm_seccomp %q: must be true|false|log (log = audit, true = enforce); the upstream KillProcess mode is unsupported because it installs empty per-thread filters", c.TinyVM.VMMSeccomp)
 	}
 	if c.Stream.SendBufferSize < 1 {
 		return fmt.Errorf("stream.send_buffer_size must be >= 1, got %d", c.Stream.SendBufferSize)
@@ -772,7 +772,7 @@ type SandlotConfig struct {
 	GatewayAddr  string               `yaml:"gateway_addr"`
 	NodeID       string               `yaml:"node_id"`
 	VMMBinary    string               `yaml:"vmm_binary"`
-	MicroVM      MicroVMConfig        `yaml:"microvm"`
+	TinyVM      TinyVMConfig        `yaml:"tinyvm"`
 	Specs        map[string]SpecEntry `yaml:"specs"`
 	Pool         string               `yaml:"pool"`
 	Recycle      RecycleConfig        `yaml:"recycle"`
@@ -794,7 +794,7 @@ type SandlotConfig struct {
 	Resilience     ResilienceConfig `yaml:"resilience"`
 
 	// Roles selects this instance's capability sets (restart-required):
-	//   ["exec"]      — the exec plane (microVM lifecycle, mounts, exec/file
+	//   ["exec"]      — the exec plane (tinyVM lifecycle, mounts, exec/file
 	//                   ops). The historical per-node daemon; also the default
 	//                   and the meaning of an empty/absent value.
 	//   ["prov"]      — the provision role: sandfs + template lifecycle on
@@ -866,7 +866,7 @@ const (
 	DefaultSetFsTransport = "raw"
 	DefaultVMMAPIAuth     = true
 	// DefaultInitOnFree is the guest free-wipe posture default (false = boot
-	// with init_on_free=0; see MicroVMConfig.InitOnFree for the rationale).
+	// with init_on_free=0; see TinyVMConfig.InitOnFree for the rationale).
 	DefaultInitOnFree = false
 
 	DefaultMaxProvisionOps       = 2
@@ -1000,7 +1000,7 @@ func Defaults() SandlotConfig {
 		GatewayAddr: DefaultGatewayAddr,
 		NodeID:      "",
 		VMMBinary:   DefaultVMMBinary,
-		MicroVM: MicroVMConfig{
+		TinyVM: TinyVMConfig{
 			Kernel:          DefaultKernelPath,
 			Initramfs:       DefaultInitramfsPath,
 			DefaultVCPUs:    DefaultVCPUs,
@@ -1012,7 +1012,7 @@ func Defaults() SandlotConfig {
 			// foreign accounts resolve differently (common/sh/runtime.sh
 			// ss_ensure_service_users adopts/auto-picks, then exports these
 			// SANDSWAP_* env vars into the service environment). Env wins
-			// over the pinned default; an explicit YAML microvm.vmm_uid
+			// over the pinned default; an explicit YAML tinyvm.vmm_uid
 			// still wins over both (config file beats defaults). "kvm"
 			// resolves per-host.
 			VMMUid:     envU32("SANDSWAP_VMM_UID", defaultVMMUID),
@@ -1028,7 +1028,7 @@ func Defaults() SandlotConfig {
 			// set-fs. Explicit `vmm_api_auth: false` / `-vmm-api-auth=false`
 			// remains for test tooling that must drive the socket directly.
 			VMMAPIAuth: true,
-			// Guest free-wipe posture default: OFF (see MicroVMConfig.InitOnFree).
+			// Guest free-wipe posture default: OFF (see TinyVMConfig.InitOnFree).
 			// The bool's zero value carries it; listed so the default is
 			// discoverable next to the other posture pins.
 			InitOnFree: false,
@@ -1121,9 +1121,9 @@ func parseRolesFlag(s string) []string {
 // requires a restart.
 func classifyField(name string) config.ChangeClass {
 	switch {
-	// microvm.*: hot-reload (affects new VMs only)
-	case name == "microvm.kernel", name == "microvm.initramfs",
-		name == "microvm.default_vcpus", name == "microvm.default_memory_mb":
+	// tinyvm.*: hot-reload (affects new VMs only)
+	case name == "tinyvm.kernel", name == "tinyvm.initramfs",
+		name == "tinyvm.default_vcpus", name == "tinyvm.default_memory_mb":
 		return config.ChangeHotReload
 	// pool: hot-reload (adjust pool target)
 	case name == "pool":
@@ -1245,11 +1245,11 @@ type SandlotFlags struct {
 	WardenCountdownSec int // -warden-countdown-sec
 	IsolationSec       int // -isolation-sec
 
-	// Warden cmdline overrides (microvm.* YAML keys; RESTART-REQUIRED —
+	// Warden cmdline overrides (tinyvm.* YAML keys; RESTART-REQUIRED —
 	// deliberately not hot-reloadable: an online warden_log=debug flip would
 	// enable UART-taxed debug logging on every new VM at fleet scale, so the
 	// restart is the safety gate. classifyField keeps them restart-required and
-	// a microvm.* hot-reload preserves these startup values.)
+	// a tinyvm.* hot-reload preserves these startup values.)
 	WardenMaxExecTimeoutSec int    // -warden-max-exec-timeout-sec
 	WardenLogLevel          string // -warden-log
 	InitOnFree              bool   // -init-on-free
@@ -1290,10 +1290,10 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 		cfg.NodeID = flags.NodeID
 	}
 	if explicitSet["kernel"] {
-		cfg.MicroVM.Kernel = flags.Kernel
+		cfg.TinyVM.Kernel = flags.Kernel
 	}
 	if explicitSet["initramfs"] {
-		cfg.MicroVM.Initramfs = flags.Initramfs
+		cfg.TinyVM.Initramfs = flags.Initramfs
 	}
 	if explicitSet["default-vcpus"] {
 		// Refuse the negative BEFORE the int→uint cast: the wrap is silent and
@@ -1303,23 +1303,23 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 			cfg.applyErr = fmt.Errorf("invalid -default-vcpus %d (must be >= 1)", flags.DefaultVCPUs)
 			return
 		}
-		cfg.MicroVM.DefaultVCPUs = uint32(flags.DefaultVCPUs)
+		cfg.TinyVM.DefaultVCPUs = uint32(flags.DefaultVCPUs)
 	}
 	if explicitSet["default-memory"] {
 		if flags.DefaultMemMB < MinBootMemoryMB {
 			cfg.applyErr = fmt.Errorf("invalid -default-memory %d (must be >= %d MB)", flags.DefaultMemMB, MinBootMemoryMB)
 			return
 		}
-		cfg.MicroVM.DefaultMemoryMB = uint64(flags.DefaultMemMB)
+		cfg.TinyVM.DefaultMemoryMB = uint64(flags.DefaultMemMB)
 	}
 	if explicitSet["vmm-binary"] {
 		cfg.VMMBinary = flags.VMMBinary
 	}
 	if explicitSet["volumes-dir"] {
-		cfg.MicroVM.VolumesDir = flags.VolumesDir
+		cfg.TinyVM.VolumesDir = flags.VolumesDir
 	}
 	if explicitSet["overlayfs-templates"] {
-		cfg.MicroVM.OverlayFSTemplates = flags.TemplatesDir
+		cfg.TinyVM.OverlayFSTemplates = flags.TemplatesDir
 	}
 	if explicitSet["warden-max-exec-timeout-sec"] {
 		// -1 is NOT "unlimited" here (that sentinel belongs to -max-uses): the
@@ -1337,13 +1337,13 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 			cfg.applyErr = fmt.Errorf("invalid -warden-max-exec-timeout-sec %d (must be <= %d)", flags.WardenMaxExecTimeoutSec, wardenMaxExecTimeoutCeiling)
 			return
 		}
-		cfg.MicroVM.WardenMaxExecTimeoutSec = uint32(flags.WardenMaxExecTimeoutSec)
+		cfg.TinyVM.WardenMaxExecTimeoutSec = uint32(flags.WardenMaxExecTimeoutSec)
 	}
 	if explicitSet["warden-log"] {
-		cfg.MicroVM.WardenLogLevel = flags.WardenLogLevel
+		cfg.TinyVM.WardenLogLevel = flags.WardenLogLevel
 	}
 	if explicitSet["init-on-free"] {
-		cfg.MicroVM.InitOnFree = flags.InitOnFree
+		cfg.TinyVM.InitOnFree = flags.InitOnFree
 	}
 	if explicitSet["pool"] {
 		cfg.Pool = flags.PoolSpec
@@ -1418,7 +1418,7 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 		cfg.SetFsTransport = flags.SetFsTransport
 	}
 	if explicitSet["vmm-api-auth"] {
-		cfg.MicroVM.VMMAPIAuth = flags.VMMAPIAuth
+		cfg.TinyVM.VMMAPIAuth = flags.VMMAPIAuth
 	}
 	if explicitSet["boxout-socket"] {
 		cfg.BoxoutSocket = flags.BoxoutSocket
@@ -1525,7 +1525,7 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 // envU32 returns the SANDSWAP_* environment override of `def` when set to a
 // valid u32, else `def`. Used by Defaults() so the deployer's RESOLVED
 // service identities (occupied-slot adoption/auto-pick in
-// common/sh/runtime.sh) flow into microvm.vmm_uid/vmm_gid/api_gid without a
+// common/sh/runtime.sh) flow into tinyvm.vmm_uid/vmm_gid/api_gid without a
 // per-host YAML. Malformed values fall back to the default (the deployer
 // always exports numbers; a malformed env is a bug to surface at Validate,
 // not a startup crash).

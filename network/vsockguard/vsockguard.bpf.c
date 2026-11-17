@@ -23,7 +23,7 @@
 // Threat model: a non-privileged local user on the sandlot host can open an
 // AF_VSOCK socket and connect() to any guest CID:port WITHOUT going through any
 // device node (AF_VSOCK uses socket(2) directly, not /dev/vhost-vsock). Every
-// microVM's warden listens on vsock port 1024 and performs ZERO authentication
+// tinyVM's warden listens on vsock port 1024 and performs ZERO authentication
 // (only a 4-byte frame magic that guards against garbage, not attackers). So a
 // local user could connect to a warden, send mount+exec frames, and read/modify
 // any agent's persisted data.

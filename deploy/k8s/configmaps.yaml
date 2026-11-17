@@ -103,14 +103,14 @@ metadata:
 data:
   sandlot.yaml: |
     # Sandlot configuration (shared by embedded and boxout modes).
-    # Hot-reloadable: pool, microvm.*, recycle.*
+    # Hot-reloadable: pool, tinyvm.*, recycle.*
     # Restart-required: gateway_addr, network.*, tls.*, vm_mode, boxout_socket
     # The headless gateway Service (both agent 3000 + stream 9998). On first
     # connect kube-proxy picks one gateway pod; the sandlot remembers its last
     # gateway and re-dials that pod's stream FQDN on reconnect.
     gateway_addr: gateway-exec.sandswap.svc.cluster.local:9998
     vmm_binary: /sandvmm
-    microvm:
+    tinyvm:
       volumes_dir: /sandswap/volumes
       kernel: /sandswap-host/vmlinux.bin
       initramfs: /sandswap-host/initramfs.cpio.gz
@@ -205,7 +205,7 @@ data:
     # (ops are idempotent; any replica can serve any op).
     gateway_addr: gateway-human.sandswap.svc.cluster.local:9998
     roles: [prov]
-    microvm:
+    tinyvm:
       # Path convention for the volumes tree (shared with the compute pods);
       # no kernel/initramfs needed — this instance never creates a VM.
       volumes_dir: /sandswap/volumes

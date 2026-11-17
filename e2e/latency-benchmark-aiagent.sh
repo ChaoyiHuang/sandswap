@@ -261,7 +261,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 tc_deploy_artifacts
 if [[ "$PIN_MODE" == "1" ]]; then
@@ -297,7 +297,7 @@ log_section "Phase 3: Start sandlot (connects to gateway, mTLS)"
 # injected as a named `bench` spec so the benchmark never inherits the
 # sandlot's built-in `small` defaults (2 vCPU/256 MiB). One vCPU leaves the
 # second SMT thread of the VM's physical core for its vhost/virtiofs
-# threads, so each microVM can own one whole physical core without
+# threads, so each tinyVM can own one whole physical core without
 # cross-core scheduling.
 AIAGENT_CFG="$DEPLOY_DIR/sandlot-aiagent.yaml"
 tc_gen_sandlot_config "$AIAGENT_CFG"

@@ -468,7 +468,7 @@ echo "  dns stream:  $(dig @127.0.0.1 sandswap-stream.local +short 2>/dev/null |
 
 # ──── Affinity Self-Test (registry + redirect + owner-aware DNS + G1/G2, no LLM) ────
 # Mirrors the k8s deploy's Phase 8 affinity self-check: verifies the per-sandfs
-# owner-aware DNS zone, real microVM exec through the sandfs URL (wildcard cert),
+# owner-aware DNS zone, real tinyVM exec through the sandfs URL (wildcard cert),
 # 307 redirect from a non-owner, and the G1/G2 fault-state signal + takeover.
 # On this single-host sim both gateways share HOST_IP, so the owner-aware DNS
 # A-record is the same IP either way — ownership is verified via etcd (gateway_id)

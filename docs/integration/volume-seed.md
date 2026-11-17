@@ -68,7 +68,7 @@ runtime guards assume them; breaking one turns a rotation into an outage
    the prov identity reads it (the prov units carry
    `SupplementaryGroups=… sandprov`); the sandvmm identity (987) must not read
    the seed — every sandvmm spawn replaces its supplementary-group set with
-   exactly `microvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when
+   exactly `tinyvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when
    empty), so the merged sandlot's sandprov grant is never inherited by the
    VMM/FUSE passthrough daemon — and nobody else may REPLACE it: a
    world-writable parent directory defeats the file's own mode. On k8s the

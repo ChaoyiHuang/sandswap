@@ -14,7 +14,7 @@
 # occupant adversary): kernel objects AND tmpfs/proc/dev state that could
 # outlive the rule-A process sweep across a real agent switch.
 #
-# One microVM (pool forced to 1) serves agent A, then agent B. The channels
+# One tinyVM (pool forced to 1) serves agent A, then agent B. The channels
 # this suite pins:
 #
 #   - SysV message queue / shared memory segment (guest IPC namespace)
@@ -54,7 +54,7 @@ export PATH
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/e2e/common.sh"
 
-# Force a single microVM so the A→B transition is an agent switch (hot-swap),
+# Force a single tinyVM so the A→B transition is an agent switch (hot-swap),
 # not a second cold VM. (Consumed by tc_start_sandlot in common.sh.)
 # shellcheck disable=SC2034
 SANDLOT_POOL="medium:1"
@@ -490,7 +490,7 @@ log_info "B probe output: $OUT_B"
 VM_PID_AFTER=$(tc_run_vm_pids | head -n1)
 [[ -n "$VM_PID_AFTER" && "$VM_PID_AFTER" == "$VM_PID_BEFORE" ]] \
     || { log_error "VM changed across the A→B switch (sandvmm pid ${VM_PID_BEFORE} → ${VM_PID_AFTER:-<none>}) — a fresh VM also shows GONE; the sweep was never exercised"; exit 1; }
-pass "same microVM served A then B (sandvmm pid $VM_PID_BEFORE) — the GONE verdicts are meaningful"
+pass "same tinyVM served A then B (sandvmm pid $VM_PID_BEFORE) — the GONE verdicts are meaningful"
 fail=0
 # kcore: MASKED (kernel ships /proc/kcore, warden covers it with /dev/null) or
 # ABSENT (the guest-kernel minimization compiles CONFIG_PROC_KCORE out — the

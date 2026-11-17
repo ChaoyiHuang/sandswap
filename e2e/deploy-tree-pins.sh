@@ -1203,12 +1203,12 @@ for d in docs(f"{y}/configmaps.yaml"):
         if isinstance(v, str) and "api_gid:" in v:
             cm = yaml.safe_load(v)
 if cm is None:
-    fails.append("configmaps.yaml: no ConfigMap carries microvm.api_gid (renamed?)")
+    fails.append("configmaps.yaml: no ConfigMap carries tinyvm.api_gid (renamed?)")
 else:
-    mv = (cm.get("microvm") or {})
-    add("api_gid", "configmaps.yaml microvm.api_gid", mv.get("api_gid"))
+    mv = (cm.get("tinyvm") or {})
+    add("api_gid", "configmaps.yaml tinyvm.api_gid", mv.get("api_gid"))
     groups = [g.strip() for g in str(mv.get("vmm_groups") or "").split(",") if g.strip().isdigit()]
-    add("vmm_groups grant", "configmaps.yaml microvm.vmm_groups", groups[-1] if groups else None)
+    add("vmm_groups grant", "configmaps.yaml tinyvm.vmm_groups", groups[-1] if groups else None)
 
 # ── the rules ──
 values = {}

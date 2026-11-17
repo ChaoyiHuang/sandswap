@@ -141,7 +141,7 @@ def emit(kind, v):
     if not os.path.isabs(v):
         v = os.path.join(os.path.dirname(os.path.abspath(cfg)), v)
     print("%s\t%s" % (kind, v))
-emit("volroot", (doc.get("microvm") or {}).get("volumes_dir"))
+emit("volroot", (doc.get("tinyvm") or {}).get("volumes_dir"))
 emit("tpl", doc.get("overlayfs_templates"))
 prov = doc.get("provision") or {}
 emit("tpl", prov.get("templates_dir"))
@@ -418,7 +418,7 @@ check_dev_owner /dev/vsock sandlot
 # owned by that uid and pre-configures it (MTU/bridge/up); the VMM's attach is
 # an owner-match TUNSETIFF, so no capability is needed.
 # The VMM binaries are named `sandvmm` (build output / k8s image) or
-# `sandswap-sandvmm` (the bare-metal install name, which microvm.vmm_binary
+# `sandswap-sandvmm` (the bare-metal install name, which tinyvm.vmm_binary
 # points at); enumerate by the /proc exe image, never by comm (truncated) or
 # argv (forgeable).
 _sandvmm_pids() {
@@ -459,7 +459,7 @@ if [[ -n "$SVMM_PIDS" ]]; then
         # supplementary set: with it, the FUSE daemon reads the seed and every
         # tenant's derived name (the same hole the file-mode check catches
         # statically — this is the live form, and it also catches a
-        # microvm.vmm_groups config that hands the group down).
+        # tinyvm.vmm_groups config that hands the group down).
         #
         # /proc/<pid>/status separates the gid list from "Groups:" with a TAB,
         # so parsing with cut and matching " $gid " missed the FIRST gid of
@@ -479,7 +479,7 @@ if [[ -n "$SVMM_PIDS" ]]; then
     fi
     if [[ -n "$seed_leak_pids" ]]; then
         bad "sandvmm process(es) carry the seed's group $SANDPROV_GROUP:$seed_leak_pids — the FUSE daemon could read the volume-name seed"
-        echo "      fix: the sandvmm spawn must set its supplementary groups EXPLICITLY (sandlot/vmm/launcher.go: setpriv --groups = microvm.vmm_groups only, --clear-groups when empty) and microvm.vmm_groups must not name the seed group; restart sandlot"
+        echo "      fix: the sandvmm spawn must set its supplementary groups EXPLICITLY (sandlot/vmm/launcher.go: setpriv --groups = tinyvm.vmm_groups only, --clear-groups when empty) and tinyvm.vmm_groups must not name the seed group; restart sandlot"
     elif [[ -n "$seed_gid" ]]; then
         ok "running sandvmm processes do not carry the seed's group ($SANDPROV_GROUP)"
     fi

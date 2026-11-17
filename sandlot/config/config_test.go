@@ -28,11 +28,11 @@ func TestDefaults(t *testing.T) {
 	if d.GatewayAddr != "localhost:9998" {
 		t.Errorf("GatewayAddr = %q, want localhost:9998", d.GatewayAddr)
 	}
-	if d.MicroVM.DefaultVCPUs != 2 {
-		t.Errorf("DefaultVCPUs = %d, want 2", d.MicroVM.DefaultVCPUs)
+	if d.TinyVM.DefaultVCPUs != 2 {
+		t.Errorf("DefaultVCPUs = %d, want 2", d.TinyVM.DefaultVCPUs)
 	}
-	if d.MicroVM.DefaultMemoryMB != 512 {
-		t.Errorf("DefaultMemoryMB = %d, want 512", d.MicroVM.DefaultMemoryMB)
+	if d.TinyVM.DefaultMemoryMB != 512 {
+		t.Errorf("DefaultMemoryMB = %d, want 512", d.TinyVM.DefaultMemoryMB)
 	}
 	if d.Recycle.MaxUses != 100000 {
 		t.Errorf("Recycle.MaxUses = %d, want 100000", d.Recycle.MaxUses)
@@ -54,14 +54,14 @@ func TestDefaults(t *testing.T) {
 	}
 	// The canonical VMM API socket is authenticated by default: DAC alone is
 	// one uid boundary (the FUSE daemon shares it).
-	if !d.MicroVM.VMMAPIAuth {
-		t.Error("MicroVM.VMMAPIAuth = false, want true (default-on per-VM API token)")
+	if !d.TinyVM.VMMAPIAuth {
+		t.Error("TinyVM.VMMAPIAuth = false, want true (default-on per-VM API token)")
 	}
 	// Free-wipe posture is opt-in: the default boots with init_on_free=0
-	// (boot-time bulk clear is redundant in a fresh microVM; init_on_alloc
+	// (boot-time bulk clear is redundant in a fresh tinyVM; init_on_alloc
 	// stays on and carries the cross-tenant control).
-	if d.MicroVM.InitOnFree {
-		t.Error("MicroVM.InitOnFree = true, want false (opt-in posture)")
+	if d.TinyVM.InitOnFree {
+		t.Error("TinyVM.InitOnFree = true, want false (opt-in posture)")
 	}
 }
 
@@ -73,7 +73,7 @@ func TestLoadFromFile(t *testing.T) {
 gateway_addr: "gateway:9998"
 node_id: "node-1"
 vmm_binary: "/usr/local/bin/sandvmm"
-microvm:
+tinyvm:
   kernel: "/custom/vmlinux"
   initramfs: "/custom/initramfs.cpio.gz"
   default_vcpus: 4
@@ -127,11 +127,11 @@ provision:
 	if cfg.GatewayAddr != "gateway:9998" {
 		t.Errorf("GatewayAddr = %q, want gateway:9998", cfg.GatewayAddr)
 	}
-	if cfg.MicroVM.DefaultVCPUs != 4 {
-		t.Errorf("DefaultVCPUs = %d, want 4", cfg.MicroVM.DefaultVCPUs)
+	if cfg.TinyVM.DefaultVCPUs != 4 {
+		t.Errorf("DefaultVCPUs = %d, want 4", cfg.TinyVM.DefaultVCPUs)
 	}
-	if cfg.MicroVM.DefaultMemoryMB != 1024 {
-		t.Errorf("DefaultMemoryMB = %d, want 1024", cfg.MicroVM.DefaultMemoryMB)
+	if cfg.TinyVM.DefaultMemoryMB != 1024 {
+		t.Errorf("DefaultMemoryMB = %d, want 1024", cfg.TinyVM.DefaultMemoryMB)
 	}
 	if len(cfg.Specs) != 4 {
 		t.Errorf("len(Specs) = %d, want 4 (3 from YAML + large from defaults)", len(cfg.Specs))
@@ -169,7 +169,7 @@ provision:
 func TestDiffHotReload(t *testing.T) {
 	old := Defaults()
 	new := Defaults()
-	new.MicroVM.DefaultVCPUs = 4
+	new.TinyVM.DefaultVCPUs = 4
 	new.Recycle.MaxUses = 100
 
 	cs := old.Diff(new)
@@ -201,10 +201,10 @@ func TestClassifyField(t *testing.T) {
 		name string
 		want config.ChangeClass
 	}{
-		{"microvm.kernel", config.ChangeHotReload},
-		{"microvm.initramfs", config.ChangeHotReload},
-		{"microvm.default_vcpus", config.ChangeHotReload},
-		{"microvm.default_memory_mb", config.ChangeHotReload},
+		{"tinyvm.kernel", config.ChangeHotReload},
+		{"tinyvm.initramfs", config.ChangeHotReload},
+		{"tinyvm.default_vcpus", config.ChangeHotReload},
+		{"tinyvm.default_memory_mb", config.ChangeHotReload},
 		{"pool", config.ChangeHotReload},
 		{"recycle.max_uses", config.ChangeHotReload},
 		{"recycle.mem_percent", config.ChangeHotReload},
@@ -214,7 +214,7 @@ func TestClassifyField(t *testing.T) {
 		{"gateway_addr", config.ChangeRestartRequired},
 		{"node_id", config.ChangeRestartRequired},
 		{"vmm_binary", config.ChangeRestartRequired},
-		{"microvm.volumes_dir", config.ChangeRestartRequired},
+		{"tinyvm.volumes_dir", config.ChangeRestartRequired},
 		{"network.backend", config.ChangeRestartRequired},
 		{"tls.cert", config.ChangeRestartRequired},
 		{"instance.id", config.ChangeRestartRequired},
@@ -247,8 +247,8 @@ func TestApplyFlagOverrides(t *testing.T) {
 
 	cfg.ApplyFlagOverrides(flags, explicitSet)
 
-	if cfg.MicroVM.DefaultVCPUs != 8 {
-		t.Errorf("DefaultVCPUs = %d, want 8 (flag override)", cfg.MicroVM.DefaultVCPUs)
+	if cfg.TinyVM.DefaultVCPUs != 8 {
+		t.Errorf("DefaultVCPUs = %d, want 8 (flag override)", cfg.TinyVM.DefaultVCPUs)
 	}
 	if cfg.Recycle.MaxUses != 200 {
 		t.Errorf("Recycle.MaxUses = %d, want 200 (flag override)", cfg.Recycle.MaxUses)
@@ -267,23 +267,23 @@ func TestApplyFlagOverrides(t *testing.T) {
 // the default (flags keep precedence — the documented contract).
 func TestApplyFlagOverrides_InitOnFree(t *testing.T) {
 	cfg := Defaults()
-	cfg.MicroVM.InitOnFree = true
+	cfg.TinyVM.InitOnFree = true
 	flags := &SandlotFlags{InitOnFree: false}
 	cfg.ApplyFlagOverrides(flags, map[string]bool{}) // flag not on the command line
-	if !cfg.MicroVM.InitOnFree {
-		t.Error("unset -init-on-free must not clobber microvm.init_on_free: true")
+	if !cfg.TinyVM.InitOnFree {
+		t.Error("unset -init-on-free must not clobber tinyvm.init_on_free: true")
 	}
 	flags.InitOnFree = true
 	cfg.ApplyFlagOverrides(flags, map[string]bool{"init-on-free": true})
-	if !cfg.MicroVM.InitOnFree {
+	if !cfg.TinyVM.InitOnFree {
 		t.Error("explicit -init-on-free did not apply")
 	}
 	// And the off direction: YAML true, explicit flag false → false wins.
-	cfg.MicroVM.InitOnFree = true
+	cfg.TinyVM.InitOnFree = true
 	flags.InitOnFree = false
 	cfg.ApplyFlagOverrides(flags, map[string]bool{"init-on-free": true})
-	if cfg.MicroVM.InitOnFree {
-		t.Error("explicit -init-on-free=false did not override microvm.init_on_free: true")
+	if cfg.TinyVM.InitOnFree {
+		t.Error("explicit -init-on-free=false did not override tinyvm.init_on_free: true")
 	}
 }
 
@@ -448,7 +448,7 @@ func TestReloadCallbackRejectsInvalidRecycle(t *testing.T) {
 
 // TestSandlotConfigValidate pins the whole-config value bounds enforced at
 // startup AND on every hot-reload ingestion (an invalid edit is rejected
-// whole): recycle sentinels, microvm default vcpus/memory (the CLI flag path
+// whole): recycle sentinels, tinyvm default vcpus/memory (the CLI flag path
 // int→uint conversion would otherwise silently wrap a negative), stream
 // transport caps, and the instance CID range.
 func TestSandlotConfigValidate(t *testing.T) {
@@ -460,9 +460,9 @@ func TestSandlotConfigValidate(t *testing.T) {
 		{"defaults valid", func(c *SandlotConfig) {}, false},
 		{"recycle sentinel unchanged", func(c *SandlotConfig) { c.Recycle.MaxUses = -1 }, false},
 		{"recycle other negative invalid", func(c *SandlotConfig) { c.Recycle.MaxUses = -2 }, true},
-		{"default vcpus 0 invalid", func(c *SandlotConfig) { c.MicroVM.DefaultVCPUs = 0 }, true},
-		{"default memory below boot floor invalid", func(c *SandlotConfig) { c.MicroVM.DefaultMemoryMB = 32 }, true},
-		{"default memory at boot floor valid", func(c *SandlotConfig) { c.MicroVM.DefaultMemoryMB = 64 }, false},
+		{"default vcpus 0 invalid", func(c *SandlotConfig) { c.TinyVM.DefaultVCPUs = 0 }, true},
+		{"default memory below boot floor invalid", func(c *SandlotConfig) { c.TinyVM.DefaultMemoryMB = 32 }, true},
+		{"default memory at boot floor valid", func(c *SandlotConfig) { c.TinyVM.DefaultMemoryMB = 64 }, false},
 		{"stream send buffer 0 invalid", func(c *SandlotConfig) { c.Stream.SendBufferSize = 0 }, true},
 		{"stream max concurrent 0 invalid", func(c *SandlotConfig) { c.Stream.MaxConcurrentCommands = 0 }, true},
 		{"stream window 0 invalid", func(c *SandlotConfig) { c.Stream.InitialWindow = 0 }, true},
@@ -519,14 +519,14 @@ func TestSandlotConfigValidate(t *testing.T) {
 // value must never reach sandvmm (which rejects it too).
 func TestVMMSeccompRejectsProcess(t *testing.T) {
 	cfg := Defaults()
-	cfg.MicroVM.VMMSeccomp = "process"
+	cfg.TinyVM.VMMSeccomp = "process"
 	if err := cfg.Validate(); err == nil {
-		t.Fatal("microvm.vmm_seccomp=process accepted")
+		t.Fatal("tinyvm.vmm_seccomp=process accepted")
 	}
 	for _, ok := range []string{"", "true", "false", "log"} {
-		cfg.MicroVM.VMMSeccomp = ok
+		cfg.TinyVM.VMMSeccomp = ok
 		if err := cfg.Validate(); err != nil {
-			t.Fatalf("microvm.vmm_seccomp=%q rejected: %v", ok, err)
+			t.Fatalf("tinyvm.vmm_seccomp=%q rejected: %v", ok, err)
 		}
 	}
 }
@@ -573,12 +573,12 @@ func TestDefaultsEnvOverridesServiceIdentities(t *testing.T) {
 	t.Setenv("SANDSWAP_API_GID", "603")
 	t.Setenv("SANDSWAP_VMM_GROUPS", "kvm,603")
 	cfg := Defaults()
-	if cfg.MicroVM.VMMUid != 601 || cfg.MicroVM.VMMGid != 602 || cfg.MicroVM.APIGid != 603 || cfg.MicroVM.VMMGroups != "kvm,603" {
-		t.Errorf("env overrides not honored: %+v", cfg.MicroVM)
+	if cfg.TinyVM.VMMUid != 601 || cfg.TinyVM.VMMGid != 602 || cfg.TinyVM.APIGid != 603 || cfg.TinyVM.VMMGroups != "kvm,603" {
+		t.Errorf("env overrides not honored: %+v", cfg.TinyVM)
 	}
 	// Malformed values fall back to the pinned defaults, not a crash.
 	t.Setenv("SANDSWAP_VMM_UID", "not-a-number")
-	if got := Defaults().MicroVM.VMMUid; got != 987 {
+	if got := Defaults().TinyVM.VMMUid; got != 987 {
 		t.Errorf("malformed env must fall back to 987, got %d", got)
 	}
 }

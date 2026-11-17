@@ -7,7 +7,7 @@
 # operations (sandvmm lifecycle, network provisioning, OverlayFS mounts).
 # This is the simplest deployment mode and the current default.
 #
-# Network: uses --network-backend=bridge for microVM outbound connectivity.
+# Network: uses --network-backend=bridge for tinyVM outbound connectivity.
 # The host bridge (br-sandswap) is set up by deploy/setup-network.sh.
 #
 # Security (minimal privilege):
@@ -104,7 +104,7 @@ spec:
         # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §4;
         # storage contract row 10b): the SHARE ROOT must be writable only by
         # the provision plane. The FUSE daemon runs as uid 987 with
-        # supplementary gid 65536 (microvm.vmm_groups + api_gid in the sandlot
+        # supplementary gid 65536 (tinyvm.vmm_groups + api_gid in the sandlot
         # ConfigMap) — the same group that owns the volume tree — so without
         # this step the root is exactly as writable as the volumes themselves,
         # and a guest-driven escape could create/remove/rename entries BESIDE

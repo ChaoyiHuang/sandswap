@@ -1,5 +1,5 @@
 [Unit]
-Description=Sandswap host bridge + NAT for microVM outbound networking
+Description=Sandswap host bridge + NAT for tinyVM outbound networking
 # The bridge and the nftables masquerade rule are runtime kernel state: neither
 # survives a reboot, while every sandlot unit IS enabled. Without this unit a
 # rebooted node crash-loops (sandlot fails every VM launch with "bridge

@@ -13,7 +13,7 @@ grand_parent: Operations
 
 ## 1. Flags
 
-**Background.** Boxout has no config file of its own: `-config` points at the **same sandlot YAML** sandlot uses (see [Sandlot](sandlot.md)), and boxout reads the `network.*`, `microvm.*`, and `vmm_binary` sections from it. The network flags below exist to override the file per-deployment; an empty value means "use the config file's value". All flags are restart-required; the shared file's `microvm.*` hot-reloadable subset is picked up live (see below), everything else is restart-required.
+**Background.** Boxout has no config file of its own: `-config` points at the **same sandlot YAML** sandlot uses (see [Sandlot](sandlot.md)), and boxout reads the `network.*`, `tinyvm.*`, and `vmm_binary` sections from it. The network flags below exist to override the file per-deployment; an empty value means "use the config file's value". All flags are restart-required; the shared file's `tinyvm.*` hot-reloadable subset is picked up live (see below), everything else is restart-required.
 
 | CLI flag | Default | Meaning |
 |---|---|---|
@@ -45,17 +45,17 @@ grand_parent: Operations
 |---|---|
 | `network.*` (backend, bridge, subnet, gateway, dns, egress_baseline, vm_to_vm, v6_prefix, iid_template) | Building the network provider — in boxout mode this is the only place it is built, since sandlot delegates networking. |
 | `network.bind_backend: bpf` + `network.bind_path` | Boxout creates and pins the BPF binding region and hands it to the unprivileged sandlot (see below). |
-| `microvm.*` + `vmm_binary` | VMM defaults (kernel, initramfs, vcpus, memory, volumes_dir, overlayfs_templates) for VMs it launches. |
+| `tinyvm.*` + `vmm_binary` | VMM defaults (kernel, initramfs, vcpus, memory, volumes_dir, overlayfs_templates) for VMs it launches. |
 
 Sandlot-only sections (`pool`, `specs`, `recycle`, `stream`, `resilience`, `tls`, `instance`) are ignored by boxout. Typically both containers mount the same ConfigMap.
 
-## 3. Hot-reload: the shared microvm.* subset
+## 3. Hot-reload: the shared tinyvm.* subset
 
-When `-config` is set, boxout watches the shared sandlot YAML and hot-applies the `microvm.*` subset sandlot also classifies hot: `kernel`, `initramfs`, `default_vcpus`, `default_memory_mb` (new VMs only). Everything else in the file — `network.*` included — is logged as restart-required and not applied.
+When `-config` is set, boxout watches the shared sandlot YAML and hot-applies the `tinyvm.*` subset sandlot also classifies hot: `kernel`, `initramfs`, `default_vcpus`, `default_memory_mb` (new VMs only). Everything else in the file — `network.*` included — is logged as restart-required and not applied.
 
-**Why boxout needs this at all:** `create_vm`'s parameter whitelist compares the kernel/initramfs paths sandlot sends against boxout's own VMM defaults. Without a hot-reload on the boxout side, a sandlot-side `microvm.kernel` hot-reload (a new kernel image) would have every subsequent `create_vm` **rejected** ("kernel path not allowed") until boxout restarts — the two must move together.
+**Why boxout needs this at all:** `create_vm`'s parameter whitelist compares the kernel/initramfs paths sandlot sends against boxout's own VMM defaults. Without a hot-reload on the boxout side, a sandlot-side `tinyvm.kernel` hot-reload (a new kernel image) would have every subsequent `create_vm` **rejected** ("kernel path not allowed") until boxout restarts — the two must move together.
 
-Known transient: the two processes watch the file independently, so a reload can land in boxout up to ~one watch-interval after sandlot's. A `create_vm` racing that window fails once and the node's 60s pool reconcile refills; no cross-process coordination is worth that complexity. `microvm.warden_*` are restart-required in sandlot, so a file edit changing them lands in boxout's restart-required warnings (never applied live) — the warden cmdline is built sandlot-side and crosses as an opaque `kernel_cmdline` the whitelist never inspects.
+Known transient: the two processes watch the file independently, so a reload can land in boxout up to ~one watch-interval after sandlot's. A `create_vm` racing that window fails once and the node's 60s pool reconcile refills; no cross-process coordination is worth that complexity. `tinyvm.warden_*` are restart-required in sandlot, so a file edit changing them lands in boxout's restart-required warnings (never applied live) — the warden cmdline is built sandlot-side and crosses as an opaque `kernel_cmdline` the whitelist never inspects.
 
 ## 4. Socket security
 

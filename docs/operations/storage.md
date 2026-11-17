@@ -162,7 +162,7 @@ Rules:
 
 ### 4.1 The attack risk
 
-A tenant controls arbitrary code inside its microVM and can open AF_INET
+A tenant controls arbitrary code inside its tinyVM and can open AF_INET
 sockets. It does **not** need `mount(2)`, CAP_SYS_ADMIN, or a VMM escape: a
 userspace NFS/SMB/HTTP client is enough. If the sandbox network can reach the
 storage service, the guest can:

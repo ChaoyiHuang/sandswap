@@ -196,3 +196,15 @@ remove Sandswap from the machine.
   install is the operator's job (Ansible, rsync, or by hand).
 - The eino verification paths (`e2e/single-node-multi-agent.sh`, `deploy/baremetal/verify-eino.sh`)
   need an LLM API key; the deploys themselves do not.
+
+## 8. Upgrading
+
+- The sandlot YAML config section `microvm:` is now `tinyvm:` — section name
+  only, every key inside it is unchanged. Configs parse strictly, so an old
+  deployed config fails at startup (`field microvm not found`, sandlot and
+  boxout alike) instead of silently using defaults. Fix: re-run the deployer
+  (regenerates `/etc/sandswap/sandlot.yaml` with `tinyvm:`) or hand-rename
+  the top-level `microvm:` line.
+- Same rename applies in `deploy/k8s/configmaps.yaml` and anywhere dotted
+  paths are referenced (`microvm.*` → `tinyvm.*` — monitoring, hot-reload
+  watchers; sandlot log lines now emit `tinyvm.*` field names).

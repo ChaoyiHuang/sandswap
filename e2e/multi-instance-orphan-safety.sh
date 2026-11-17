@@ -133,7 +133,7 @@ gateway_addr: "localhost:1"
 node_id: "${node}"
 vmm_binary: "${TC_VMM_BINARY}"
 
-microvm:
+tinyvm:
   kernel: "${TC_KERNEL}"
   initramfs: "${TC_INITRAMFS}"
   volumes_dir: "${VOL_ROOT}"
@@ -239,7 +239,7 @@ gateway_addr: "localhost${STREAM_ADDR}"
 node_id: "mi-b"
 vmm_binary: "${TC_VMM_BINARY}"
 
-microvm:
+tinyvm:
   kernel: "${TC_KERNEL}"
   initramfs: "${TC_INITRAMFS}"
   default_vcpus: 1

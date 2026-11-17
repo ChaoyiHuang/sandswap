@@ -148,7 +148,7 @@ func seedScanCmd(args []string) int {
 			seeds = append(seeds, next)
 		}
 	}
-	res, err := volume.ScanGenerationStamps(cfg.MicroVM.VolumesDir, volume.ScanOptions{
+	res, err := volume.ScanGenerationStamps(cfg.TinyVM.VolumesDir, volume.ScanOptions{
 		Known:    known,
 		Seeds:    seeds,
 		Workers:  *workers,
@@ -190,7 +190,7 @@ func seedScanCmd(args []string) int {
 		Legacy             int            `json:"legacy"`
 		GatePass           bool           `json:"gate_pass"`
 	}{
-		VolumesRoot: cfg.MicroVM.VolumesDir, CurrentFingerprint: curFP, StagedFingerprint: stagedFP,
+		VolumesRoot: cfg.TinyVM.VolumesDir, CurrentFingerprint: curFP, StagedFingerprint: stagedFP,
 		Sampled: res.Sampled, ByGeneration: res.ByGeneration,
 		Unstamped: res.Unstamped, PreGeneration: res.PreGeneration, Foreign: res.Foreign,
 		Examples: res.Examples, Partial: res.Partial, ReadErrors: res.ReadErrors, Unverified: res.Unverified,

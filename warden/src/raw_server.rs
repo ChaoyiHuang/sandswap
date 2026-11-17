@@ -1425,7 +1425,7 @@ async fn dispatch(sandbox: &Arc<Mutex<Sandbox>>, mut req: Request, peer_cid: u32
             }
             // No agent-cgroup creation on the sync path: sync execs do not
             // join the cgroup (exec.rs deliberately ignores the path), and the
-            // cgroupfs mkdir + memory.max write costs ms inside a KVM microVM.
+            // cgroupfs mkdir + memory.max write costs ms inside a KVM tinyVM.
             // The cgroup is created lazily by the first BACKGROUND exec
             // (OP_ASYNC_EXEC / OP_MOUNT_AND_ASYNC_EXEC) — the only consumer of
             // the memory cap and cgroup.kill clearing.
@@ -2159,7 +2159,7 @@ fn cg_name_for(mount_point: &str) -> String {
 /// missing. Called only where a BACKGROUND exec is about to spawn (the
 /// cgroup's only consumer — memory cap + cgroup.kill clearing); sync-only
 /// cold mounts deliberately skip it: the cgroupfs mkdir + memory.max write
-/// costs ms inside a KVM microVM and sync execs never join the cgroup.
+/// costs ms inside a KVM tinyVM and sync execs never join the cgroup.
 /// Returns the cgroup path.
 async fn ensure_agent_cgroup(sandbox: &Arc<Mutex<Sandbox>>, mount_point: &str) -> Option<String> {
     let mut s = sandbox.lock().await;

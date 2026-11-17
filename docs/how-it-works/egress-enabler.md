@@ -38,7 +38,7 @@ the [Egress Integration](../integration/egress-integration.md).
 
 Sandswap gives third-party vendors the primitives to build per-agent network
 security (firewalling, authorization, audit, credential control) on top of
-microVM sandboxes. Sandswap itself implements **no network policy**.
+tinyVM sandboxes. Sandswap itself implements **no network policy**.
 
 Sandswap guarantees three things:
 
@@ -75,14 +75,14 @@ Each pattern is detailed with layouts and a go-live checklist in §5 of the
 
 ## 2. Threat model
 
-The adversary is arbitrary code running inside a microVM (the AI agent and
+The adversary is arbitrary code running inside a tinyVM (the AI agent and
 everything it executes). It can read anything inside its own VM (files, env,
 its own processes' memory, its own interface addresses), emit arbitrary
 packets from its own TAP (including spoofed source addresses), and attempt
 guest-internal privilege escalation.
 
 It cannot: touch the host, emit packets on another VM's TAP, alter host-side
-nftables/eBPF enforcement, or cross the microVM boundary.
+nftables/eBPF enforcement, or cross the tinyVM boundary.
 
 Consequences that drive this design:
 
@@ -117,7 +117,7 @@ The identity is a tuple Sandswap resolves on every mount:
   reuses pooled VMs across agents; the epoch guarantees a recycled attachment
   never shares a binding generation with its previous tenant (vendors use it
   to invalidate caches and to pin policy revisions).
-- **vm_id** — the microVM the mount runs in (diagnostic correlation).
+- **vm_id** — the tinyVM the mount runs in (diagnostic correlation).
 
 The same tuple is exposed through **two carriers** — one authoritative and
 full-resolution (§3.1), one address-encoded and stateless (§3.2). A solution
@@ -161,7 +161,7 @@ fd00:5341:4e01:<subnet>::1      host-side address on that /64 = its gateway
 | Entity | Where it lives in the address | Lifetime |
 |---|---|---|
 | Host (node) | **Nowhere — the host is the router.** Each /64's `::1` is the host-side TAP address, i.e. that VM's gateway | — |
-| microVM attachment | **subnet** (16 bits): one live attachment per /64 | assigned at VM provisioning, released at destroy, never reused while live |
+| tinyVM attachment | **subnet** (16 bits): one live attachment per /64 | assigned at VM provisioning, released at destroy, never reused while live |
 | Business identity | **IID** (last 64 bits): `agent/sandfs/epoch` per the template | stamped at mount, removed at unmount |
 
 **The SNAT rule is static; only the map element moves.** At VM provisioning
@@ -191,7 +191,7 @@ is off the per-mount path.
   `fd00:5341:4e44::/48` — "SAND"; length a multiple of 8 bits and ≤ /48,
   since the address is `<prefix | 16-bit subnet | 64-bit IID>` and a longer
   prefix would overwrite the subnet index). It names the deployment:
-  upstream routers reach every microVM with **one route to the prefix**,
+  upstream routers reach every tinyVM with **one route to the prefix**,
   and boundary policy (allow / limit / scrub) covers the whole deployment
   in one rule.
 - The **subnet index** picks the TAP's /64: 16 subnet bits in a /48 =
@@ -545,7 +545,7 @@ virtio-net. There is zero per-mount nftables work.
 
 Vendor threat models rest on these Sandswap-maintained properties:
 
-- The guest is fully untrusted and cannot reach the host (microVM boundary).
+- The guest is fully untrusted and cannot reach the host (tinyVM boundary).
 - Host-side enforcement (vsockguard BPF LSM, nftables baseline, binding
   region) is invisible and immutable from inside the guest.
 - Guest networking is statically provisioned (no DHCP); DNS is injected via
@@ -582,10 +582,10 @@ versus off.
 4. **Versioned contract**: the region layout is versioned; a FormatVersion
    mismatch refuses to open, never silently misreads.
 
-## 10. Kernel requirements (host & microVM)
+## 10. Kernel requirements (host & tinyVM)
 
 Two independent kernels matter: the HOST that runs sandlot/sandvmm, and the
-microVM GUEST kernel built into the initramfs boot. Requirements are
+tinyVM GUEST kernel built into the initramfs boot. Requirements are
 per-feature-part — with the enabler off (`-binding-backend=off`, default) or
 with the `shm` carrier + `bridge` backend, NO kernel version is required
 beyond what Sandswap already needs.
@@ -611,7 +611,7 @@ accepted in both its u32 and u64 wire forms, v4.18 boundary), and bounds every
 kernel reply with a timeout. Rule/expression encoding — the version-sensitive
 part — is owned by the `nft` CLI, not by Sandswap.
 
-### 10.2 microVM (guest) kernel
+### 10.2 tinyVM (guest) kernel
 
 | Network backend | Guest kernel requirement |
 |---|---|

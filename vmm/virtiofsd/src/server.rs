@@ -2370,7 +2370,7 @@ impl<F: FileSystem + Sync> Server<F> {
     fn destroy(&self) -> usize {
         // No reply to this function. The destroy is terminal: mark the server
         // destroyed (a later INIT is refused) and tell the owner so it can
-        // retire the whole microVM — a device cannot be rebuilt from a filter
+        // retire the whole tinyVM — a device cannot be rebuilt from a filter
         // and handle set that the guest just tore down.
         self.destroyed.store(true, Ordering::Release);
         if let Some(hook) = self.on_destroy.as_ref() {

@@ -8,7 +8,7 @@ parent: How It Works
 
 A SandFS is the agent's persistent filesystem: **one directory** under the
 volumes root (sandlot `-volumes-dir`, default `/var/sandswap/volumes`) holding
-everything the agent keeps. The microVM is the compute; the SandFS is the
+everything the agent keeps. The tinyVM is the compute; the SandFS is the
 disk. It reaches the VM through one virtio-fs device (tag `sandswap`) that is
 created at VM boot and never hot-plugged — attaching a different SandFS to a
 running VM is a filter swap (`allowed_dirs`, ~0.20 ms) plus a guest

@@ -1709,7 +1709,7 @@ func (h *Handler) alarmResourceShortage(cfg vmm.Config, cause error) {
 	}
 }
 
-// CreateVerifiedVM is the SINGLE entry point for creating a microVM. Every
+// CreateVerifiedVM is the SINGLE entry point for creating a tinyVM. Every
 // creation path (startup pre-creation, pool scale-up, crash replacement) goes
 // through it, and it upholds the two invariants the rest of the code relies on:
 //

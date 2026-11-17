@@ -411,6 +411,22 @@ auto-created). Requirements: KVM (/dev/kvm), root, curl/python3. The
 verification step needs an LLM API key (DEEPSEEK_API_KEY / OPENAI_API_KEY /
 GOOGLE_API_KEY) — the deployment itself does not.
 
+## Upgrade notes
+
+- BREAKING config rename: the sandlot YAML section "microvm:" is now
+  "tinyvm:" (one-to-one: every key inside the section kept its name; no CLI
+  flag, binary, HTTP/MCP API, protocol field, or metric name changed).
+  Configs parse STRICTLY, so an older deployed /etc/sandswap/sandlot.yaml
+  makes the new sandlot (and boxout, which reads the same file) fail at
+  startup with a "field microvm not found" parse error rather than silently
+  running on defaults. Fix: re-run the deployer (it regenerates the config
+  with "tinyvm:"), or hand-rename the top-level "microvm:" line. Ops
+  automation referencing dotted paths (microvm.vmm_uid, microvm.warden_log,
+  ...) must switch to the "tinyvm." prefix (sandlot hot-reload log lines now
+  emit tinyvm.* field names); k8s deployments get the same rename in
+  deploy/k8s/configmaps.yaml. Full write-up: the Upgrading section of
+  docs/operations/release.md.
+
 ## Contents
 
 - deploy/baremetal: one-click deploys (embedded + single-node systemd),
@@ -445,8 +461,9 @@ the full breakdown and the lighter between-deploys cleanup.sh.
   and support matrix.
 - vsockguard.bpf.o is compiled against the build kernel's BTF; attaching is
   best-effort and warns on kernels where it cannot load.
-- Real multi-host cluster deploys (deploy-cluster-*-gw.sh) additionally need
-  SSH access to the target nodes.
+- Multi-host cluster deploys are local-only: the control host builds a
+  self-contained stage dir and prints per-node install commands; shipping it
+  to the target hosts (Ansible, rsync, or by hand) is the operator's job.
 EOF
 
 log "Release assembled:"

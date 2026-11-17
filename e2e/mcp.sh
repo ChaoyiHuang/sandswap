@@ -11,7 +11,7 @@
 # by the Apache License, Version 2.0.
 #
 # test-mcp-e2e.sh — End-to-end test for the Sandswap MCP server.
-# Starts the full stack (gateway + sandlot + KVM microVMs), creates an agent
+# Starts the full stack (gateway + sandlot + KVM tinyVMs), creates an agent
 # and sandfs, then runs the Go MCP e2e test binary that connects to the
 # gateway's MCP endpoint (POST /mcp) and exercises all 12 MCP tools
 # (incl. sandswap_guide). Then restarts the gateway with
@@ -19,7 +19,7 @@
 # (initialize + sandswap_guide must serve the file's text, and pick up an
 # in-place edit within the ~30s watcher poll).
 # This test covers the full chain: MCP client → gateway → gRPC stream →
-# sandlot → vmm → warden → microVM.
+# sandlot → vmm → warden → tinyVM.
 # Prerequisites:
 #   1. bash build/build.sh all        (all binaries in output/)
 #   2. bash build/build-rootfs-template.sh   (rootfs template in output/)
@@ -53,7 +53,7 @@ tc_ensure_dev_nodes
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 # ══════════════════════════════════════════════════════════════════

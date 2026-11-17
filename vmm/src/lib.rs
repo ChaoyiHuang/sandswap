@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-// Modified by Sandswap (c) 2026: sandvmm binary crate for the Sandswap microVM sandbox.
+// Modified by Sandswap (c) 2026: sandvmm binary crate for the Sandswap tinyVM sandbox.
 //
 
 mod common;

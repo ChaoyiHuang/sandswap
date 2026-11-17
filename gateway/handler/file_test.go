@@ -46,7 +46,7 @@ type fileOpClient struct {
 	unmountErr error
 }
 
-func (c *fileOpClient) DestroyMicroVM(ctx context.Context, nodeAddr, vmID string) error { return nil }
+func (c *fileOpClient) DestroyTinyVM(ctx context.Context, nodeAddr, vmID string) error { return nil }
 func (c *fileOpClient) UnmountRootfs(ctx context.Context, nodeAddr, vmID, volumePath, volumeEpoch string) (pool.UnmountResult, error) {
 	return pool.UnmountResult{}, c.unmountErr
 }

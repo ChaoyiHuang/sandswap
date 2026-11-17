@@ -58,7 +58,7 @@ type vmMonitorState struct {
 	lastProbeErrMsg string
 }
 
-// VMState tracks a running microVM.
+// VMState tracks a running tinyVM.
 // pendingMount is one in-flight cold-mount generation.
 type pendingMount struct {
 	sandfsID    string
@@ -625,7 +625,7 @@ func (h *Handler) VMCreateAndAttach(ctx context.Context, cfg vmm.Config) (*vmm.R
 // UpdateVMMConfig atomically updates the default VMM config. Affects new VM
 // creation only; existing VMs keep their original config. Hot-reloadable.
 // WardenCountdownSec is preserved from the previous config if the new one has 0
-// (resilience timings are restart-required; a microvm hot-reload must not drop
+// (resilience timings are restart-required; a tinyvm hot-reload must not drop
 // a non-default warden countdown).
 func (h *Handler) UpdateVMMConfig(cfg vmm.Config) {
 	h.mu.Lock()

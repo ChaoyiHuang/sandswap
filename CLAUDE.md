@@ -1,24 +1,24 @@
 # Sandswap
 
-Sandswap redefines the microVM by decoupling compute from disk: a microVM
+Sandswap redefines the tinyVM by decoupling compute from disk: a tinyVM
 acts as pure compute(only the kernel and PID 1 warden), while the agent's
 rootfs (SandFS) is simply a directory(local or distributed). SandFS is
-dynamically mounted into the microVM to execute commands with ultra-low
+dynamically mounted into the tinyVM to execute commands with ultra-low
 latency—~2.3 ms cold and ~0.96 ms warm. After just as little as 1 ms of
 inactivity, SandFS is asynchronously unmounted to free up resources. Under
-ideal conditions, benchmarks show a single microVM can be reused up to
+ideal conditions, benchmarks show a single tinyVM can be reused up to
 183 times per second across different AI agents.
 
-One KVM microVM per workload, virtio-fs rootfs sharing for persistence and
+One KVM tinyVM per workload, virtio-fs rootfs sharing for persistence and
 agent switching, hardware-level isolation, zero agent code changes. Go
 services (gateway, sandlot,boxout) manage Rust components (the sandvmm VMM
 and the in-VM warden).
 
 Sandswap’s lifelines are ultra-low latency overhead on both the warm and cold
-command-execution paths, and secure isolation when reusing microVMs across AI
+command-execution paths, and secure isolation when reusing tinyVMs across AI
 agents. No changes should violate these lifelines. If a modification increases
 command execution latency on either the warm or cold path, or compromises the
-isolation security of cross-agent microVM reuse, human intervention is required
+isolation security of cross-agent tinyVM reuse, human intervention is required
 to evaluate the justification for the change.
 
 ## Where the truth lives

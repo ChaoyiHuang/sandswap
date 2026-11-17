@@ -9,7 +9,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0.
 //
-// warden-probe — raw vsock client for talking to a warden inside a microVM
+// warden-probe — raw vsock client for talking to a warden inside a tinyVM
 // DIRECTLY, bypassing sandlot/gateway. A testing/diagnostics tool: it exists
 // because every other client reaches the warden through the full stack, so
 // protocol-level edges (malformed frames, oversized bodies, hostile

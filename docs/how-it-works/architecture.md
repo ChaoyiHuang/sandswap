@@ -7,7 +7,7 @@ parent: How It Works
 # Architecture
 
 Sandswap serves every AI agent request with an isolated sandbox on demand:
-Sandswap attaches a warm pooled microVM with the agent's persistent
+Sandswap attaches a warm pooled tinyVM with the agent's persistent
 filesystem, and releases the VM when it goes idle. This page is the
 structural view: the components, the optional ones, the connections, and
 the flow of one request.
@@ -20,12 +20,12 @@ build artifact:
 | Component | Kind | Present when | Role |
 |-----------|------|--------------|------|
 | **gateway** | Service | Always | The entry point: auth, SandFS registry, ownership, sticky lease, dispatch to nodes. Deployed as one combined process (single-node), or split into a **human gateway** (ops) and **exec gateways** (agent traffic) |
-| **sandlot** | Daemon | Always — one per node | The node daemon: keeps a pool of warm microVMs ready, swaps the agent's SandFS in and out of a VM, and performs sandfs/template lifecycle on shared storage. Deployed as one combined instance (`-roles exec,prov`), or split into **exec sandlot** instances (compute) and **prov sandlot** instances (storage) |
-| **sandvmm** | Process | Always — one per microVM | The KVM virtual machine monitor |
-| **warden** | Process | Always — PID 1 in every microVM | Mounts the SandFS, runs the agent's commands |
+| **sandlot** | Daemon | Always — one per node | The node daemon: keeps a pool of warm tinyVMs ready, swaps the agent's SandFS in and out of a VM, and performs sandfs/template lifecycle on shared storage. Deployed as one combined instance (`-roles exec,prov`), or split into **exec sandlot** instances (compute) and **prov sandlot** instances (storage) |
+| **sandvmm** | Process | Always — one per tinyVM | The KVM virtual machine monitor |
+| **warden** | Process | Always — PID 1 in every tinyVM | Mounts the SandFS, runs the agent's commands |
 | **sandns** | Service | Multi-gateway deployments | The owner-aware DNS service: answers "which gateway serves this SandFS?" and "which gateway serves this sandlot?" on DNS `:53` |
 | **boxout** | Sidecar | Kubernetes (boxout mode) | Privileged helper so sandlot can run unprivileged |
-| **kernel + initramfs** | Artifacts | Always | The boot image of every microVM (warden inside) |
+| **kernel + initramfs** | Artifacts | Always | The boot image of every tinyVM (warden inside) |
 | **vsockguard** | BPF LSM | Optional host hardening | Pins the host-side vsock transport against local users |
 
 Around the boundary sit third-party systems Sandswap integrates with but
@@ -73,8 +73,8 @@ Solid boxes are Sandswap components; `[EXT]` marks a third-party system,
       │ gRPC bidi stream(sandlot dial out)             │
 ┌─────▼─────────────────────────┐       ┌──────────────▼──────────────────┐
 │ node × N — exec sandlot       │       │ instances × M — prov sandlot    │
-│ sandvmm · microVMs (warden)   │       │ sandfs + template lifecycle     │
-│ one SandFS per microVM        │       │ OCI pull/push [EXT]             │
+│ sandvmm · tinyVMs (warden)   │       │ sandfs + template lifecycle     │
+│ one SandFS per tinyVM        │       │ OCI pull/push [EXT]             │
 │ at a time                     │       └──────────────┬──────────────────┘
 └─────┬─────────────────────────┘                      │
       │ virtio-fs passthrough                          │ volume + template writes
@@ -111,7 +111,7 @@ Notes on lines not drawn:
   manage SandFS identities and templates, track ownership, and perform
   all sandfs/template storage work. Agent code never travels through it.
 - **Exec plane** — the exec gateway, sandns (optional), and the exec sandlot
-  nodes: gateway → sandlot → sandvmm → microVM (warden). Every command an
+  nodes: gateway → sandlot → sandvmm → tinyVM (warden). Every command an
   agent runs travels this chain.
 - **Storage plane** — the volumes + templates trees: one directory per
   SandFS on local disk or shared storage. Written ONLY by prov sandlot
@@ -119,14 +119,14 @@ Notes on lines not drawn:
   serving FUSE daemon (sandvmm); exec sandlot nodes read it via virtio-fs
   passthrough.
 
-The central invariant lives in the exec plane: **one SandFS per microVM at
-a time** — a microVM runs at most one SandFS, and Sandswap mounts one
-SandFS in at most one microVM.
+The central invariant lives in the exec plane: **one SandFS per tinyVM at
+a time** — a tinyVM runs at most one SandFS, and Sandswap mounts one
+SandFS in at most one tinyVM.
 
 ## 3. Inside a sandlot exec node
 
 The exec sandlot node from the logical architecture — the one that runs
-microVMs. A prov sandlot runs the same sandlot binary with no VM side:
+tinyVMs. A prov sandlot runs the same sandlot binary with no VM side:
 no sandvmm, no warden clients, no pool — just storage operations against the
 volumes/templates trees.
 
@@ -149,7 +149,7 @@ volumes/templates trees.
 │   └─┬──────────────┘      │                       │
 │     │ KVM                 │                       │
 │   ┌─▼──────────────────┐  │                       │
-│   │ microVM            │  │                       │
+│   │ tinyVM            │  │                       │
 │   │ warden (PID 1)     │◄─┘                       │
 │   │ chroot: /mnt/rootfs│                          │
 │   │ eth0 → host bridge │                          │
@@ -174,7 +174,7 @@ The connections, one by one:
   multiplexes all VM commands, events, and heartbeats.
 - **HTTP over UDS (control)** — sandlot drives sandvmm: create, boot,
   `set-fs`, ping, shutdown. Rare, milliseconds, never on the hot path.
-- **KVM** — sandvmm runs the microVM: its own kernel, warden as PID 1.
+- **KVM** — sandvmm runs the tinyVM: its own kernel, warden as PID 1.
 - **vsock `:1024` (business path)** — sandlot talks to the warden directly.
   The connection is carried by the kernel's vhost-vsock backend; sandvmm is
   not in the data path. Mount, exec, unmount, stats all travel here.
@@ -203,7 +203,7 @@ External AI Agents/Human (HTTP/MCP)
 │ +human API      │                                 │ ┌──────────────┐ │
 │ :9998 exec+prov │                                 │ │ sandvmm      │ │
 │ in-process      │                                 │ │  ┌────────┐  │ │
-│ identity store  │                                 │ │  │microVM │  │ │
+│ identity store  │                                 │ │  │tinyVM │  │ │
 │ (snapshot file) │                                 │ │  │ warden │  │ │
 └─────────────────┘                                 │ │  └────────┘  │ │
                                                     │ └──────────────┘ │
@@ -244,7 +244,7 @@ prov sandlot instances dial the human gateway:
           ┌──────▼──────┐    ┌──────▼──────┐    ┌──────▼──────┐
           │exec sandlot │    │exec sandlot │    │exec sandlot │
           │node-1       │    │node-2       │    │node-3       │
-          │KVM microVMs │    │KVM microVMs │    │KVM microVMs │
+          │KVM tinyVMs │    │KVM tinyVMs │    │KVM tinyVMs │
           └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
@@ -295,7 +295,7 @@ The hot path stays in sandlot with zero privileges — details in
 | exec sandlot → volumes | filesystem (virtio-fs) | exec sandlot | read-only overlay lowerdirs; the serving FUSE daemon (sandvmm) writes guest data |
 | prov sandlot → volumes/templates | filesystem | prov sandlot | the ONLY writer of volume trees (create/seed/delete) and the template store |
 | agents, sandlots → sandns | UDP/TCP `:53` | agent / sandlot | gateway address resolution (multi-gateway) |
-| microVM → internet | guest eth0 → host bridge | guest | egress; identity-stamped on enabler nodes |
+| tinyVM → internet | guest eth0 → host bridge | guest | egress; identity-stamped on enabler nodes |
 
 The three internal paths that carry all the traffic, in detail:
 
@@ -348,7 +348,7 @@ No containerd, no shim — direct control of the VMM.
 ### 5.3 sandlot ↔ warden (raw vsock protocol)
 
 ```
-Sandlot ─── kernel AF_VSOCK (guest CID, port 1024) ───→ MicroVM
+Sandlot ─── kernel AF_VSOCK (guest CID, port 1024) ───→ TinyVM
   raw vsock protocol:
     OP_MOUNT_AND_EXEC (1)       — mount + exec in one RTT (cold)
     OP_UNMOUNT (2)              — unmount + cgroup.kill
@@ -451,7 +451,7 @@ identity: that agent authenticates with its provisioned `api_key`
 every request.
 
 **2. The warm pool (continuous, per node — not per request).** Each sandlot
-keeps its own pool of **CLEAN** microVMs per spec: pre-created at startup
+keeps its own pool of **CLEAN** tinyVMs per spec: pre-created at startup
 and refilled asynchronously as VMs are consumed or recycled. Creating a VM
 is purely local node work — the gateway never commands it: sandlot launches
 the sandvmm process with a permanent virtio-fs device (tag `sandswap`,
@@ -495,7 +495,7 @@ the pool CLEAN — or sandlot destroys and replaces it when the unmount fails
 (the exclusive-ownership guarantee) — and recycles at the `max_uses` /
 memory-pressure thresholds rather than running forever.
 
-**7. Agent B on the same microVM.** A new mount-and-execute with agent B's
+**7. Agent B on the same tinyVM.** A new mount-and-execute with agent B's
 volume: filter swap + bind-mount swap after killing A's processes. B cannot
 see any of A's data — enforced at both the VMM level (`allowed_dirs`) and
 inside the guest (chroot), with the memory-clearing chain in between (see
@@ -505,14 +505,14 @@ inside the guest (chroot), with the memory-clearing chain in between (see
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Isolation tech | KVM microVM (sandvmm) | Hardware-level isolation, no containerd needed |
+| Isolation tech | KVM tinyVM (sandvmm) | Hardware-level isolation, no containerd needed |
 | Boot method | Initramfs cold boot | No snapshot needed; kernel VFS cache naturally consistent |
 | Agent volume role | **is** the rootfs | All writes inside the chroot persist naturally |
 | Hot-swap mechanism | mount/umount + virtio-fs `allowed_dirs` | bind-mount swap + VMM-level directory filter; set-fs ~0.20 ms |
 | OverlayFS mode | Read-only overlay + writable `workspace/` · `home/` | No upperdir/workdir, so it works on any shared filesystem — NFS, CephFS, Cloud FS, or newer storage systems; lazy mount, stateless overlay |
 | Volume storage | Local disk or shared (Cloud FS / NFS / CephFS / ...) | Sandswap only sees directories — the storage backend is replaceable; shared storage lets any node serve any SandFS |
 | Agent identity | API key (Bearer) | Config-file injection, zero code changes |
-| microVM reuse | Sticky lease + async clean | Same-agent reuse skips remount |
+| tinyVM reuse | Sticky lease + async clean | Same-agent reuse skips remount |
 | sandlot connectivity | Outbound gRPC stream | No ports exposed on sandlot; NAT-friendly |
 | VMM control | HTTP + raw frames over Unix socket | Direct control, no containerd/shim layer; binary frames for per-request hot ops |
 | Background exec | Per-agent cgroup + async API | Long-running tools survive across calls; cgroup.kill on release |

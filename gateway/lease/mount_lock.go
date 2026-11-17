@@ -50,7 +50,7 @@ func DispatchInFlight(sandfsID string) bool {
 }
 
 // MountLock is a sandfs-level mutex that prevents two concurrent cold mounts
-// from acquiring different microVMs for the same sandfs.
+// from acquiring different tinyVMs for the same sandfs.
 //
 // Warm-path requests bypass the lock entirely: concurrent exec/file I/O on an
 // already-mounted sandfs is allowed.

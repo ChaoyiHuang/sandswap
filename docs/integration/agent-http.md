@@ -21,7 +21,7 @@ one-to-one).
    created with a template and a volume mode.
 3. Every request carries your key and addresses **exactly one SandFS** by
    its `sandfs_id` — there is no implicit "current sandbox".
-4. Commands execute inside that SandFS's KVM microVM; stdout/stderr/exit
+4. Commands execute inside that SandFS's KVM tinyVM; stdout/stderr/exit
    code come back, and **everything the command wrote persists** in the
    SandFS for the next call.
 5. Calls are plain HTTP/JSON or MCP tools — no SDK required, no agent-code
@@ -94,7 +94,7 @@ client ── POST /agent/execute (or MCP tool) ──▶ gateway
    auth: api_key → agent; owns sandfs_id? (else 404)
    claim: this gateway owns the sandfs? (else 307 to the owner / 503 retry)
    lease: sticky window? warm path : cold mount
-   exec:  one command to the node → microVM → warden
+   exec:  one command to the node → tinyVM → warden
 ◀── stdout / stderr / exit_code / *_duration_ns ──
    (background:true ⇒ returns exec_id immediately instead)
 ```
@@ -168,7 +168,7 @@ in the reference.
 ## 7. Design for the abort contract
 
 The platform guarantees the **workspace survives every failure and
-recovery**. In-flight commands keep running inside the microVM through a
+recovery**. In-flight commands keep running inside the tinyVM through a
 gateway outage (the node holds the mount for a grace window, default
 300 s), and are aborted when the mount is released. Recovery deliberately
 clears state rather than reconstructing it:

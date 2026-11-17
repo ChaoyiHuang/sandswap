@@ -11,7 +11,7 @@
 # by the Apache License, Version 2.0.
 #
 # latency-benchmark-alloc-sweep.sh — find the disjoint whole-core split
-# between loadgen / gateway(+human+etcd) / sandlot(+prov) and the microVM
+# between loadgen / gateway(+human+etcd) / sandlot(+prov) and the tinyVM
 # pool that maximizes host cold reuse.
 #
 # The normal load benchmark fixes one allocation. This driver is the
@@ -106,7 +106,7 @@ usage: latency-benchmark-alloc-sweep.sh --plan|--run [options]
   --core-pool "0-1;2-3"  whole-core cpulists (default: live topology)
   --cores N              synthetic contiguous pool (testing; default 2 threads/core)
   --threads-per-core N   override the topology's threads per core
-  --slice-cpus N         CPUs per microVM (2 = whole core, 1 = logical CPU)
+  --slice-cpus N         CPUs per tinyVM (2 = whole core, 1 = logical CPU)
   --cold-per-vm R        --plan: measured per-VM cold/s for the host projection
   --targets "u1 u2"     per-role utilization targets (default 0.60 0.70 0.80)
   --tier K               validation latency tier (default 2.0)

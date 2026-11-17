@@ -40,7 +40,7 @@ func TestReloadChainStagesThenPromotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(dir, "sandlot.yaml")
-	body := "roles: [exec,prov]\nmicrovm:\n  volumes_dir: " + volRoot +
+	body := "roles: [exec,prov]\ntinyvm:\n  volumes_dir: " + volRoot +
 		"\nprovision:\n  volume_seed_file: " + seedA + "\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestReloadChainStagesThenPromotes(t *testing.T) {
 
 	// The staged edit: the config gains volume_seed_next_file beside the
 	// current generation's key — exactly what the rotation tooling writes.
-	cb([]byte("roles: [exec,prov]\nmicrovm:\n  volumes_dir: " + volRoot +
+	cb([]byte("roles: [exec,prov]\ntinyvm:\n  volumes_dir: " + volRoot +
 		"\nprovision:\n  volume_seed_file: " + seedA +
 		"\n  volume_seed_next_file: " + seedBFile + "\n"))
 	if !namer.HasNext() {
@@ -93,7 +93,7 @@ func TestReloadChainStagesThenPromotes(t *testing.T) {
 	// The promoting edit: re-point volume_seed_file at the staged file and drop
 	// the staged key (what a correct --promote writes). The volume tree is
 	// empty, so the completeness gate passes.
-	cb([]byte("roles: [exec,prov]\nmicrovm:\n  volumes_dir: " + volRoot +
+	cb([]byte("roles: [exec,prov]\ntinyvm:\n  volumes_dir: " + volRoot +
 		"\nprovision:\n  volume_seed_file: " + seedBFile + "\n"))
 	if got := volname.Fingerprint(namer.CurrentSeed()); got != volname.Fingerprint(genB) {
 		t.Fatalf("current fingerprint = %s, want the promoted %s", got, volname.Fingerprint(genB))

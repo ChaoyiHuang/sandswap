@@ -11,9 +11,9 @@ The handful of terms everything else builds on. Read this once, then
 
 ## 1. The core idea in one paragraph
 
-Sandswap gives every AI agent a **hardware-isolated microVM with a persistent
+Sandswap gives every AI agent a **hardware-isolated tinyVM with a persistent
 per-agent filesystem**: each agent's
-files live on shared or local storage and are mounted into a warm pooled microVM on
+files live on shared or local storage and are mounted into a warm pooled tinyVM on
 demand — so switching a VM from one agent to another takes milliseconds, and
 everything the agent writes persists.
 
@@ -21,15 +21,15 @@ everything the agent writes persists.
 
 | Term | Meaning |
 |------|---------|
-| **SandFS** | The agent's persistent filesystem: a volume of files stored on host local or shared storage, holding everything the agent keeps — files, code, `workspace/`, `home/`. When the agent runs something, its SandFS is mounted into a microVM; the microVM is the compute, the SandFS is the disk. It is what every API request addresses by `sandfs_id`. |
+| **SandFS** | The agent's persistent filesystem: a volume of files stored on host local or shared storage, holding everything the agent keeps — files, code, `workspace/`, `home/`. When the agent runs something, its SandFS is mounted into a tinyVM; the tinyVM is the compute, the SandFS is the disk. It is what every API request addresses by `sandfs_id`. |
 | **Agent** | The client of Sandswap — typically an AI agent, but any program: it authenticates with an API key and calls the API to execute code and store files. Each agent owns one or more SandFS instances — its disks. |
 | **Gateway** | The entry point of Sandswap: agents send every request here. It authenticates the agent, locates its SandFS, and dispatches the work to a node over a gRPC stream. Agents connect to HTTP `:3000` (MCP on the same listener); nodes connect to `:9998`. In split deployments the gateway runs as two instances — see §3 for the names. |
 | **sandns** | The owner-aware DNS service: how agents and sandlots find the right gateway. It reads etcd and answers every lookup with the address of the Gateway that currently holds the SandFS. When ownership moves, the answers follow automatically. See [Ownership & DNS](ownership-and-dns.md). |
-| **Node** | One machine that does the executing — a bare-metal host, a nested-virtualization VM, or a Kubernetes node — running one sandlot daemon and its microVMs. |
-| **Sandlot** | The per-node daemon. It keeps a pool of warm microVMs ready on its machine, mounts the agent's SandFS into the right VM when work arrives, and talks to each VM's Warden over vsock. The prov role does the storage side: it creates and seeds SandFS volumes and pulls or pushes templates. Sandlot dials the Gateway — the Gateway never connects in. In split deployments sandlot runs as two instances — see §3 for the names. |
-| **microVM** | A tiny hardware-isolated virtual machine (KVM): its own kernel and warden. Sandswap keeps a pool of them warm, and one microVM serves at most one SandFS at a time. |
-| **sandvmm** | The virtual machine monitor: one process per microVM, running it on KVM. A fork of Cloud Hypervisor, specially trimmed and extended for Sandswap, controlled by the sandlot over an HTTP API on a Unix socket. |
-| **Warden** | PID 1 inside each microVM. It mounts the SandFS into the VM and runs the agent's commands as its own children. It enforces memory limits and capability/seccomp profiles, and tears everything down when the VM goes idle. |
+| **Node** | One machine that does the executing — a bare-metal host, a nested-virtualization VM, or a Kubernetes node — running one sandlot daemon and its tinyVMs. |
+| **Sandlot** | The per-node daemon. It keeps a pool of warm tinyVMs ready on its machine, mounts the agent's SandFS into the right VM when work arrives, and talks to each VM's Warden over vsock. The prov role does the storage side: it creates and seeds SandFS volumes and pulls or pushes templates. Sandlot dials the Gateway — the Gateway never connects in. In split deployments sandlot runs as two instances — see §3 for the names. |
+| **tinyVM** | A tiny hardware-isolated virtual machine (KVM): its own kernel and warden. Sandswap keeps a pool of them warm, and one tinyVM serves at most one SandFS at a time. |
+| **sandvmm** | The virtual machine monitor: one process per tinyVM, running it on KVM. A fork of Cloud Hypervisor, specially trimmed and extended for Sandswap, controlled by the sandlot over an HTTP API on a Unix socket. |
+| **Warden** | PID 1 inside each tinyVM. It mounts the SandFS into the VM and runs the agent's commands as its own children. It enforces memory limits and capability/seccomp profiles, and tears everything down when the VM goes idle. |
 | **vsock** | The lightweight host↔VM socket channel the sandlot uses to reach each VM's warden — no guest network stack involved. |
 | **Boxout** | An optional privileged helper (Kubernetes deployments). It does the host-privileged work — starting and stopping sandvmm, networking, mounts — so the sandlot daemon itself can run unprivileged. See [Topologies](topologies.md). |
 | **Spec** | A VM size class — `small` / `medium` / `large` (vCPUs, memory, `exec_slots`). A SandFS creation states its minimum resources; the gateway resolves them to a spec. |

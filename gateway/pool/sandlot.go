@@ -143,7 +143,7 @@ type UnmountRecorder interface {
 // All workload RPCs address the sandfs by sandfs_id; sandlot resolves it to a VM.
 type SandlotClient interface {
 	// UnmountRootfs unmounts the sandfs's rootfs directory (/mnt/rootfs) from the
-	// microVM holding it and clears the virtio-fs allowed_dirs filter. Sandlot
+	// tinyVM holding it and clears the virtio-fs allowed_dirs filter. Sandlot
 	// resolves sandfs_id -> VM. Idempotent (no-op if the sandfs isn't mounted here).
 	// Called on the async release path. Pairs with MountRootfsAndExecute. Returns
 	// the three-layer unmount latency (UnmountResult) for gateway stats.

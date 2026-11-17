@@ -25,11 +25,11 @@ import (
 	"sandlot/vmm"
 )
 
-// BridgeNAT is a NetworkProvider that gives each microVM a virtio-net TAP
+// BridgeNAT is a NetworkProvider that gives each tinyVM a virtio-net TAP
 // enslaved to a shared host bridge, with kernel NAT (installed once by
 // deploy/setup-network.sh) and a static guest IP — no DHCP daemon, no
 // per-VM process. The TAP is created at Provision time and torn down at
-// Release time, matching the microVM lifecycle.
+// Release time, matching the tinyVM lifecycle.
 type BridgeNAT struct {
 	bridge string // host bridge name (e.g. br-sandswap)
 	subnet *net.IPNet

@@ -160,7 +160,7 @@ func TestBuildVMCreateConfigVirtioFsPins(t *testing.T) {
 }
 
 // TestBuildCmdlineInitOnFreePosture pins the free-wipe posture as an EXPLICIT
-// cmdline token on every boot: the knob (microvm.init_on_free, default false)
+// cmdline token on every boot: the knob (tinyvm.init_on_free, default false)
 // is the deployment's authority over the kernel config's
 // INIT_ON_FREE_DEFAULT_ON, and the effective cmdline is persisted per VM in
 // state.json — the posture must be readable off the record. The appended token

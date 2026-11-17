@@ -801,7 +801,7 @@ func parsePoolSeq(vmID, prefix string) (int, bool) {
 //
 // Memory threshold combination is min() over the enabled signals (AND): the
 // guest must drop below EVERY active threshold before recycling. Each signal
-// acts as a cap on the other, which keeps both small and large microVMs sane:
+// acts as a cap on the other, which keeps both small and large tinyVMs sane:
 //
 //	small VM (128MB), pct=10 abs=100MB: min(12.8MB, 100MB) = 12.8MB  → pct decides
 //	large VM (128GB), pct=10 abs=100MB: min(12.8GB, 100MB) = 100MB   → abs decides

@@ -592,7 +592,7 @@ func runServeLoop(ctx context.Context, client *rpc.Client, handler *Handler, log
 				// VM-lifecycle machinery is exec-role only. A prov-only
 				// instance owns no VMs, and on a co-located host its sandbox
 				// root may be the shared default — its reaper must never touch
-				// (or kill) the exec instance's live microVMs.
+				// (or kill) the exec instance's live tinyVMs.
 				if provOnly {
 					continue
 				}

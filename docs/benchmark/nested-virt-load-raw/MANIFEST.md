@@ -1,9 +1,9 @@
 ---
-title: Raw logs — nested-virt microVM reuse capacity
+title: Raw logs — nested-virt tinyVM reuse capacity
 nav_exclude: true
 ---
 
-# Raw logs — nested-virt microVM reuse capacity
+# Raw logs — nested-virt tinyVM reuse capacity
 
 Raw stdout/stderr of the `e2e/latency-benchmark-aiagent.sh` and
 `e2e/latency-benchmark-load.sh` runs that back
@@ -19,7 +19,7 @@ the baseline log.
 | CPU / RAM | 4 vCPUs = 2 physical cores × 2 SMT threads, one NUMA node, 5 GiB |
 | Guest | 1 vCPU / 256 MiB / 3 exec slots (the benchmark's `bench` spec) |
 | Stack | one-machine-etcd: exec gateway :3001 + human gateway :3100 + etcd, one merged exec,prov sandlot |
-| VM pool | 2 microVMs (the other two vCPUs carry the host stack) |
+| VM pool | 2 tinyVMs (the other two vCPUs carry the host stack) |
 | Pinning | none (`PIN_MODE=0`) |
 
 ## Files

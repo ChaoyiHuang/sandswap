@@ -332,7 +332,7 @@ EOF
 log "  /etc/resolv.conf -> 127.0.0.1 (sandns); backed up"
 
 log "[6/8] Starting 1 sandlot (gateway_addr = sandswap-stream.local:9998)..."
-# Ensure the host bridge exists (the sandlot needs it for microVM networking;
+# Ensure the host bridge exists (the sandlot needs it for tinyVM networking;
 # setup-network.sh is idempotent). The failover test only checks the sandlot's
 # gRPC connection + failover, but the sandlot refuses to start without br-sandswap.
 # The sandlot below is configured with subnet 10.190.1.0/24 / gw 10.190.1.1, so
@@ -359,7 +359,7 @@ gateway_addr: "sandswap-stream.local:9998"
 node_id: "failover-sl"
 vm_mode: embedded
 vmm_binary: ${SANDSWAP_BIN}/sandswap-sandvmm
-microvm:
+tinyvm:
   kernel: ${SANDSWAP_VAR}/vmlinux.bin
   initramfs: ${SANDSWAP_VAR}/initramfs.cpio.gz
   default_vcpus: 2

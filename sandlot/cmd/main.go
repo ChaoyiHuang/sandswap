@@ -59,7 +59,7 @@ var (
 	tlsKey        = flag.String("tls-key", "", "TLS client private key (required if -tls-cert set)")
 	tlsCA         = flag.String("tls-ca", "", "CA bundle to verify the gateway server cert (enables server verification). Empty = skip verify.")
 
-	// Outbound networking for pooled microVMs.
+	// Outbound networking for pooled tinyVMs.
 	networkBackend = flag.String("network-backend", sandlotconfig.DefaultNetworkBackend, "outbound net backend: none|bridge|routed-ipv6")
 	networkBridge  = flag.String("network-bridge", sandlotconfig.DefaultNetworkBridge, "host bridge (bridge backend)")
 	networkSubnet  = flag.String("network-subnet", sandlotconfig.DefaultNetworkSubnet, "guest subnet (CIDR)")
@@ -85,16 +85,16 @@ var (
 	recycleMemPct = flag.Int("recycle-mem-percent", sandlotconfig.DefaultRecycleMemPercent, "Recycle when guest MemAvailable < MemTotal × this / 100 (0 = disable)")
 	recycleMemAbs = flag.Int("recycle-mem-abs-mb", sandlotconfig.DefaultRecycleMemAbsMB, "Absolute recycle threshold (MiB) of guest MemAvailable (0 = disable). Effective threshold is the lower (min) of the enabled thresholds: pct decides on small VMs, abs decides on large VMs; clamped to ≤ 50% of MemTotal")
 	minIdleFloor  = flag.Float64("min-idle-floor-frac", sandlotconfig.DefaultMinIdleFloorFrac, "Maintain per-spec CLEAN headroom of max(1, floor(frac*target)) on top of pool target (min-idle floor dampener; 0 = disabled, 0.05 = 5%). Hot-reloadable.")
-	vmCreateConc  = flag.Int("vm-create-concurrency", sandlotconfig.DefaultVMCreateConcurrency, "Maximum microVMs booting at once during pool scale-up / reconcile / startup pre-create (>= 1; restart-required)")
-	vmDestroyConc = flag.Int("vm-destroy-concurrency", sandlotconfig.DefaultVMDestroyConcurrency, "Maximum idle microVMs destroyed at once during pool scale-down (>= 1; restart-required)")
+	vmCreateConc  = flag.Int("vm-create-concurrency", sandlotconfig.DefaultVMCreateConcurrency, "Maximum tinyVMs booting at once during pool scale-up / reconcile / startup pre-create (>= 1; restart-required)")
+	vmDestroyConc = flag.Int("vm-destroy-concurrency", sandlotconfig.DefaultVMDestroyConcurrency, "Maximum idle tinyVMs destroyed at once during pool scale-down (>= 1; restart-required)")
 
 	// VM mode
 	vmMode          = flag.String("vm-mode", sandlotconfig.DefaultVMMode, "VM lifecycle mode: embedded (default, direct) or boxout (sidecar)")
 	boxoutSocket    = flag.String("boxout-socket", sandlotconfig.DefaultBoxoutSocket, "Unix socket path for boxout mode")
 	boxoutTokenFile = flag.String("boxout-token-file", "", "Per-pod admission token file shared with boxout (empty = UID-only admission; set this in production boxout deployments)")
 	setfsTransport  = flag.String("setfs-transport", sandlotconfig.DefaultSetFsTransport, "Transport for the sandvmm hot ops (vm.set-fs, sandvmm.ping): raw = binary control frames on the same API socket (default, fastest), http = legacy REST over the same socket. Restart-required.")
-	vmmAPIAuth      = flag.Bool("vmm-api-auth", sandlotconfig.DefaultVMMAPIAuth, "Per-VM sandvmm canonical-API token/challenge handshake (default ON via the config default). Each VM gets a 32-byte random token delivered over an inherited fd and every connection starts with a challenge-response preface (transport-independent: raw and HTTP framing). Pass -vmm-api-auth=false only for test tooling that drives the socket directly; when off the socket relies on DAC + --api-allowed-uid alone. Restart-required; boxout mode reads microvm.vmm_api_auth from the shared config.")
-	initOnFree      = flag.Bool("init-on-free", sandlotconfig.DefaultInitOnFree, "Guest kernel free-time page wipe (init_on_free= on every VM's kernel cmdline). Default false: a fresh microVM's RAM is host anonymous mmap, so the kernel config's INIT_ON_FREE_DEFAULT_ON boot-time bulk clear is pure redundancy measured at ~0.65ms/MB; init_on_alloc stays on either way and keeps the cross-tenant freed-page channel closed. Pass -init-on-free for deployments that require contents wiped at free time as well. Restart-required; boxout mode reads microvm.init_on_free from the shared config.")
+	vmmAPIAuth      = flag.Bool("vmm-api-auth", sandlotconfig.DefaultVMMAPIAuth, "Per-VM sandvmm canonical-API token/challenge handshake (default ON via the config default). Each VM gets a 32-byte random token delivered over an inherited fd and every connection starts with a challenge-response preface (transport-independent: raw and HTTP framing). Pass -vmm-api-auth=false only for test tooling that drives the socket directly; when off the socket relies on DAC + --api-allowed-uid alone. Restart-required; boxout mode reads tinyvm.vmm_api_auth from the shared config.")
+	initOnFree      = flag.Bool("init-on-free", sandlotconfig.DefaultInitOnFree, "Guest kernel free-time page wipe (init_on_free= on every VM's kernel cmdline). Default false: a fresh tinyVM's RAM is host anonymous mmap, so the kernel config's INIT_ON_FREE_DEFAULT_ON boot-time bulk clear is pure redundancy measured at ~0.65ms/MB; init_on_alloc stays on either way and keeps the cross-tenant freed-page channel closed. Pass -init-on-free for deployments that require contents wiped at free time as well. Restart-required; boxout mode reads tinyvm.init_on_free from the shared config.")
 
 	// Stream concurrency / transport (govern in-flight commands from gateway + gRPC/HTTP-2 caps)
 	streamSendBuffer      = flag.Int("stream-send-buffer", config.DefaultStreamSendBuffer, "sendCh capacity for outbound messages to gateway (restart)")
@@ -111,8 +111,8 @@ var (
 	toleranceSec            = flag.Int("tolerance-sec", sandlotconfig.DefaultToleranceSec, "Stream-outage tolerance before the sandlot starts cleaning mounts (T_tolerance)")
 	cleanupSec              = flag.Int("cleanup-sec", sandlotconfig.DefaultCleanupSec, "Time budget for the sandlot's mount cleanup (T_clean; must be <= warden-countdown-sec)")
 	wardenCountdownSec      = flag.Int("warden-countdown-sec", sandlotconfig.DefaultWardenCountdownSec, "In-VM warden single countdown, reset only by heartbeats (T_warden)")
-	wardenMaxExecTimeoutSec = flag.Int("warden-max-exec-timeout-sec", 0, "In-VM warden max exec timeout passed via kernel cmdline (0 = warden default 180s). Must stay below -warden-countdown-sec (default 300) so a max-length exec always finishes before the warden's countdown fires. Restart-required; also settable as microvm.warden_max_exec_timeout_sec")
-	wardenLogLevel          = flag.String("warden-log", "", "In-VM warden log level passed via kernel cmdline (empty = warden default info). Set debug for profiling sessions — per-op hot-path timing lines live at debug because their serial-UART drain taxes the measured path. Restart-required (deliberately NOT hot-reloadable: an online flip would enable UART-taxed debug logging across every new VM at fleet scale); also settable as microvm.warden_log")
+	wardenMaxExecTimeoutSec = flag.Int("warden-max-exec-timeout-sec", 0, "In-VM warden max exec timeout passed via kernel cmdline (0 = warden default 180s). Must stay below -warden-countdown-sec (default 300) so a max-length exec always finishes before the warden's countdown fires. Restart-required; also settable as tinyvm.warden_max_exec_timeout_sec")
+	wardenLogLevel          = flag.String("warden-log", "", "In-VM warden log level passed via kernel cmdline (empty = warden default info). Set debug for profiling sessions — per-op hot-path timing lines live at debug because their serial-UART drain taxes the measured path. Restart-required (deliberately NOT hot-reloadable: an online flip would enable UART-taxed debug logging across every new VM at fleet scale); also settable as tinyvm.warden_log")
 	isolationSec            = flag.Int("isolation-sec", sandlotconfig.DefaultIsolationSec, "Wait after cleanup before reconnecting (T_isolation; > T_safe)")
 	// allowShortResilienceTimings permits sub-production resilience timings
 	// (T_tolerance/T_clean/T_warden < 300s). Production must NEVER set this:
@@ -130,7 +130,7 @@ var (
 	// (merged single-process form for single-node / all-in-one hosts — only
 	// meaningful against a UNIFIED gateway). One sandlot process per host;
 	// -allow-colocated-instances is the simulation escape hatch.
-	rolesFlag            = flag.String("roles", "exec", "Capability planes this instance serves: exec | prov | exec,prov (restart-required). exec = microVM lifecycle/mount/exec (default). prov = sandfs+template lifecycle on shared storage (dials a human/unified gateway). exec,prov = merged single-process form for single-node hosts.")
+	rolesFlag            = flag.String("roles", "exec", "Capability planes this instance serves: exec | prov | exec,prov (restart-required). exec = tinyVM lifecycle/mount/exec (default). prov = sandfs+template lifecycle on shared storage (dials a human/unified gateway). exec,prov = merged single-process form for single-node hosts.")
 	provTemplatesDir     = flag.String("templates-dir", "", "Template store root (layers/ + refs/) for the prov role. Empty = -overlayfs-templates when set, else the sibling templates/ directory beside -volumes-dir (the same store the exec role reads lowerdirs from).")
 	provOCIRegistry      = flag.String("oci-registry", "", "OCI registry for template pull/push/auto-pull (prov role; the registry egress lives on THIS host). Empty = local templates only.")
 	registryUsername     = flag.String("registry-username", "", "Registry basic-auth username (prov role; requires -oci-registry; restart-required). Prefer the YAML key over the flag: a flag value is visible in /proc/<pid>/cmdline.")
@@ -264,7 +264,7 @@ func main() {
 	// reverts a flag-provided value.
 	cfg.SetFlagReapplier(func(c *sandlotconfig.SandlotConfig) { c.ApplyFlagOverrides(flags, explicitSet) })
 
-	// Value-bound validation (recycle sentinels, microvm default vcpus/memory,
+	// Value-bound validation (recycle sentinels, tinyvm default vcpus/memory,
 	// stream transport caps, instance CID range). Hot-reload re-validates the
 	// whole edited config with the same rule before applying.
 	if err := cfg.Validate(); err != nil {
@@ -285,11 +285,11 @@ func main() {
 	// container runtime may drop per-mount flags on a PVC bind, so those
 	// roles warn instead of refusing (the mount owner must harden it).
 	if cfg.VMMode != "boxout" && slices.Contains(cfg.NormalizedRoles(), "exec") {
-		if err := requireSecureVolumesMount(cfg.MicroVM.VolumesDir, *allowInsecureVolumes); err != nil {
+		if err := requireSecureVolumesMount(cfg.TinyVM.VolumesDir, *allowInsecureVolumes); err != nil {
 			log.Fatalf("%v", err)
 		}
 	} else {
-		warnVolumesMountIfInsecure(cfg.MicroVM.VolumesDir)
+		warnVolumesMountIfInsecure(cfg.TinyVM.VolumesDir)
 	}
 
 	// The warden-port BPF guard is a startup precondition for an embedded exec
@@ -332,9 +332,9 @@ func main() {
 	// equal to max_exec_timeout is possible; the margin must survive that clamp.
 	// The warden has hard ceilings on both values (config.rs); a larger value
 	// would be refused inside the guest after the VM was already launched.
-	if cfg.MicroVM.WardenMaxExecTimeoutSec > 3600 {
+	if cfg.TinyVM.WardenMaxExecTimeoutSec > 3600 {
 		log.Fatalf("warden-max-exec-timeout-sec (%d) exceeds the warden's supported maximum (3600s)",
-			cfg.MicroVM.WardenMaxExecTimeoutSec)
+			cfg.TinyVM.WardenMaxExecTimeoutSec)
 	}
 	if res.WardenCountdownSec > 4200 {
 		log.Fatalf("warden-countdown-sec (%d) exceeds the warden's supported maximum (4200s)", res.WardenCountdownSec)
@@ -346,7 +346,7 @@ func main() {
 	// countdown this node reports, so in a production configuration the two
 	// values must not diverge. The Fast/dev timing escape hatch is the only
 	// configuration allowed to rely on the warden's clamp.
-	effectiveMaxExec := int(cfg.MicroVM.WardenMaxExecTimeoutSec)
+	effectiveMaxExec := int(cfg.TinyVM.WardenMaxExecTimeoutSec)
 	if effectiveMaxExec == 0 {
 		effectiveMaxExec = 180 // warden default
 	}
@@ -354,18 +354,18 @@ func main() {
 		log.Fatalf("warden-countdown-sec (%d) must be strictly greater than the warden's effective max_exec_timeout (%ds): the warden raises its countdown to the timeout, which would invalidate the gateway's T_safe proof",
 			res.WardenCountdownSec, effectiveMaxExec)
 	}
-	if cfg.MicroVM.WardenMaxExecTimeoutSec > 0 &&
-		res.WardenCountdownSec <= int(cfg.MicroVM.WardenMaxExecTimeoutSec)+int(warden.ReadTimeoutMargin/time.Second) {
+	if cfg.TinyVM.WardenMaxExecTimeoutSec > 0 &&
+		res.WardenCountdownSec <= int(cfg.TinyVM.WardenMaxExecTimeoutSec)+int(warden.ReadTimeoutMargin/time.Second) {
 		if !*allowShortResilienceTimings {
 			log.Fatalf("warden-countdown-sec (%d) must be strictly greater than "+
 				"warden-max-exec-timeout-sec (%d) + %ds read margin; a max-length exec's transport read "+
 				"races the warden's timeout response and a retry may re-execute it. "+
 				"Raise -warden-countdown-sec or lower -warden-max-exec-timeout-sec.",
-				res.WardenCountdownSec, cfg.MicroVM.WardenMaxExecTimeoutSec, int(warden.ReadTimeoutMargin/time.Second))
+				res.WardenCountdownSec, cfg.TinyVM.WardenMaxExecTimeoutSec, int(warden.ReadTimeoutMargin/time.Second))
 		}
 		log.Printf("WARNING: warden-countdown-sec (%d) is not greater than "+
 			"warden-max-exec-timeout-sec (%d) + %ds read margin (allowed only by -allow-short-resilience-timings)",
-			res.WardenCountdownSec, cfg.MicroVM.WardenMaxExecTimeoutSec, int(warden.ReadTimeoutMargin/time.Second))
+			res.WardenCountdownSec, cfg.TinyVM.WardenMaxExecTimeoutSec, int(warden.ReadTimeoutMargin/time.Second))
 	}
 	// Production floor: T_tolerance, T_clean, and T_warden must each be >= 300s
 	// (docs/how-it-works/resilience.md). Sub-300s timings collapse the tolerance
@@ -436,7 +436,7 @@ func main() {
 	// neither vhost-vsock nor its device lockdown.
 	if cfg.HasRole("exec") && cfg.VMMode != "boxout" {
 		const vhostVsockDev = "/dev/vhost-vsock"
-		if cfg.MicroVM.VMMUid > 0 {
+		if cfg.TinyVM.VMMUid > 0 {
 			// Identity-split model: /dev/vhost-vsock is owner-sandvmm 0600 —
 			// sandlot itself must NOT be able to open it (that is the device
 			// isolation). Verify the OWNER instead: the sandvmm uid must hold
@@ -449,11 +449,11 @@ func main() {
 				logger.Fatalf("vhost-vsock not available: %s: %v\n"+
 					"  ensure the kernel module is loaded: modprobe vhost_vsock", vhostVsockDev, err)
 			}
-			if sys, ok := st.Sys().(*syscall.Stat_t); ok && sys.Uid != cfg.MicroVM.VMMUid {
+			if sys, ok := st.Sys().(*syscall.Stat_t); ok && sys.Uid != cfg.TinyVM.VMMUid {
 				logger.Fatalf("%s owned by uid %d, want the sandvmm identity %d\n"+
-					"  fix: reinstall the udev rule (deploy/udev/99-sandswap-vsock.rules) and re-run host prep", vhostVsockDev, sys.Uid, cfg.MicroVM.VMMUid)
+					"  fix: reinstall the udev rule (deploy/udev/99-sandswap-vsock.rules) and re-run host prep", vhostVsockDev, sys.Uid, cfg.TinyVM.VMMUid)
 			}
-			if err := checkCapsForVMMSpawn(cfg.MicroVM.VMMUid); err != nil {
+			if err := checkCapsForVMMSpawn(cfg.TinyVM.VMMUid); err != nil {
 				logger.Fatalf("%v", err)
 			}
 		} else if f, err := os.OpenFile(vhostVsockDev, os.O_RDWR, 0); err != nil {
@@ -472,28 +472,28 @@ func main() {
 	}
 
 	// Default VMM config
-	vmmGroups, gerr := resolveVMMGroups(cfg.MicroVM.VMMGroups, cfg.MicroVM.APIGid, logger)
+	vmmGroups, gerr := resolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger)
 	if gerr != nil {
 		logger.Fatalf("%v", gerr)
 	}
 	vmmCfg := vmm.Config{
-		KernelPath:              cfg.MicroVM.Kernel,
-		InitramfsPath:           cfg.MicroVM.Initramfs,
-		VCPUs:                   cfg.MicroVM.DefaultVCPUs,
-		MemoryMB:                cfg.MicroVM.DefaultMemoryMB,
+		KernelPath:              cfg.TinyVM.Kernel,
+		InitramfsPath:           cfg.TinyVM.Initramfs,
+		VCPUs:                   cfg.TinyVM.DefaultVCPUs,
+		MemoryMB:                cfg.TinyVM.DefaultMemoryMB,
 		VMMBinary:               cfg.VMMBinary,
-		VolumesDir:              cfg.MicroVM.VolumesDir,
-		TemplatesDir:            cfg.MicroVM.OverlayFSTemplates,
+		VolumesDir:              cfg.TinyVM.VolumesDir,
+		TemplatesDir:            cfg.TinyVM.OverlayFSTemplates,
 		WardenCountdownSec:      uint32(res.WardenCountdownSec),
-		WardenMaxExecTimeoutSec: cfg.MicroVM.WardenMaxExecTimeoutSec,
-		WardenLogLevel:          cfg.MicroVM.WardenLogLevel,
-		VMMUID:                  cfg.MicroVM.VMMUid,
-		VMMGID:                  cfg.MicroVM.VMMGid,
+		WardenMaxExecTimeoutSec: cfg.TinyVM.WardenMaxExecTimeoutSec,
+		WardenLogLevel:          cfg.TinyVM.WardenLogLevel,
+		VMMUID:                  cfg.TinyVM.VMMUid,
+		VMMGID:                  cfg.TinyVM.VMMGid,
 		VMMGroups:               vmmGroups,
-		APIGID:                  cfg.MicroVM.APIGid,
-		SeccompMode:             cfg.MicroVM.VMMSeccomp,
-		VMMAPIAuth:              cfg.MicroVM.VMMAPIAuth,
-		InitOnFree:              cfg.MicroVM.InitOnFree,
+		APIGID:                  cfg.TinyVM.APIGid,
+		SeccompMode:             cfg.TinyVM.VMMSeccomp,
+		VMMAPIAuth:              cfg.TinyVM.VMMAPIAuth,
+		InitOnFree:              cfg.TinyVM.InitOnFree,
 	}
 
 	// Build the outbound-networking provider.
@@ -502,7 +502,7 @@ func main() {
 	// bridge check is skipped (a provision host owes KVM/bridge nothing).
 	var netProv vmm.NetworkProvider = network.NewNoop()
 	if cfg.HasRole("exec") && cfg.VMMode != "boxout" {
-		netProv, err = network.BuildProvider(cfg.Network, cfg.MicroVM.VMMUid, logger)
+		netProv, err = network.BuildProvider(cfg.Network, cfg.TinyVM.VMMUid, logger)
 		if err != nil {
 			logger.Fatalf("%v", err)
 		}
@@ -627,10 +627,10 @@ func main() {
 		// — node prep never created it, so a fresh host could not write it.
 		templatesDir := cfg.Provision.TemplatesDir
 		if templatesDir == "" {
-			templatesDir = cfg.MicroVM.OverlayFSTemplates
+			templatesDir = cfg.TinyVM.OverlayFSTemplates
 		}
 		if templatesDir == "" {
-			templatesDir = filepath.Join(filepath.Dir(cfg.MicroVM.VolumesDir), "templates")
+			templatesDir = filepath.Join(filepath.Dir(cfg.TinyVM.VolumesDir), "templates")
 		}
 		// The volume-name seed: required, and it must NOT live in a file the
 		// sandvmm identity can read (see config.ProvisionConfig.VolumeSeed).
@@ -660,7 +660,7 @@ func main() {
 		seedCoord, cerr = seed.New(seed.Options{
 			Config:  liveConfig.Get,
 			Namer:   namer,
-			VolRoot: cfg.MicroVM.VolumesDir,
+			VolRoot: cfg.TinyVM.VolumesDir,
 			// Beside the role lock: the same runtime directory, so the record
 			// is tmpfs-backed and shares the lock's one-instance-per-host
 			// assumption (a second PROV instance on this host is not a
@@ -680,17 +680,17 @@ func main() {
 			logger.Fatalf("provision seed startup guard: %v", gerr)
 		}
 		resolveVolume := func(id string) (string, error) {
-			dir := filepath.Join(cfg.MicroVM.VolumesDir, namer.Current(id))
+			dir := filepath.Join(cfg.TinyVM.VolumesDir, namer.Current(id))
 			if _, err := os.Stat(dir); err == nil {
 				return dir, nil
 			}
 			if namer.HasNext() {
-				next := filepath.Join(cfg.MicroVM.VolumesDir, namer.Next(id))
+				next := filepath.Join(cfg.TinyVM.VolumesDir, namer.Next(id))
 				if _, err := os.Stat(next); err == nil {
 					return next, nil
 				}
 			}
-			return "", fmt.Errorf("volume for %s not found under %s", id, cfg.MicroVM.VolumesDir)
+			return "", fmt.Errorf("volume for %s not found under %s", id, cfg.TinyVM.VolumesDir)
 		}
 		mgr, merr := template.NewManager(template.Config{
 			Registry:     cfg.Provision.OCIRegistry,
@@ -699,7 +699,7 @@ func main() {
 			// directory as <OverlayBase>/<id> for SaveAsTemplate (volume →
 			// template snapshots). This process owns the storage plane, so the
 			// path is real here — the gateway never has it.
-			OverlayBase:    cfg.MicroVM.VolumesDir,
+			OverlayBase:    cfg.TinyVM.VolumesDir,
 			ResolveVolume:  resolveVolume,
 			MaxSparseBytes: cfg.Provision.MaxSparseBytes,
 			// SaveAsTemplate must classify flat vs overlay from a SIGNED
@@ -738,7 +738,7 @@ func main() {
 				logger.Printf("WARNING: flat template scan %s: %v", cfg.Provision.FlatTemplatesDir, serr)
 			}
 		}
-		prov, perr := volume.NewWithNamer(cfg.MicroVM.VolumesDir, mgr, namer)
+		prov, perr := volume.NewWithNamer(cfg.TinyVM.VolumesDir, mgr, namer)
 		if perr != nil {
 			logger.Fatalf("provision volume namer: %v", perr)
 		}
@@ -751,7 +751,7 @@ func main() {
 			logger)
 		logger.Printf("provision plane ready: templates=%s registry=%q auth=%s volumes=%s max_ops=%d",
 			templatesDir, cfg.Provision.OCIRegistry, cfg.Provision.RegistryAuthMethod(),
-			cfg.MicroVM.VolumesDir, cfg.Provision.MaxConcurrentOps)
+			cfg.TinyVM.VolumesDir, cfg.Provision.MaxConcurrentOps)
 	}
 
 	// heartbeatNow is a channel that triggers an immediate heartbeat when
@@ -782,7 +782,7 @@ func main() {
 		bm.SetSandboxRoot(handler.SandboxRoot)
 	}
 
-	// Re-adopt microVMs that survived a sandlot restart. Exec-role only: a
+	// Re-adopt tinyVMs that survived a sandlot restart. Exec-role only: a
 	// prov-only instance owns no VMs, and its sandbox root may be the shared
 	// default (instance.id unset on a co-located exec+prov host) — scanning it
 	// here would adopt or orphan-kill the exec instance's live VMs.
@@ -810,7 +810,7 @@ func main() {
 	// brand-new pool VMs, which are still mid-boot — and a VM that was just
 	// created has by construction never been mounted, so there is nothing to
 	// release.
-	// Exec-role only: survivors are microVMs this instance owns.
+	// Exec-role only: survivors are tinyVMs this instance owns.
 	if cfg.HasRole("exec") {
 		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), time.Duration(res.CleanupSec)*time.Second)
 		handler.ResetSurvivorsToClean(cleanCtx, time.Now().Add(time.Duration(res.CleanupSec)*time.Second))
@@ -889,7 +889,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
-		logger.Printf("received signal %v, closing stream (microVMs left alive for re-adopt)", sig)
+		logger.Printf("received signal %v, closing stream (tinyVMs left alive for re-adopt)", sig)
 		cancel()
 	}()
 
@@ -898,7 +898,7 @@ func main() {
 	// anchor fresh (single countdown). StopProbeLoop cancels it on entering
 	// CLEANING so the countdowns can fire as the last-resort mount release.
 	// Exec-role only: a prov-only instance owns no VMs and must not heartbeat
-	// (or later reap) another instance's microVMs.
+	// (or later reap) another instance's tinyVMs.
 	if cfg.HasRole("exec") {
 		handler.StartProbeLoop(ctx)
 	}
@@ -935,14 +935,14 @@ func main() {
 	}
 	core.RunNode(ctx, runOpts)
 
-	logger.Printf("sandlot exiting; %d microVM(s) left alive for re-adopt", func() int {
+	logger.Printf("sandlot exiting; %d tinyVM(s) left alive for re-adopt", func() int {
 		c, _ := handler.ActiveVMs()
 		return int(c)
 	}())
 	handler.Stop()
 }
 
-// resolveVMMGroups turns the microvm.vmm_groups spec (comma-separated numeric
+// resolveVMMGroups turns the tinyvm.vmm_groups spec (comma-separated numeric
 // gids or group NAMES — names carry per-host variance like "kvm", numbers
 // carry the contract pins like 985) into the supplementary group list for
 // the sandvmm child. The API gid is always included so the socket chgrp
@@ -969,7 +969,7 @@ func resolveVMMGroups(spec string, apiGid uint32, logger *log.Logger) ([]uint32,
 		}
 		g, err := user.LookupGroup(tok)
 		if err != nil {
-			logger.Printf("warning: microvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
+			logger.Printf("warning: tinyvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
 			continue
 		}
 		if n, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
@@ -984,7 +984,7 @@ func resolveVMMGroups(spec string, apiGid uint32, logger *log.Logger) ([]uint32,
 	if forbidden := sandprovGroupID(); forbidden != 0 {
 		for _, g := range out {
 			if g == forbidden {
-				return nil, fmt.Errorf("microvm.vmm_groups/api_gid resolves to the sandprov group %d — the VMM/FUSE child must never carry the volume-seed group; remove it from the group list", g)
+				return nil, fmt.Errorf("tinyvm.vmm_groups/api_gid resolves to the sandprov group %d — the VMM/FUSE child must never carry the volume-seed group; remove it from the group list", g)
 			}
 		}
 	}
@@ -1001,8 +1001,8 @@ const guestArtifactDir = "/usr/local/lib/sandswap/guest"
 // root-owned, non-group/world-writable regular files, and match SHA256SUMS.
 // A missing or mismatched pin is fatal — the guest kernel is the sandbox TCB.
 func verifyGuestArtifacts(cfg *sandlotconfig.SandlotConfig, logger *log.Logger) {
-	kernel := cfg.MicroVM.Kernel
-	initramfs := cfg.MicroVM.Initramfs
+	kernel := cfg.TinyVM.Kernel
+	initramfs := cfg.TinyVM.Initramfs
 	if filepath.Dir(kernel) != guestArtifactDir || filepath.Dir(initramfs) != guestArtifactDir {
 		logger.Printf("guest TCB hash check skipped: kernel/initramfs are outside %s (dev/e2e paths)", guestArtifactDir)
 		return

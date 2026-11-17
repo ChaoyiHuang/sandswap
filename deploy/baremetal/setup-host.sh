@@ -321,7 +321,7 @@ setup_sandlot() {
     # a host configured with a non-default subnet would come back from a reboot
     # speaking the defaults (10.188.0.0/16 / 10.188.0.1) while every sandlot on
     # it still hands guests the configured gateway — an unreachable default
-    # route inside every microVM, silently.
+    # route inside every tinyVM, silently.
     install -d -m 0755 /etc/sandswap
     printf 'BRIDGE=br-sandswap\nSUBNET=%s\nGATEWAY=%s\nEXTRA_ADDRS=%s\n' "$subnet" "$gw_ip" "$EXTRA_ADDRS" \
         > /etc/sandswap/network.env

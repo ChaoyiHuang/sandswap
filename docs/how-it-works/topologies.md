@@ -28,7 +28,7 @@ conceptual map; the step-by-step installs live in
   draw it compactly as `sandlot (exec role)`; expanded here once:
 
 ```
-sandlot ──UDS──► sandvmm ──KVM──► microVM (warden, PID 1)
+sandlot ──UDS──► sandvmm ──KVM──► tinyVM (warden, PID 1)
    ▲                                    │
    └───── vsock :1024 (hot path) ───────┘   bypasses the VMM
 ```
@@ -76,7 +76,7 @@ The same binary, two roles (flag `-roles`; restart-required). Where the
 gateway splits by listeners, sandlot splits by workload — execution versus
 provision:
 
-- **exec**: the execution role — microVM pool lifecycle, SandFS swap in/out
+- **exec**: the execution role — tinyVM pool lifecycle, SandFS swap in/out
   (`set-fs`), and the warden vsock client. Dials the **exec gateway's**
   stream (`:9998`) and carries the exec plane end to end. Needs KVM and
   `/dev/vhost-vsock` on the host; its stream connection is sticky (never
@@ -121,7 +121,7 @@ smallest complete deployment.
 │  │ gateway (human+exec)   │  gRPC  │ node (exec+prov)      │ │
 │  │ :3000 agent + MCP      │◄──────►│ sandlot ──UDS──►      │ │
 │  │ :3100 human API        │ bidi,  │   sandvmm ──KVM──►    │ │
-│  │ :9998 node stream      │ sandlot│     microVM (warden)  │ │
+│  │ :9998 node stream      │ sandlot│     tinyVM (warden)  │ │
 │  │ identity: snapshot     │ dials  │ sandlot ──vsock :1024 │ │
 │  │ file                   │ out    │   ──► warden (hot)    │ │
 │  └───────────┬────────────┘        │ virtio-fs: the active │ │
@@ -231,7 +231,7 @@ directly.
 │ exec node hosts ×N (KVM on each)  │ │ prov node hosts ×M        │
 │ every node runs:                  │ │ (storage-attached hosts,  │
 │ sandlot (exec role)               │ │  no KVM needed)           │
-│ warm microVM pool · vsock exec    │ │ sandlot (prov role)       │
+│ warm tinyVM pool · vsock exec    │ │ sandlot (prov role)       │
 └───────────────┬───────────────────┘ │ volume · template ops     │
                 │ virtio-fs — the     └──────────┬────────────────┘
                 │ active agent's directory       │ volume +
@@ -247,7 +247,7 @@ directly.
   SandFS/template storage: all volume and template work is done by the prov
   node hosts.
 - **Exec node hosts** (×N): KVM + `/dev/vhost-vsock` + the shared storage.
-  Each holds a pool of warm CLEAN microVMs; commands arrive over the one
+  Each holds a pool of warm CLEAN tinyVMs; commands arrive over the one
   outbound stream.
 - **Prov node hosts** (×M): storage-attached, no KVM — sandlot (prov role)
   performs all volume/template work for human gateway over its prov stream
@@ -299,7 +299,7 @@ DNS instead of a hardcoded address; the gateways coordinate through etcd.
 │ exec node hosts ×N (KVM on each)  │ │ prov node hosts ×M                 │
 │ every node runs:                  │ │ (storage-attached, no KVM)         │
 │ sandlot (exec role)               │ │ sandlot (prov role)                │
-│ warm microVM pool · vsock exec    │ │ volume · template ops · OCI        │
+│ warm tinyVM pool · vsock exec    │ │ volume · template ops · OCI        │
 └───────────────┬───────────────────┘ └──────────┬─────────────────────────┘
                 │ virtio-fs — the                │
                 │ active agent's directory       │ volume +
@@ -409,7 +409,7 @@ One privileged container holds the whole node stack:
 │                                                              │
 │  ┌─ container: sandlot — UID 0, privileged ────────────────┐ │
 │  │                                                         │ │
-│  │   sandlot ──UDS──► sandvmm ──KVM──► microVM (warden)    │ │
+│  │   sandlot ──UDS──► sandvmm ──KVM──► tinyVM (warden)    │ │
 │  │      ▲                                │                 │ │
 │  │      └──── vsock :1024 (hot path) ────┘                 │ │
 │  │                                                         │ │
@@ -444,7 +444,7 @@ Unix socket:
 │  │   privileged path only: sandvmm lifecycle · network     │ │
 │  │   provisioning · host-side overlay mounts · /proc       │ │
 │  │   re-adopt · crash detection                            │ │
-│  │   sandvmm ──KVM──► microVMs (warden)                    │ │
+│  │   sandvmm ──KVM──► tinyVMs (warden)                    │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
 │  hostNetwork · hostPID · initContainer: attach-vsockguard    │

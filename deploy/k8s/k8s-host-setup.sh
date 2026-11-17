@@ -558,14 +558,14 @@ if [[ ! -e /sys/fs/bpf/vsockguard/link ]]; then
     echo "  ✓ vsockguard attached (allowed UID=$VSOCKGUARD_ALLOWED_UID, mode=$MODE)"
 fi
 
-# ── Step 5b: microVM outbound networking (bridge + NAT) ────────────
+# ── Step 5b: tinyVM outbound networking (bridge + NAT) ────────────
 # The sandlot pod runs hostNetwork and needs br-sandswap for TAP attachment;
 # the bridge and the nftables masquerade are runtime kernel state that does
 # NOT survive a node reboot (deploy-lib creates them per deploy, so a plain
 # reboot of a running cluster leaves every sandlot pod crash-looping until a
 # redeploy). Create them here (idempotent) and persist via the same oneshot
 # unit the baremetal prep installs — one implementation, re-created per boot.
-echo "[5b/6] microVM networking (bridge + NAT, persistent)"
+echo "[5b/6] tinyVM networking (bridge + NAT, persistent)"
 SETUP_NET="$ROOT/deploy/setup-network.sh"
 if [[ -f "$SETUP_NET" ]]; then
     if [[ "$VERIFY_ONLY" == "true" ]]; then
@@ -577,7 +577,7 @@ if [[ -f "$SETUP_NET" ]]; then
             echo "  ✗ sandswap-network.service NOT enabled — a reboot will leave every sandlot pod without br-sandswap"
         fi
     else
-        bash "$SETUP_NET" >/dev/null 2>&1 || echo "  ⚠ setup-network.sh reported a failure — check microVM egress"
+        bash "$SETUP_NET" >/dev/null 2>&1 || echo "  ⚠ setup-network.sh reported a failure — check tinyVM egress"
         install -m 0755 "$SETUP_NET" /usr/local/bin/sandswap-setup-network
         # The installed copy resolves its shared runtime from
         # /usr/local/lib/sandswap (its $ROOT is /usr/local, where no repo tree
@@ -617,7 +617,7 @@ fi
 # ── Summary ────────────────────────────────────────────────────────
 echo ""
 if ip link show br-sandswap &>/dev/null; then
-    echo "  ✓ br-sandswap present (microVM egress) — persist unit: sandswap-network.service"
+    echo "  ✓ br-sandswap present (tinyVM egress) — persist unit: sandswap-network.service"
 else
     echo "  ✗ br-sandswap MISSING — sandlot VMs will have no outbound networking"
     exit 1

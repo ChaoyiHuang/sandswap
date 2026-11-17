@@ -2,7 +2,7 @@
 
 This directory contains the **VMM (Virtual Machine Monitor)** component of
 [Sandswap](https://github.com/sandswap/sandswap), a transparent remote code
-execution sandbox for AI agents. Every microVM runs under one dedicated
+execution sandbox for AI agents. Every tinyVM runs under one dedicated
 `sandvmm` process, driven by sandlot over a dual-protocol (raw control
 frames + HTTP) API on a Unix-domain socket.
 
@@ -107,12 +107,12 @@ sandlot (Go) ── raw+HTTP ──→ sandvmm (Rust/KVM)
                                 ├── virtio-net  ← TAP on host bridge
                                 └── virtio-rng
                                        │
-                                  KVM microVM
+                                  KVM tinyVM
                                   ├── kernel (PVH)
                                   └── initramfs (warden)
 ```
 
-The sandlot process spawns one `sandvmm` per microVM. All operations are
+The sandlot process spawns one `sandvmm` per tinyVM. All operations are
 issued over one Unix-domain socket that speaks two protocols, routed per
 connection by the first byte: raw control frames for the hot ops
 (`vm.set-fs`, `sandvmm.ping`) and HTTP/JSON for lifecycle (create, boot,

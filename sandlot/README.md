@@ -1,6 +1,6 @@
 # sandlot
 
-The per-node daemon of Sandswap. It manages the microVM pool (spawns and
+The per-node daemon of Sandswap. It manages the tinyVM pool (spawns and
 monitors `sandvmm` KVM processes), performs agent SandFS hot-swap over
 native virtio-fs (`allowed_dirs` update + in-guest bind mount), relays
 exec/file I/O to the in-VM warden over raw vsock, and reaches the gateway
@@ -24,7 +24,7 @@ certs for the gateway stream.
 
 - Architecture and communication paths (gateway ↔ sandlot stream, sandlot →
   sandvmm HTTP API, sandlot → warden vsock): [docs/how-it-works/architecture.md](../docs/how-it-works/architecture.md)
-- microVM lifecycle states (CLEAN → IN_USE → LEASED → RELEASING → CLEAN,
+- tinyVM lifecycle states (CLEAN → IN_USE → LEASED → RELEASING → CLEAN,
   sticky lease, recycle policy): [docs/how-it-works/vm-lifecycle.md](../docs/how-it-works/vm-lifecycle.md)
 - Resilience state machine (CONNECTED → TOLERATING → CLEANING → DONE),
   crash detection, re-adoption, and the warden countdown: [docs/how-it-works/resilience.md](../docs/how-it-works/resilience.md)

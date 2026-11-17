@@ -29,7 +29,7 @@ func TestResolveVMMGroupsRejectsSandprovGroup(t *testing.T) {
 	lg := log.New(io.Discard, "", 0)
 
 	if _, err := resolveVMMGroups("4242", 985, lg); err == nil {
-		t.Fatal("sandprov group accepted in microvm.vmm_groups")
+		t.Fatal("sandprov group accepted in tinyvm.vmm_groups")
 	}
 	if _, err := resolveVMMGroups("", 4242, lg); err == nil {
 		t.Fatal("sandprov group accepted as api_gid")

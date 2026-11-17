@@ -26,7 +26,7 @@ import (
 //
 // Design principle: no direct filesystem access. All sandfs content
 // (including self-description files like SANDFS.md/CLAUDE.md/README.md)
-// must be accessed through the microVM via POST /agent/file. The agent discovery
+// must be accessed through the tinyVM via POST /agent/file. The agent discovery
 // endpoint returns only metadata stored in the identity store (description,
 // name, template) — never reads from the sandbox's rootfs.
 type AgentHandler struct {

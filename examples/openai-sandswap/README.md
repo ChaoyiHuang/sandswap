@@ -5,7 +5,7 @@ An AI agent built directly on the two **official** Go SDKs — no agent framewor
 - [`github.com/openai/openai-go`](https://github.com/openai/openai-go) for the LLM (Chat Completions with tool calling)
 - [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) for the MCP client (Streamable HTTP)
 
-It connects to a Sandswap gateway's MCP server and executes code in isolated KVM microVMs. This is a **functional twin** of [`examples/eino-sandswap`](../eino-sandswap/): same modes, same environment variables, same routing rules, same prompts, and same log-line shapes — so the end-to-end test ([`e2e/eino-agent-mcp.sh`](../../e2e/eino-agent-mcp.sh)) can target either example by pointing `EINO_DIR` at this directory.
+It connects to a Sandswap gateway's MCP server and executes code in isolated KVM tinyVMs. This is a **functional twin** of [`examples/eino-sandswap`](../eino-sandswap/): same modes, same environment variables, same routing rules, same prompts, and same log-line shapes — so the end-to-end test ([`e2e/eino-agent-mcp.sh`](../../e2e/eino-agent-mcp.sh)) can target either example by pointing `EINO_DIR` at this directory.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ It connects to a Sandswap gateway's MCP server and executes code in isolated KVM
 ┌─────────────────────────────┐
 │  Sandlot → sandvmm (KVM)    │
 │  ┌───────────────────────┐  │
-│  │  microVM (warden)     │  │
+│  │  tinyVM (warden)     │  │
 │  │  vsock:1024           │  │
 │  │  /workspace           │  │
 │  └───────────────────────┘  │
@@ -43,7 +43,7 @@ The agent loop is hand-rolled and framework-free: send the conversation to the L
 
 ### Dual-Agent Mode (VM Reuse)
 
-Two agents run in the same process, each with its own MCP session. Prompts alternate between them sequentially over one shared pool (sequential by design). They share a single microVM — the gateway performs virtio-fs `allowed_dirs` hot-swap when switching between agents.
+Two agents run in the same process, each with its own MCP session. Prompts alternate between them sequentially over one shared pool (sequential by design). They share a single tinyVM — the gateway performs virtio-fs `allowed_dirs` hot-swap when switching between agents.
 
 ```
 ┌─────────────────────────────────────┐
@@ -64,7 +64,7 @@ Two agents run in the same process, each with its own MCP session. Prompts alter
 ┌─────────────────────────────────────┐
 │  Sandlot → sandvmm (1 KVM VM)       │
 │  ┌─────────────────────────────────┐│
-│  │  microVM (shared)               ││
+│  │  tinyVM (shared)               ││
 │  │  virtio-fs allowed_dirs hot-swap││
 │  │  Agent A rootfs ↔ Agent B rootfs││
 │  └─────────────────────────────────┘│
@@ -84,9 +84,9 @@ The auth contract is unchanged from the Eino example: every MCP request carries 
 
 - **Multi-LLM support**: DeepSeek (recommended), OpenAI, or Gemini — selected by environment variable
 - **MCP tool integration**: All Sandswap sandbox tools available through the standard MCP protocol
-- **Dual-agent mode**: Two agents in one process, sharing a microVM pool — tests VM reuse and agent switching
+- **Dual-agent mode**: Two agents in one process, sharing a tinyVM pool — tests VM reuse and agent switching
 - **Interactive console**: Multi-turn conversation with the agent(s)
-- **Full sandbox access**: Code execution, file I/O, background processes in KVM microVMs
+- **Full sandbox access**: Code execution, file I/O, background processes in KVM tinyVMs
 
 ## Prerequisites
 
@@ -199,7 +199,7 @@ export DEEPSEEK_API_KEY=sk-xxx
 EINO_DIR=/home/joehuang_sweden/sandswap/examples/openai-sandswap bash e2e/eino-agent-mcp.sh
 ```
 
-The test starts the full stack (gateway + sandlot + real KVM microVMs, pool size 1), creates two agents and two sandfs, then runs the example in dual-agent piped mode with alternating `A:`/`B:` prompts. It verifies both agents' tool execution results and confirms VM reuse (only 1 VM created for 2 agents).
+The test starts the full stack (gateway + sandlot + real KVM tinyVMs, pool size 1), creates two agents and two sandfs, then runs the example in dual-agent piped mode with alternating `A:`/`B:` prompts. It verifies both agents' tool execution results and confirms VM reuse (only 1 VM created for 2 agents).
 
 ## Bare-metal Latency Benchmark
 

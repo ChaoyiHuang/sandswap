@@ -1,6 +1,6 @@
 # Sandswap Eino Agent Example
 
-An AI agent built with [Eino](https://github.com/cloudwego/eino) that connects to a Sandswap gateway's MCP server and executes code in isolated KVM microVMs.
+An AI agent built with [Eino](https://github.com/cloudwego/eino) that connects to a Sandswap gateway's MCP server and executes code in isolated KVM tinyVMs.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ An AI agent built with [Eino](https://github.com/cloudwego/eino) that connects t
 ┌─────────────────────────────┐
 │  Sandlot → sandvmm (KVM)    │
 │  ┌───────────────────────┐  │
-│  │  microVM (warden)     │  │
+│  │  tinyVM (warden)     │  │
 │  │  vsock:1024           │  │
 │  │  /workspace           │  │
 │  └───────────────────────┘  │
@@ -36,7 +36,7 @@ An AI agent built with [Eino](https://github.com/cloudwego/eino) that connects t
 
 ### Dual-Agent Mode (VM Reuse)
 
-Two agents run in the same process, each with its own MCP session. Prompts alternate between them sequentially over one shared pool (sequential by design). They share a single microVM — the gateway performs virtio-fs `allowed_dirs` hot-swap when switching between agents.
+Two agents run in the same process, each with its own MCP session. Prompts alternate between them sequentially over one shared pool (sequential by design). They share a single tinyVM — the gateway performs virtio-fs `allowed_dirs` hot-swap when switching between agents.
 
 ```
 ┌─────────────────────────────────────┐
@@ -57,7 +57,7 @@ Two agents run in the same process, each with its own MCP session. Prompts alter
 ┌─────────────────────────────────────┐
 │  Sandlot → sandvmm (1 KVM VM)       │
 │  ┌─────────────────────────────────┐│
-│  │  microVM (shared)               ││
+│  │  tinyVM (shared)               ││
 │  │  virtio-fs allowed_dirs hot-swap││
 │  │  Agent A rootfs ↔ Agent B rootfs││
 │  └─────────────────────────────────┘│
@@ -68,9 +68,9 @@ Two agents run in the same process, each with its own MCP session. Prompts alter
 
 - **Multi-LLM support**: DeepSeek (recommended), OpenAI, or Gemini — selected by environment variable
 - **MCP tool integration**: All 12 Sandswap sandbox tools available through the standard MCP protocol
-- **Dual-agent mode**: Two agents in one process, sharing a microVM pool — tests VM reuse and agent switching
+- **Dual-agent mode**: Two agents in one process, sharing a tinyVM pool — tests VM reuse and agent switching
 - **Interactive console**: Multi-turn conversation with the agent(s)
-- **Full sandbox access**: Code execution, file I/O, background processes in KVM microVMs
+- **Full sandbox access**: Code execution, file I/O, background processes in KVM tinyVMs
 
 ## Prerequisites
 
@@ -189,7 +189,7 @@ bash e2e/eino-agent-mcp.sh
 
 The test script:
 1. Deploys all binaries and Ubuntu rootfs template
-2. Starts gateway + sandlot with real KVM microVMs (pool size = 1)
+2. Starts gateway + sandlot with real KVM tinyVMs (pool size = 1)
 3. Creates **two agents** and **two sandfs** (both with Ubuntu rootfs)
 4. Builds and runs the Eino dual-agent with alternating test prompts
 5. Verifies both agents' tool execution results

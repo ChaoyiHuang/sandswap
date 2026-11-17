@@ -458,7 +458,7 @@ gateway_addr: "${ip}:9998"
 node_id: "bp-${inst}"
 vm_mode: embedded
 vmm_binary: ${SANDSWAP_BIN}/sandswap-sandvmm
-microvm:
+tinyvm:
   kernel: ${SANDSWAP_VAR}/vmlinux.bin
   initramfs: ${SANDSWAP_VAR}/initramfs.cpio.gz
   default_vcpus: 1
@@ -531,7 +531,7 @@ cat > "$RUN_DIR/sandlot-prov.yaml" << YAML
 gateway_addr: "127.0.0.1:9996"
 node_id: "${BP_PROV_NODE_ID}"
 roles: [prov]
-microvm:
+tinyvm:
   volumes_dir: ${SANDSWAP_VAR}/volumes
 provision:
   flat_templates_dir: ${SANDSWAP_VAR}/flat-templates

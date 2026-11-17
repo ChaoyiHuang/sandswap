@@ -9,9 +9,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0.
 //
-// Package lease implements microVM leases for Sandswap sandboxes.
+// Package lease implements tinyVM leases for Sandswap sandboxes.
 // Lease model (background-exec-aware):
-// A lease keeps a microVM mounted for a sandfs so subsequent calls skip the
+// A lease keeps a tinyVM mounted for a sandfs so subsequent calls skip the
 // virtio-fs allowed_dirs swap + mount overhead. A lease is released (the VM is
 // unmounted) only when ALL of these hold:
 //	activeExecs == 0              — no in-flight RPC (sync exec, file op, bg
@@ -55,7 +55,7 @@ import (
 // bottleneck well past 100k concurrent leases on commodity hardware.
 const leaseShards = 32
 
-// Lease holds microVMs for sandfs after execution completes. Each entry has its
+// Lease holds tinyVMs for sandfs after execution completes. Each entry has its
 // own timer (time.AfterFunc), so evaluation is independent per sandfs — no
 // global ticker scanning the whole map. A low-frequency reaper remains as a
 // safety net for the global maxHold cap on pure-sync sandboxes (a chatty
@@ -92,7 +92,7 @@ type bgHold struct {
 	done     bool      // poll saw done/killed/not_found, or deadline expired
 }
 
-// LeaseEntry tracks a single sandfs's microVM lease.
+// LeaseEntry tracks a single sandfs's tinyVM lease.
 type LeaseEntry struct {
 	NodeID string
 	// Spec is the actual VM spec serving this sandfs: set on the

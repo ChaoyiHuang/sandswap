@@ -8,8 +8,8 @@ parent: Benchmark
 
 The numbers in the four reports — [bare-metal latency](baremetal.md),
 [nested-virt latency](nested-virt.md),
-[bare-metal microVM reuse capacity](baremetal-load.md) and
-[nested-virt microVM reuse capacity](nested-virt-load.md) — come from self-contained
+[bare-metal tinyVM reuse capacity](baremetal-load.md) and
+[nested-virt tinyVM reuse capacity](nested-virt-load.md) — come from self-contained
 scripts in [`e2e/`](https://github.com/ChaoyiHuang/sandswap/tree/main/e2e).
 Each one deploys its own throwaway stack (binaries, certs, volumes, logs —
 everything under `$DEPLOY_DIR`, default `/var/lib/sandswap`), runs, and
@@ -118,20 +118,20 @@ sudo bash e2e/latency-benchmark-unmount.sh cache16m
 FILE_MB=128 sudo bash e2e/latency-benchmark-unmount.sh cache16m
 ```
 
-## 5. Load benchmarks (microVM reuse capacity)
+## 5. Load benchmarks (tinyVM reuse capacity)
 
-Two steps: first measure the baseline (one microVM, no background load),
+Two steps: first measure the baseline (one tinyVM, no background load),
 then run the offered-agent levels with its four P95s.
 
 ```bash
-# step 1: the baseline (one microVM, no background load): gateway E2E and
+# step 1: the baseline (one tinyVM, no background load): gateway E2E and
 # client P95, warm and cold
 sudo bash e2e/latency-benchmark-aiagent.sh http distributed
 
 # step 2: the realistic AI agent model. Offered-agent levels, one flat volume
 # per simulated agent; the benchmark reserves whole cores for the host stack
 # (auto-sized, or named per role with PIN_STACK_LAYOUT) and gives the rest to
-# the microVM pool. Pass the baseline's four P95s so the latency tiers are
+# the tinyVM pool. Pass the baseline's four P95s so the latency tiers are
 # measured.
 PIN_MODE=1 PIN_RESERVE_CORES=auto PIN_SLICE_CPUS=2 POOL_SIZE=<remaining cores> \
 LOADTEST_AGENT_LEVELS="<agent levels>" LOADTEST_LATENCY_TIERS="1.0 2.0" \
@@ -141,7 +141,7 @@ WARM_CLIENT_P95_MS=<warm-client-p95> COLD_CLIENT_P95_MS=<cold-client-p95> \
   sudo -E bash e2e/latency-benchmark-load.sh
 
 # optional capability tests:
-# ideal — ideal paced-lane test: one lane per microVM, no between-turn think
+# ideal — ideal paced-lane test: one lane per tinyVM, no between-turn think
 #         gap (the collision-free ceiling)
 # shaped — traffic-shaped test: a full agent population queued per lane, one
 #          in-flight request per VM (the realistic version of that ceiling)
@@ -159,20 +159,20 @@ POOL_SIZE=2 LOADTEST_WORKLOAD=shaped LOADTEST_LANES=2 \
   sudo -E bash e2e/latency-benchmark-load.sh
 ```
 
-The two microVM reuse capacity reports ran this same script on their own
+The two tinyVM reuse capacity reports ran this same script on their own
 hosts; the exact command and environment behind every table are in each
 report's Reproduction section and its `*-load-raw/MANIFEST.md`:
 
 | | [bare-metal](baremetal-load.md#9-reproduction) | [nested-virt](nested-virt-load.md#9-reproduction) |
 |---|---|---|
-| Pinning | `PIN_MODE=1`: the host stack roles on 12 reserved whole physical cores named by `PIN_STACK_LAYOUT`, the microVM pool on the remaining 36 | `PIN_MODE=0` — the L1 vCPUs are already outer-scheduled |
+| Pinning | `PIN_MODE=1`: the host stack roles on 12 reserved whole physical cores named by `PIN_STACK_LAYOUT`, the tinyVM pool on the remaining 36 | `PIN_MODE=0` — the L1 vCPUs are already outer-scheduled |
 | Pool / mapping | 32 VMs with `PIN_SLICE_CPUS=2` (the physical-core mapping, the recommendation) and 64 with `PIN_SLICE_CPUS=1` (the logical-core mapping, two VMs per core, comparison only) | 2 VMs |
 | Latency tiers | `1.05 1.5 2.0` | `1.0 2.0` (the default) |
 | Window | 20 s measured / 10 s warm-up; the first offered level is excluded | 20 s / 5 s |
 
 **Bare-metal runs auto-pin** (`e2e/pin.sh`; `PIN_MODE=auto` resolves to 1 on
 bare metal, 0 under a hypervisor, `PIN_MODE=0` forces it off): the host stack
-on whole reserved physical cores and every microVM on its own whole physical
+on whole reserved physical cores and every tinyVM on its own whole physical
 core — a 1-vCPU VM uses one thread and its vhost/virtiofs threads use the
 other, so no VM spans two physical cores — with `numactl --membind` per
 slice. `PIN_PLAN=1` prints the computed core partition (reserve, layout,
@@ -185,10 +185,10 @@ Useful environment knobs (all optional):
 | `WARM_N` / `COLD_N` | 100 / 50 | warm samples / cold rounds (each round = 2 cold samples, so 100 cold) |
 | `SWITCH_GAP_MS` | 300 | gap between agent switches (must exceed the sticky window) |
 | `POOL_SIZE` | 4 | sandlot VM pool size |
-| `VM_MEMORY_MB` | 256 | microVM memory |
+| `VM_MEMORY_MB` | 256 | tinyVM memory |
 | `PIN_MODE` | `auto` | CPU/NUMA pinning: bare metal on, hypervisor off; `0`/`1` force |
 | `PIN_STACK_CORES` | 8 | whole cores reserved for the host stack (aiagent/unmount) |
-| `PIN_SLICE_CPUS` | 2 | CPUs per microVM slice (the load benchmark derives it from `BENCH_VCPUS`); 2 = one whole physical core (both SMT threads), 1 = one logical core (two VMs per core, comparison only) |
+| `PIN_SLICE_CPUS` | 2 | CPUs per tinyVM slice (the load benchmark derives it from `BENCH_VCPUS`); 2 = one whole physical core (both SMT threads), 1 = one logical core (two VMs per core, comparison only) |
 | `PIN_RESERVE_CORES` | 0 | load benchmark: whole cores reserved for loadgen/gateway/sandlot (`auto` = compute) |
 | `PIN_STACK_LAYOUT` | — | load benchmark: explicit `role:cpus` sets for the reserved cores, e.g. `"loadgen:0-3;gateway:4-7;sandlot:8-11"`; gateway also carries the human gateway + etcd, sandlot the provision instance |
 | `PIN_VERIFY_EACH_LEVEL` | 1 | load benchmark: re-verify the VM-to-slice map after every level; the report runs set 0 |
@@ -201,7 +201,7 @@ Useful environment knobs (all optional):
 | `LOADTEST_INTRA_TURN_GAP_MS` | 0 | spacing between requests inside a turn (0 = immediate, warm under the 1 ms sticky) |
 | `LOADTEST_MAX_INFLIGHT` | 1024 | client-side in-flight request cap (not a server limit) |
 | `LOADTEST_LATENCY_TIERS` | `1.0 2.0` | load: latency budgets as multiples of the no-load baseline P95, for BOTH classes (warm and cold) and both surfaces (gateway E2E and client); the per-report tiers are in the contrast above |
-| `LOADTEST_WORKLOAD` | `agents` | `agents` = the realistic AI agent model (closed loop); `ideal` = the ideal paced-lane test, one lane per microVM (capability test); `shaped` = the traffic-shaped test, a full agent population queued per lane, one in-flight request per VM |
+| `LOADTEST_WORKLOAD` | `agents` | `agents` = the realistic AI agent model (closed loop); `ideal` = the ideal paced-lane test, one lane per tinyVM (capability test); `shaped` = the traffic-shaped test, a full agent population queued per lane, one in-flight request per VM |
 | `LOADTEST_LANES` / `LOADTEST_TURN_PERIODS_MS` | `POOL_SIZE` / `20 22 24 26 28 30 35` | ideal/shaped: lane count (must equal the pool) and the turn-period sweep. The knee is the highest completed cold rate among periods that pass the test's gate — ideal: zero failed requests and busy refusals within the 0.5 % noise tolerance; shaped: zero failed requests and the cold (for mixed turns also warm) gateway and client P95 inside the last tier |
 | `LOADTEST_SHAPED_AGENTS_PER_LANE` / `LOADTEST_SHAPED_HOLD_MS` | `auto` / `auto` | shaped: agents aggregated per lane (auto = rate x mean think + margin) and the VM-slot hold after the sticky window — `auto` measures this stack's unmount P95 (cold execs, then the `/stats` unmount recent P95) and uses `ceil(P95)+2ms` clamped [1,100]; bare metal calibrates several ms lower than nested |
 | `LOADTEST_RECYCLE_POLICY` | `capacity` | `capacity` disables all lifetime recycle caps + memory recycle; `shipped` uses the product defaults (300 distinct agents / 10000 mounts / 100000 uses) |
@@ -220,13 +220,13 @@ section of each report for the exact command set behind each table.
 - The latency scripts print warm/cold P50/P95 per mode/topology, and the
   unmount script prints per-scenario gateway/sandlot/warden layer breakdowns.
 - The load benchmark prints, per offered-agent level, the completed cold
-  reuses/s, the per-microVM rate, the warm share, the retry pressure and the
+  reuses/s, the per-tinyVM rate, the warm share, the retry pressure and the
   gateway E2E / client P95 of both classes; the capacity section selects the
   highest level with zero failed requests, within each latency tier. A
   `503 NO_AVAILABLE_SANDBOX` is retried like a real agent, so it appears as
   retry pressure, not a failed turn.
 - `LOADTEST_WORKLOAD=ideal` is the ideal paced-lane test, not a business
-  model: one lane per microVM, each issuing a turn every period with no
+  model: one lane per tinyVM, each issuing a turn every period with no
   between-turn think gap. It sweeps the turn period and reports the highest
   cold rate with zero failed requests and busy refusals within the 0.5 %
   noise tolerance — the collision-free ceiling with the VMs continuously fed.

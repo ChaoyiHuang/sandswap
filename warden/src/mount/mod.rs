@@ -62,7 +62,7 @@ pub const HOME_DIR: &str = "/home/agent";
 ///
 /// # Exclusive-Ownership Invariant
 ///
-/// A microVM belongs to exactly one SandFS at any time. When switching agents,
+/// A tinyVM belongs to exactly one SandFS at any time. When switching agents,
 /// ALL processes from the previous SandFS must be dead and the rootfs unmounted
 /// before the next SandFS's rootfs can be mounted. This invariant is enforced
 /// by the following chain:
@@ -94,7 +94,7 @@ pub const HOME_DIR: &str = "/home/agent";
 /// namespace immediately, it leaves the D-state process alive. When the next
 /// agent's rootfs is mounted, the old process would coexist with the new one
 /// in the same VM — violating the invariant that only one SandFS's processes
-/// run in a microVM at a time. Destroying the VM is the safe alternative: it
+/// run in a tinyVM at a time. Destroying the VM is the safe alternative: it
 /// kills every process (including D-state) and guarantees a clean slate.
 ///
 /// The cost of VM destruction is a one-time cold-boot (~2-3s) for the next
@@ -118,7 +118,7 @@ pub fn unmount_workspace(
     // agent's processes BEFORE umount, so none can hold the mount busy (EBUSY)
     // or coexist with the next agent's processes. If processes survive (D-state),
     // the umount returns EBUSY and the gateway destroys the VM — guaranteeing
-    // that only one SandFS's processes exist in a microVM at any time.
+    // that only one SandFS's processes exist in a tinyVM at any time.
     if let Some(cg) = &agent_cgroup {
         // Preferred path: cgroup.kill (O(1), atomic recursive SIGKILL).
         // The per-agent cgroup contains every exec's process group (sync +
@@ -288,7 +288,7 @@ pub fn unmount_workspace(
     // and been reaped by the SIGCHLD handler. If retry also fails, we return
     // an error — the gateway will destroy this VM to guarantee that NO process
     // from the old SandFS coexists with the next SandFS's process. This is the
-    // exclusive-ownership security invariant: one microVM = one SandFS at a time.
+    // exclusive-ownership security invariant: one tinyVM = one SandFS at a time.
     // We do NOT use MNT_DETACH here, as it would detach the mount from the
     // namespace while leaving the D-state process alive, allowing it to coexist
     // with the next agent's process in the same VM — violating the invariant.
@@ -411,7 +411,7 @@ pub fn unmount_workspace(
     // anything above PID 1 in state Z — means the process table is NOT
     // provably clean. Like the D-state process that surfaces as umount-EBUSY,
     // this must FAIL the unmount (Response::err → transport-error class) so
-    // the sandlot destroys the microVM instead of handing it to the next
+    // the sandlot destroys the tinyVM instead of handing it to the next
     // tenant: exclusive ownership admits no unclearable residue, and reuse is
     // the cheap path, not the correct one. In a healthy guest the set is
     // empty — every child and reparented orphan is waited for by the warden's

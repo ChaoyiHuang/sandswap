@@ -7,7 +7,7 @@ parent: How It Works
 # Resilience Design: Tolerance First, Confirmed Switching
 
 > [Ownership & DNS](ownership-and-dns.md) describes the normal path: a
-> request routes DNS → gateway → node → microVM, ownership is claimed, the
+> request routes DNS → gateway → node → tinyVM, ownership is claimed, the
 > command executes. This page describes everything **beyond** the normal
 > path — what happens when a component fails, restarts, hangs, or is
 > partitioned — and how the system provides minimal latency while still
@@ -131,9 +131,9 @@ migrating):**
 move.** No living participant can confirm → unchanged → safe (possibly
 stuck, but never double-mounted).
 
-### 1.4 In-VM exclusivity (one microVM, one SandFS)
+### 1.4 In-VM exclusivity (one tinyVM, one SandFS)
 
-The counterpart invariant inside the VM: **a microVM belongs to exactly one
+The counterpart invariant inside the VM: **a tinyVM belongs to exactly one
 SandFS at any time.** SandFS A's rootfs must be fully unmounted (and all of
 A's processes dead) before SandFS B's rootfs can be mounted; processes from
 two SandFS instances never coexist in the same VM. This is a **security
@@ -156,12 +156,12 @@ recreates a replacement VM with guaranteed exclusive ownership.
 1. **Always persist; agents assume Sandswap is unreliable.** Agents handle
    all transient unavailability by retrying; a minutes-level tolerance window
    buys the elimination of double-mounting.
-2. **The same sandfs executes on only one microVM at a time.** Prevents
+2. **The same sandfs executes on only one tinyVM at a time.** Prevents
    data corruption from concurrent writes (workspace/home on distributed
    shared storage, virtio-fs overlay).
 3. **Sync-task failure → clean up → refuse → retry.** After a component
    failure, if the states of the components cannot be confirmed consistent,
-   all state of the sync task in the microVM must be cleaned; new agent
+   all state of the sync task in the tinyVM must be cleaned; new agent
    requests are refused (503 + Retry-After) until cleanup completes.
 4. **Async-task failure → lost → retry.** Background-exec metadata lives only
    in gateway memory and is lost on component failure; cross-gateway async
@@ -173,7 +173,7 @@ recreates a replacement VM with guaranteed exclusive ownership.
    routing + power-of-two-choices; there is no load balancer in front of the
    gateway tier); cross-gateway coordination goes
    through etcd (ownership CAS + health key + presence key).
-6. **5K+ microVM scalability.** Hot paths are O(1) or O(nodes × specs);
+6. **5K+ tinyVM scalability.** Hot paths are O(1) or O(nodes × specs);
    presence keys are per-node — count = number of sandlots (tens to
    hundreds), independent of the number of sandfs (tens of thousands).
 7. **Tolerance first**: the default response to any brief component failure
@@ -196,7 +196,7 @@ recreates a replacement VM with guaranteed exclusive ownership.
 | **Gateway** | stream EOF → sandlot tolerance clock starts; the health key has no lease (plain key) — death is judged per-consumer by `last_healthy_ts` staleness (§5), triggering no switch | keepalive half-open ~8s → sandlot tolerance clock starts | partitioned from etcd → fail-closed, stop dispatching (§8.4) | HTTP stops accepting and drains (≤30s); health keeps refreshing during drain (peers neither judge it dead early nor grab its sandfs); after exit, staleness takes over — no explicit key removal needed; the stream is handled by the sandlot tolerance state machine |
 | **Sandlot** | stream EOF → gateway stops refreshing the presence key; warden countdown starts | keepalive ~8s / write timeout → gateway stops refreshing presence; warden countdown starts | same as hang (from the gateway's view) | stream EOF |
 | **Warden** | vsock EOF / countdown expiry → VM exits → sandvmm CRASHED | countdown expiry → VM exits; **hang (probe 3×3s failed) → sandlot kills sandvmm → CRASHED** | N/A (vsock is local) | N/A |
-| **microVMM** | pidfd/cmd.Wait → CRASHED | Ping failure / warden probe failure → kill sandvmm → CRASHED | N/A (Unix socket) | shutdown API |
+| **tinyVMM** | pidfd/cmd.Wait → CRASHED | Ping failure / warden probe failure → kill sandvmm → CRASHED | N/A (Unix socket) | shutdown API |
 | **etcd** | connection lost → reconnect | N/A | unavailable → fail-closed, stop dispatching | N/A |
 
 **Detecting silent failures**: the health value carries `last_healthy_ts`,

@@ -11,18 +11,18 @@
 # by the Apache License, Version 2.0.
 #
 # test-eino-e2e.sh — End-to-end test for the Sandswap Eino dual-agent example.
-# Starts the full stack (gateway + sandlot + KVM microVMs), creates TWO agents
+# Starts the full stack (gateway + sandlot + KVM tinyVMs), creates TWO agents
 # with TWO sandfs (both backed by Ubuntu rootfs), then runs the Eino program
-# in dual-agent mode where both agents exercise the same microVM pool.
+# in dual-agent mode where both agents exercise the same tinyVM pool.
 # This test validates:
 #   1. Both agents connect to the MCP server and discover tools
 #   2. Each agent executes code in its own sandbox
-#   3. The microVM is reused across agents (virtio-fs allowed_dirs hot-swap)
+#   3. The tinyVM is reused across agents (virtio-fs allowed_dirs hot-swap)
 #   4. File isolation: Agent A's files are not visible to Agent B
 #   5. Sequential agent operations on the same VM work correctly
 # Architecture under test:
 #   Eino Agent A ──┐
-#                  ├─→ Gateway (MCP) → gRPC → Sandlot → VMM → microVM (shared)
+#                  ├─→ Gateway (MCP) → gRPC → Sandlot → VMM → tinyVM (shared)
 #   Eino Agent B ──┘
 # Prerequisites:
 #   1. bash build/build.sh all        (all binaries in output/)
@@ -121,7 +121,7 @@ log_pass "Ubuntu rootfs template present: $ROOTFS_UBUNTU/"
 if [[ "$NETWORK_BACKEND" == "bridge" ]]; then
     tc_setup_host_network
 else
-    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — microVMs will be offline"
+    log_info "NETWORK_BACKEND=$NETWORK_BACKEND — tinyVMs will be offline"
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -243,7 +243,7 @@ echo ""
 #   7. Agent B executes a final shell command
 #   8. Exit
 #
-# With POOL_SIZE=1, both agents MUST share the same microVM.
+# With POOL_SIZE=1, both agents MUST share the same tinyVM.
 # The gateway will perform virtio-fs allowed_dirs hot-swap between them.
 
 # Total wall-clock budget for the ENTIRE piped test to finish (not a per-op

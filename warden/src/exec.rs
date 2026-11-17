@@ -564,7 +564,7 @@ impl AgentService {
         // SYNC execs deliberately do NOT join the per-agent cgroup: a real
         // cgroup v2 task migration (writing the pid to cgroup.procs — whether
         // done by the parent post-spawn or self-done in pre_exec) costs 8-20ms
-        // inside a KVM microVM (measured on CH v6.2 and v6.16.9 guest kernels;
+        // inside a KVM tinyVM (measured on CH v6.2 and v6.16.9 guest kernels;
         // the identical operation on the bare-metal host kernel is µs-scale),
         // which would sit directly on the exec hot path. Sync execs are
         // one-shot and are fully cleaned up by the finish-tail kill(-pgid)
@@ -574,7 +574,7 @@ impl AgentService {
         // migration for the memory cap and cgroup.kill agent-switch clearing.
         // SYNC execs deliberately do NOT join the per-agent cgroup (background
         // execs do — start_exec): a real cgroup v2 task migration costs 8-20ms
-        // inside a KVM microVM (measured on CH v6.2 and v6.16.9 guest kernels;
+        // inside a KVM tinyVM (measured on CH v6.2 and v6.16.9 guest kernels;
         // µs-scale on the bare-metal host kernel), which would sit directly on
         // the exec hot path. Sync execs are one-shot and are fully cleaned up
         // by the finish-tail kill(-pgid) group kill, so the loss is only the
@@ -828,7 +828,7 @@ fn open_pidfd(pid: i32) -> Option<tokio::io::unix::AsyncFd<std::os::unix::io::Ow
 /// Wait for the child's exit through its pidfd: the kernel marks the fd
 /// readable on exit, waking the waiting task DIRECTLY from epoll — no
 /// SIGCHLD handler → signal-driver task → registry oneshot hop chain
-/// (measured ~1ms of pure wakeup latency per exec inside a microVM).
+/// (measured ~1ms of pure wakeup latency per exec inside a tinyVM).
 /// Returns the raw wait status word (same encoding as waitpid's wstatus).
 ///
 /// A pidfd holds a reference to the task_struct, so waitid(P_PIDFD) still

@@ -244,7 +244,7 @@ func (h *Handler) ReconcileSandboxDirs(ctx context.Context) {
 		// directory is in use by SOME instance (co-located instances may share
 		// the sandbox root in benchmark/test deployments). Removing its state
 		// or killing the VMM here would destroy another instance's running
-		// microVM; the startup /proc sweep owns orphaned-live-VMM cleanup.
+		// tinyVM; the startup /proc sweep owns orphaned-live-VMM cleanup.
 		if _, held := heldSockets[filepath.Join(h.SandboxRoot, name, "sandvmm.sock")]; held {
 			delete(h.orphanDirSeen, name)
 			continue

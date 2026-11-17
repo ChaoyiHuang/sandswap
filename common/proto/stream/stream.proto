@@ -54,7 +54,7 @@ message NodeHello {
   string version = 2;
   uint32 total_cpus = 3;
   uint64 total_memory_mb = 4;
-  // active_vm_ids is the set of microVM IDs currently live on the node at
+  // active_vm_ids is the set of tinyVM IDs currently live on the node at
   // (re)connect — i.e. re-adopted survivors of a sandlot restart plus any
   // freshly created since. The gateway reconciles its pool against this list:
   // drop pool entries not live, reset survivors to CLEAN, and register any
@@ -89,7 +89,7 @@ message NodeHello {
   // clear log instead of confusing runtime errors). Distinct from the
   // build-info `version` string above, which is never used for decisions.
   uint32 protocol_version = 11;
-  // roles is the set of capabilities this instance serves: "exec" (microVM
+  // roles is the set of capabilities this instance serves: "exec" (tinyVM
   // lifecycle, mounts, exec/file ops) and/or "prov" (sandfs + template
   // lifecycle on shared storage — the prov role). EMPTY means
   // ["exec"]: a build from before roles existed is an exec node, so an
@@ -128,7 +128,7 @@ message NodeTiming {
   uint32 isolation_sec = 4;
 }
 
-// VMInfo describes a single microVM on the node, including its spec.
+// VMInfo describes a single tinyVM on the node, including its spec.
 message VMInfo {
   string vm_id = 1;
   // spec_id identifies the VM's resource spec: "small", "medium", "large".

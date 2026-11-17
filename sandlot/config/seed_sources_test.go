@@ -122,7 +122,7 @@ func TestLoadResolvesRelativeSeedPaths(t *testing.T) {
 	writeSeedFile(t, dir, "seed-cur", 0x44)
 	writeSeedFile(t, dir, "seed-next", 0x55)
 	cfgPath := filepath.Join(dir, "sandlot.yaml")
-	body := "roles: [exec,prov]\nmicrovm:\n  volumes_dir: " + dir +
+	body := "roles: [exec,prov]\ntinyvm:\n  volumes_dir: " + dir +
 		"\nprovision:\n  volume_seed_file: seed-cur\n  volume_seed_next_file: ./seed-next\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

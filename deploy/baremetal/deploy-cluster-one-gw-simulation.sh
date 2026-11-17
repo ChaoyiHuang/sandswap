@@ -98,7 +98,7 @@ DEPLOY_DIR="$REPO_ROOT/deploy/baremetal"
 log "[2/6] Preparing host..."
 # Each exec instance below gets its OWN subnet (10.188.${i}.0/24) because every
 # instance carries a private guest-IP allocator — two instances on one subnet
-# would hand the same address to two microVMs. The bridge therefore has to own
+# would hand the same address to two tinyVMs. The bridge therefore has to own
 # every instance's gateway address, or the guests' default routes are dead.
 SIM_EXTRA_ADDRS=""
 for i in $(seq 1 "$SANSLOT_COUNT"); do

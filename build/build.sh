@@ -24,7 +24,7 @@
 # order and then runs verify_freshness, which fails the build if any artifact
 # is older than its newest source file. This guarantees the test runs freshly
 # compiled code — never stale binaries left over from a partial build.
-# Host networking (for microVM outbound access with --network-backend=bridge):
+# Host networking (for tinyVM outbound access with --network-backend=bridge):
 # run `deploy/setup-network.sh` once per host to create the bridge + NAT.
 # build.sh does NOT run it automatically — it is an ops step.
 
@@ -237,7 +237,7 @@ verify_freshness() {
 
     # initramfs.cpio.gz: embeds the warden binary, so it depends on warden
     # sources AND the initramfs build script. This is the critical check —
-    # a recompiled warden must be re-packaged, or the microVM boots old code.
+    # a recompiled warden must be re-packaged, or the tinyVM boots old code.
     check_one "$ROOT/output/initramfs.cpio.gz" \
         "$ROOT/warden/src" "$ROOT/warden/Cargo.toml" "$ROOT/initramfs"
 

@@ -36,16 +36,16 @@ work that the system could do once and reuse.
 A SandFS swap must cost as little as possible. Swap-out — unmounting the
 rootfs, killing the agent's processes, clearing caches — runs in the
 background when a SandFS goes idle; no request waits for the swap-out.
-Swap-in — mounting the requesting agent's SandFS onto an idle microVM,
+Swap-in — mounting the requesting agent's SandFS onto an idle tinyVM,
 the same one or a different one — sits on the critical path and must cost
 as little as the mechanism allows, defensive residue re-check included.
 
-### Principle 4. Never double-mounted — one SandFS runs on one microVM at a time
-Sandswap mounts a SandFS on at most one microVM at any instant. Sandswap
-never mounts one SandFS on two microVMs simultaneously — not on the same
+### Principle 4. Never double-mounted — one SandFS runs on one tinyVM at a time
+Sandswap mounts a SandFS on at most one tinyVM at any instant. Sandswap
+never mounts one SandFS on two tinyVMs simultaneously — not on the same
 node, not across nodes. This is the single most important safety
 invariant; see [Resilience](resilience.md) for the ownership machinery
-that enforces it and the in-VM counterpart (one microVM, one SandFS at a
+that enforces it and the in-VM counterpart (one tinyVM, one SandFS at a
 time).
 
 ### Principle 5. One sandlot connects to one gateway at a time

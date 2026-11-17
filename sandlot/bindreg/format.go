@@ -11,7 +11,7 @@
 //
 // Package bindreg implements Sandswap's egress identity binding region: a
 // node-local, versioned, lock-free readable shared memory region that maps a
-// microVM's network attachment (TAP ifindex) to the agent identity currently
+// tinyVM's network attachment (TAP ifindex) to the agent identity currently
 // mounted in it.
 // This is the core enabler of the egress identity contract (see
 // docs/how-it-works/egress-enabler.md): Sandswap guarantees the binding is
