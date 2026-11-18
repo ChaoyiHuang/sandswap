@@ -129,6 +129,12 @@ Full walkthrough (including distributed mode with etcd + DNS + TLS):
     ["Sandswap: ultra efficient sandboxes for AI agents"](https://chaoyihuang.github.io/posts/blog/sandswap-ultra-high-efficient-sandbox-for-ai-agents.html) — Walkthrough
     of compute-disk decoupling, guest kernel hardening, four layers isolation,
     ultra low latency engineering, etc.
+- **Blog (November 2026)** —
+    ["Is the Per-Agent microVM the Biggest Waste in AI Infrastructure?"](https://chaoyihuang.github.io/posts/blog/per-agent-microvm-biggest-waste-in-ai-infrastructure.html) —
+    Why a per-agent microVM idles over 99% of the time waiting for LLM
+    responses of a second or more while tool execution needs only ~2 ms, and
+    how Sandswap time-shares a purpose-built tinyVM across agents at
+    millisecond granularity to cut sandbox cost 50–100×.
 
 ## Documentation
 
