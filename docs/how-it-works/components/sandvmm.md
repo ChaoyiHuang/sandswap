@@ -26,14 +26,14 @@ Source: `vmm/` (Rust). Provenance and the replacement contract:
   is enforced by the guest-side overlay mount, not by the device flag.
   The share root is the volumes directory, but the sandvmm identity holds
   **no list permission on it** (mode `2710`, group traverse-only): the
-  daemon reaches exactly one tenant directory per mount — the
+  virtio-fs server reaches exactly one tenant directory per mount — the
   `allowed_dirs` entry — and the other tenants' directory names are
   derived and unguessable
   ([Storage](../../operations/storage.md) rows 10b–11).
 - **Apply the `allowed_dirs` runtime filter** (`vm.set-fs`) — the VMM-level
   half of cross-agent isolation. The filter is a namespace control at the
   share root; see
-  [Isolation and Swap §4](../isolation-and-swap.md#4-the-host-side-boundary-the-virtio-fs-filter).
+  [Isolation and Swap §5.2](../isolation-and-swap.md#52-layer-2-sandvmm-and-the-virtio-fs-filter).
 - **Expose the vsock transport**: attach the vsock device before boot and
   offload the data path to kernel vhost-vsock — the zero-VMEXIT warm path.
 - **Translate guest power-off into process exit**: the warden's

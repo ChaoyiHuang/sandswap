@@ -415,7 +415,7 @@ every name-based op whose parent is the share root is denied
 (mkdir/mknod/create/symlink/link/unlink/rmdir/rename/xattr), and the deny
 path answers a real ENOENT (EIO would tell a guest a hidden name EXISTS
 — a cross-tenant name-existence oracle). The executable companion of
-[isolation §4](../how-it-works/isolation-and-swap.md#4-the-host-side-boundary-the-virtio-fs-filter).
+[isolation §5.2](../how-it-works/isolation-and-swap.md#52-layer-2-sandvmm-and-the-virtio-fs-filter).
 
 ### 6.4 `mount-identity-race.sh` — generation-bound mount identity
 

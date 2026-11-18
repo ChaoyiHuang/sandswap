@@ -527,7 +527,7 @@ for _m in slabinfo kpagecount kpageflags pagetypeinfo buddyinfo zoneinfo; do
 done
 # The warden vsock port must be unreachable from inside the guest (the
 # runtime pin for the kernel-config facts docs/how-it-works/isolation-and-swap.md
-# §7.3 documents — no loopback transport, vhost drops cross-VM packets).
+# §5.1.4 documents — no loopback transport, vhost drops cross-VM packets).
 case "$OUT_B" in
     *"vsock:UNREACHABLE"*|*"vsock:NO_TRANSPORT"*)
         pass "B: warden vsock port unreachable from inside the guest (no loopback, no cross-VM routing)" ;;

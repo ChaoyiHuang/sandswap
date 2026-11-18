@@ -13,12 +13,12 @@ the cost of a bind mount. The hard part is not the mount — it is the
 guarantee that comes with it: **the next SandFS starts on a machine with
 zero residue of the previous one.**
 
-This page covers that machinery end to end: how the sandlot, sandvmm, and
-the warden cooperate on a swap; the two boundaries that keep one agent's
-SandFS invisible to another (the VMM's virtio-fs filter and the warden's
-guest-side mount stack); what dies at a switch — processes, filesystem
-state, kernel objects, network metadata, memory; and what agent code can
-still reach afterwards, and what it cannot.
+This page tells that story in two parts. §§1–4 are the swap itself: how
+the sandlot, sandvmm, and the warden cooperate on an attach and on a
+release, and how nothing of agent A survives the switch — processes,
+filesystem state, kernel objects, network metadata, memory. §5 is the
+isolation behind it — four layers from the inside out — and §6 pins both
+with tests.
 
 Neighbors: which gateway owns which SandFS is
 [Ownership & DNS](ownership-and-dns.md); what happens when a component
@@ -49,7 +49,7 @@ idle in the pool        serving A         back in the pool      serving B
 ```
 
 This VM is reused by B only after (2) completed; if the swap-out cannot be
-proven complete, the VM is destroyed and a replacement boots fresh (§6.6).
+proven complete, the VM is destroyed and a replacement boots fresh (§4.6).
 
 The invariant is [Design Principles](design-principles.md) Principle 4 —
 **never double-mounted**: a SandFS is mounted on at most one tinyVM at any
@@ -104,7 +104,7 @@ host                                    guest
 ```
 
 Volume directories never carry the sandfs id — their names are derived from
-a deployment secret (`sf-` + HMAC, §4.3), so even if someone reads the
+a deployment secret (`sf-` + HMAC, §5.2.3), so even if someone reads the
 directory listing of the volumes root, the names reveal nothing about which
 agent owns which volume. The device is created with an **explicitly empty
 `allowed_dirs`** — the
@@ -205,7 +205,7 @@ Two properties make this idempotent and race-free:
   redundant mount instead of stacking it.
 - **Volume identity (`mounted_volume`).** The warden remembers *which*
   volume it mounted (the directory basename, e.g. `sf-b7e2d9` — the
-  seed-derived name of §4.3), recorded
+  seed-derived name of §5.2.3), recorded
   only after the mount fully succeeds. A mount request for the same volume
   is a duplicate (skip). A request for a **different** volume while one is
   mounted is a state the protocol forbids — a duplicate-skip would run the
@@ -272,11 +272,12 @@ Two design rules inside the chain:
 
 ### 3.4 The swap protocol assumes a hostile peer
 
-The mount protocol is written as if its peer is hostile: vsock carries no
-authentication, seccomp does not block `socket`/`connect`, and whether a
-guest process can actually reach the port is a kernel-config property, not
-a designed control (§7.3). The isolation must not depend on the caller
-being the sandlot:
+The mount protocol is written as if its peer is hostile: the vsock
+transport carries no authentication (the frame layer adds the per-VM
+session key of §5.1.4 on top), seccomp does not block `socket`/`connect`,
+and whether a guest process can actually reach the port is a
+kernel-config property, not a designed control (§5.1.4). The isolation
+must not depend on the caller being the sandlot:
 
 - The wire's `mount_point` must be **exactly** `/mnt/rootfs`. A hostile
   process cannot steer a mount over warden-critical guest paths — e.g.
@@ -293,330 +294,12 @@ being the sandlot:
   body, body size cap), and a malformed frame closes the connection —
   never PID 1.
 
-## 4. The host-side boundary: the virtio-fs filter
-
-The guest never touches the host filesystem. Every file request from the
-guest travels to a program on the host — the virtio-fs server inside
-sandvmm (this section: *the daemon*) — and that program answers with one
-rulebook, the filter:
-
-```
-guest (agent code)                 host (sandvmm)
-  open("/workspace/file.txt")  →   virtio-fs server
-                                     │  is /workspace on the allow-list?
-                                     │  the allow-list holds exactly ONE
-                                     │  directory: the active agent's volume
-                                     ├─ yes → serve the file
-                                     └─ no  → answer "no such file or
-                                              directory"
-```
-
-The boundary lives at the **share root** — the top directory of the shared
-volumes tree on the host (not the host's root directory `/`, and not the
-`root` user) — the only place where an agent directory can be named at all.
-
-### 4.1 What the guest sees
-
-The guest sees one virtio-fs share at `/mnt/volumes` containing exactly one
-agent directory — presented under a per-generation alias (32 random hex
-characters, minted by the sandlot for each set-fs), never its real
-(seed-derived) name: names are secrets (§4.3), and every guest-pathable
-string — `/proc/self/mountinfo` root fields included — must stay free of
-them, because agents leak ambient strings to third-party LLMs wholesale.
-Everything else is answered as if it did not exist:
-
-- A lookup of any name outside the allow-list gets `ENOENT` — the same
-  reply a genuinely missing file gets, a real errno, not a synthesized I/O
-  error. Probing another tenant is indistinguishable from probing a name
-  that was never there.
-- A listing of the share root is answered **from the allow-list itself**,
-  not by filtering the real directory.
-- A chroot escape changes nothing: every path above the mount still
-  resolves through the filtered share (§5).
-
-Problem solved: all tenants live in one host directory tree, yet an agent
-must not be able to name, list, or even prove the existence of another
-tenant's directory. Attack this closes: an agent probing
-`/mnt/volumes/../<sibling>`, brute-forcing sibling names, or reading the
-mount table — all of it sees only the allowed directory.
-
-### 4.2 What sandvmm enforces
-
-One virtio-fs device per VM, created at boot and never hot-plugged. There
-is no `vm.add-fs` route and a configuration with more than one fs device is
-refused — a second device would be a second, separately filtered window
-into the host that `vm.set-fs` (which addresses the one device by id)
-could neither see nor re-filter. The allow-list is swapped by the sandlot
-via `vm.set-fs` (~0.2 ms); the guest cannot influence it.
-
-The filter's rules, as implemented in the daemon:
-
-1. **Not on the list = does not exist.** Rule §4.1's uniform `ENOENT`. The
-   allow-list PRESENTS its single entry under the generation's alias
-   (lookups by the real directory name answer ENOENT too — the guest cannot
-   even spell the secret, let alone prove it exists). The alias is the
-   capability binding one filter generation to the warden mount that
-   follows it: after the next set-fs the old name is gone, so a mount
-   request that lost the race fails before it can touch the new export.
-   The same holds for invented objects: node ids and file handles are
-   numbers minted by the daemon's own tables, never guest-chosen — a
-   forged or revoked one names no host object and answers `ESTALE` /
-   `EBADF`. A guest can only ever ask about objects the daemon itself
-   handed it.
-2. **Nothing can be done at the share root either.** `mkdir`, `mknod`,
-   `create`, `symlink`, `link`, `unlink`, `rmdir`, all rename forms, the
-   four xattr operations, and `statfs` at the share root (the volumes
-   filesystem's real host capacity/usage is not exposed there; an allowed
-   directory's `statfs` is served from the backing filesystem — a coarse
-   node-wide capacity/free-byte signal, no tenant identity) are refused by
-   **one class check
-   before the per-opcode dispatch** — these handlers pass names straight to
-   the host and do not consult the filter themselves, so the gate sits above
-   all of them. The gate's match is exhaustive over the opcode enum: a new
-   opcode (an upstream merge, a protocol bump) fails to compile until it is
-   classified here, so none can silently skip the gate. A non-UTF-8 root
-   name can never match the UTF-8 allow-list keys and is denied — never a
-   panic. The wire surface itself is an allow-list: an opcode number that is
-   not part of the protocol enum is refused with `ENOSYS`, and the
-   per-opcode dispatch match carries no wildcard either — a newly added
-   opcode (an upstream merge, a protocol bump) fails to compile until it is
-   both routed and classified, so no request can reach a handler this build
-   did not intend to serve.
-3. **A guest-supplied name is exactly one path component.** `.` / `..` / an
-   embedded `/` / empty are refused, because host `*at()` calls treat the
-   name as a path — `../other-agent` would walk out of the share. In code
-   the name exists only as a validated type produced by the validating
-   constructor; there is no raw-bytes path left, so a new opcode cannot
-   reintroduce the hole without failing to compile. Legal-but-odd names
-   (`...`, backslashes, 200 bytes, non-UTF-8) still work.
-4. **The host never follows a path the guest chose.** Lookups go through
-   `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)` with `O_NOFOLLOW`,
-   rooted at the parent directory's descriptor; inodes are held as
-   descriptors, never as stored paths; `/proc/self/fd` reopens are limited
-   to regular files and directories. A planted symlink is never followed by
-   the daemon — the guest's own kernel resolves symlinks, through lookups
-   the filter gates.
-5. **The filter is always on.** An empty allow-list hides every share-root
-   entry and no configuration can turn filtering off: the config layer
-   defaults an omitted list to empty, the fs device normalizes any remaining
-   absence to empty, and the filter's constructor takes a list (there is no
-   "no list" value). A list swap validates the new list first (each
-   directory opened and stat'ed), then replaces the old one under a single
-   lock; a failed swap leaves the previous list in place.
-6. **The filter gates new lookups, not cached answers.** The guest kernel
-   caches directory entries, and an already-open file descriptor keeps
-   resolving. That is why the swap-out sequence (§3.3) kills the agent's
-   processes and drops the caches before the next attach: a dead process
-   holds no descriptors and `drop_caches` evicts the entries. The swap
-   itself is a second, kernel-side line of the same defence: every
-   `vm.set-fs` clears the daemon's inode and handle tables (the share root
-   alone survives) and bumps each store's revocation epoch under the same
-   lock the clear runs under. A lookup or open captures the epoch when it
-   starts and re-checks it at insertion, so a request that began before the
-   swap can never re-insert the previous agent's object after the clear —
-   it answers `ESTALE`. A stale node id or file handle minted under the
-   previous agent therefore answers `ESTALE` / `EBADF` even in the A→B→A
-   same-VM reuse case, where the outgoing guest kernel could otherwise
-   still be holding one. The read-only backend forwards the same revoke (the
-   virtio-devices default for an FS config that omits `read_only` is `true`,
-   so inheriting the trait's no-op default would leave that variant
-   unprotected). One node id survives by design: the
-   share root itself — the guest kernel holds a persistent reference to
-   it for the whole `/mnt/volumes` mount (established once; switches never
-   re-INIT), so the daemon keeps it alive across revokes while every
-   agent-content node id still dies.
-
-Attack examples this closes: a planted symlink pointing at a sibling
-(rule 4), a `renameat2` with a path-shaped name (rule 3), a planted device
-node handed back through `/proc/self/fd` (rule 4 — the daemon never reopens
-one, and the mount flags and missing capabilities make the inode inert
-anyway).
-
-### 4.3 If sandvmm is compromised
-
-Assume the daemon is hostile. It can skip the filter entirely — it is a
-host process in the shared storage group — and simply `stat` candidate
-paths under the share root.
-
-**What it can read:** every volume directory whose path it has been
-handed. The daemon learns the path of each volume its own VM serves
-through `allowed_dirs`, so the exposure is the tenant history of that one
-VM (the current and previously served volumes), not the tree. **What it
-cannot do:** find a path it was never handed. Five facts bound that
-exposure:
-
-- **It cannot list the share root.** The share root is owned by `sandprov`
-  (uid 983) and the daemon's group has **traverse only** — no read, no
-  write. There is no `ls` to enumerate tenant directories, and creating,
-  removing or renaming beside the allowed directory fails `EACCES` in the
-  kernel itself, even if the class gate (rule 2) were ever regressed away.
-- **It cannot guess a name.** Volume directories are named
-  `sf-` + base32(HMAC-SHA256(seed, id)) — 128 bits
-  (`sandlot/provision/volname`). The seed lives in the prov sandlot's
-  config (scoped `root:sandprov` 0640) and never reaches the daemon: the
-  merged exec,prov sandlot carries the `sandprov` group to read the seed,
-  but every sandvmm spawn REPLACES its supplementary-group set with exactly
-  `tinyvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when empty), so
-  the daemon never inherits the grant.
-  The sandfs id itself is deliberately *not* the name: `sandfs-` + 8 hex is
-  32 bits — a `stat` loop finds some tenant of a 10 000-tenant node in well
-  under a second. A name collision between two volumes needs ~2^64 tries.
-- **Rotation revokes knowledge.** A daemon compromised earlier remembers
-  the paths it served. `deploy/baremetal/rotate-volume-seed.sh` re-keys
-  every name at once in a maintenance window. Each volume carries a
-  `.sandfs-id` stamp — the stamp, not the name, is the authority on which
-  sandfs a directory belongs to.
-- **It cannot reach the warden.** vsockguard admits only the sandlot uid
-  (985) on the warden port; the daemon runs as 987 (§4.4). A full VMM
-  compromise cannot touch the guest control transport.
-- **It cannot write the storage plane.** The daemon writes only through its
-  FUSE service, inside the one allowed directory. The share root and every
-  sibling tenant directory are outside its write reach: the root is owned by
-  `sandprov` (983) with traverse-only for the daemon's group, and prov
-  sandlot instances are the only writer of the tree's structure. This is
-  also why a stamp inside a tenant-writable volume cannot be trusted by
-  itself: it carries an HMAC keyed by the volume-name seed (see
-  [Sandlot Configuration](../operations/configuration/sandlot.md)).
-
-### 4.4 Why sandvmm has a dedicated identity
-
-The daemon parses untrusted guest file requests — the largest attack
-surface on the exec path. It therefore runs as its own user, `sandvmm`
-(987), spawned through a setpriv wrapper holding **zero capabilities**
-(`--inh-caps=-all --ambient-caps=-all`). The network provider creates the
-persistent TAP owned by that uid and pre-configures its MTU/bridge/up
-state; the VMM's attach is an owner-match `TUNSETIFF`, and its MTU/enable
-ioctls are skipped when the desired state is already present.
-The split is chosen so a full VMM compromise lands on an identity with
-nothing to take:
-
-- Not the warden-trusted uid (985): vsockguard's allow-list excludes 987,
-  so a compromised VMM cannot connect to any warden port.
-- Guest-planted setuid files land owned by 987 — an escalation target with
-  no warden access and no storage-write grant.
-- The daemon must read/write the volume it serves (shared storage group),
-  so the identity cannot be further reduced by permissions. The group is
-  not a whole-tree grant: the share root is traverse-only (no listing) and
-  derived names are 2^128, so only paths the daemon has been handed are
-  reachable — the filter, the share-root permissions, and the derived
-  names are what hold (§4.2–§4.3, §4.5).
-- The sandlot (985) still reaches the API sockets through the `--api-gid`
-  shared-group grant (0660).
-
-Cost: the TAP work happens once at VM creation (the cold path), not per
-command; the VMM seccomp filter runs in the VMM's own threads, never in
-the guest's exec syscalls, and the kernel's seccomp cache makes a repeated
-syscall's filter cost tens of nanoseconds (measured on a nested-virt dev
-host; the guest's own syscalls are unaffected). The zero-cap split adds no
-warm-path command work.
-
-A VMM running as root, or as the sandlot uid, would turn any VMM bug into
-full host access or warden access; the dedicated identity caps the blast
-radius at "can read/write the volumes this VM has served" — bounded by the
-traverse-only share root and the seed-derived names, and revoked by a
-volume-name-seed rotation.
-
-### 4.5 The host-side controls behind the filter
-
-The host layout closes what filter code alone cannot:
-
-- **`nosuid,nodev` on the volumes filesystem, every consumer host.** The
-  passthrough stores guest-requested setuid bits and `mknod`s verbatim; the
-  mount flags make them inert on the host. Checked by
-  `security/verify-host-security.sh` (check 7) and `e2e/seccomp.sh`.
-- **Per-owner device nodes.** `/dev/vhost-vsock` owner `sandvmm` 0600,
-  `/dev/vsock` owner `sandlot` 0600 — each vsock device is reachable by
-  exactly the identity that needs it.
-- **The share root's permissions** (§4.3) are the kernel-enforced backstop
-  for the filter's class gate.
-- **The daemon's identity** (§4.4) is the backstop for everything else:
-  capabilities, storage access, and warden reachability are all fixed at
-  spawn, not by filter behavior.
-
-### 4.6 Summary: what the boundary covers, and what keeps it closed
-
-Every operation class a guest could attempt at the boundary, and the
-mechanism that stops it:
-
-| Operation class | Examples | Enforced by |
-|---|---|---|
-| Naming at the share root | `lookup`, `readdir`/`readdirplus` | the allow-list (and its validated snapshot) |
-| Mutating / host-leaking at the share root | `mkdir`, `mknod`, `create`, `symlink`, `link`, `unlink`, `rmdir`, `rename`/`rename2`, xattrs, `statfs` | the share-root class gate — one check before per-opcode dispatch, exhaustive over the opcode enum |
-| Any name spelling | `..`, `.`, `a/b`, absolute paths, empty, non-UTF-8 bytes | the single-component rule at the one name-extraction point (a validated type); non-UTF-8 root names denied, never a panic |
-| Reaching outside by path | planted symlinks, `..` inside a resolution, magic links | `openat2(RESOLVE_IN_ROOT)` + `O_NOFOLLOW` rooted at the parent descriptor; inodes held as descriptors |
-| File-type tricks | planted symlink/FIFO/socket, device nodes | the reopen guard (regular files and directories only), missing capabilities, `nodev`/`nosuid` mounts |
-| Metadata ops on the root itself (nodeid-scoped, no name operand) | `open`/`opendir`/`getattr`/`setattr`/`readlink` on the share root | standing allow-decisions: the root is the one exposed entry — open/opendir/getattr are the filtered listing path; `setattr` cannot write (the daemon's group holds no write on the root, kernel `EACCES`) |
-| Unsupported paths | `tmpfile`, inode-handle mappings, opcode numbers outside the protocol enum | `tmpfile`/unknown opcodes answered `ENOSYS`; handle mappings `EINVAL` (no DAX cache); file handles are never generated |
-| Turning the filter off | an omitted or empty allow-list in any config layer | fail-closed defaults: config defaults to empty, the device normalizes absence to empty, no unfiltered mode exists |
-| Widening the filter via the VMM API | a forged `vm.set-fs`, a second fs device | no `vm.add-fs` route; multi-fs configurations refused; `vm.set-fs` DAC-admitted only to the socket's owner/group, and the **peer-uid gate then accepts only root or the configured sandlot uid** (`--api-allowed-uid`; `dispatch.rs:163`) — an `--api-gid` member with a different uid, such as prov, is still refused |
-| Cached answers after a swap | an open file descriptor, a cached dentry, a retained node id/handle naming A's files | two lines: every `vm.set-fs` clears the daemon's inode and handle tables and bumps their revocation epochs (an insertion that began before the swap answers `ESTALE`), and the swap-out sequence (§3.3) kills the agent's processes and drops the caches before the next attach |
-| Planting at the share root if the class gate were regressed | `mkdir`/`create`/`unlink`/`rename` beside the allowed directory | the share root's permissions: `sandprov` (uid 983) owns it, the daemon's group has traverse only — the kernel answers `EACCES` |
-| Exhausting the daemon's open handles | `open`/`opendir` without a matching `release` | a hard handle-table cap (65 536) answers `EMFILE` past the bound — an unbounded table would exhaust the shared sandvmm process's file descriptors and take down every VM it serves |
-| Discovering a sibling's name offline (a compromised daemon stats the host; no FUSE request) | guessing `<share-root>/<volume>` | derived names: `sf-` + HMAC-SHA256(seed, id) — 128 bits; the seed never reaches the daemon; seed rotation re-keys every name |
-
-Two invariants keep the boundary closed, and both are written down where
-they are enforced: a FUSE name is one component and exists only as a
-validated value (§4.2 rule 3), and no host-side resolution follows a
-guest-controlled symlink (§4.2 rule 4). The share root's unwritability by
-the daemon identity is enforced by the kernel and checked live
-(`security/verify-host-security.sh`, `e2e/share-root-gate.sh`). The tests
-that pin the whole surface are enumerated in §8.
-
-## 5. The guest-side boundary: chroot and the mount stack
-
-The second boundary is built inside the VM by the warden at mount time,
-sitting under the filter (§4): the filter decides which host directories
-*exist* for the guest; the mount stack decides what a guest process can
-*name*. Even a chroot escape is still confined by the filter.
-
-- **`chroot` + `chdir`** into the bind-mounted volume on every exec — the
-  process's namespace root *is* the active SandFS. Nothing above it is
-  reachable by path.
-- **Masked `/proc`**: dangerous entries (`kcore`, `kallsyms`, `keys`, and
-  `kmsg` — kernel-log lines from the *previous* agent's OOM, for example)
-  are covered with `/dev/null`, then the whole proc is remounted read-only
-  so the agent cannot write `drop_caches` or cgroup knobs. The warden's
-  own `/proc/sys/vm/drop_caches` writes happen outside the chroot, where
-  the agent cannot reach.
-- **Minimal `/dev`**: a fresh tmpfs with only safe device nodes
-  (null/zero/full/urandom/random/tty), devpts for ptys, and a fresh,
-  size-capped `/dev/shm`. `/dev/mem`, `/dev/kmem`, `/dev/port` are never
-  created.
-- **Per-attachment `/tmp`** (overlay mode): fresh tmpfs — nothing an agent
-  writes there is visible to the next one, and nothing persists.
-- **File API's own guard**: file operations never trust a path. Each is
-  resolved by a component-by-component walk that refuses to follow
-  symlinks implicitly, re-expands in-workspace symlinks explicitly, and
-  finishes with a kernel-authoritative check that the *opened inode* lives
-  under the workspace before a byte is read or written; destructive flags
-  are deferred until after that check. This is defense in depth on top of
-  chroot and seccomp — the race-hardened replacement for a canonicalize
-  check that a symlink swap could beat. Shell commands bypass the file API,
-  but they cannot bypass chroot + the filter: a symlink a shell command
-  plants resolves inside the guest's own view (and a `chroot` escape is
-  still confined by the filter), so agent-created files and links cannot reach
-  another SandFS or the host *through the guest*.
-- **Host-side reads of agent-writable paths trust nothing either**: in flat
-  mode the volume root IS the agent's chroot root, so host processes never
-  treat anything there as storage-plane-written. The gateway sends the record's
-  template only for **overlay** records; a flat record's mount commands say
-  "no template", and the node then ignores the marker path entirely (mounts
-  flat) — a planted marker can neither flip the volume into an unresolvable
-  overlay mount nor, being ignored, be used to wedge it. Underneath that,
-  the marker read itself is hardened (`O_NOFOLLOW` + regular-file check):
-  a planted symlink cannot become a host-file read and a planted FIFO
-  cannot block the node's mount path, covering the overlay-record path and
-  version skew. The storage plane's copy never follows symlinks (it
-  recreates them, and skips any that escape the source root), and deletion
-  unlinks without following. Planted markers are ignored, never deleted —
-  the volume root of a flat SandFS is the agent's own filesystem.
-
-## 6. Nothing of agent A survives the switch
+## 4. Nothing of agent A survives the switch
 
 When agent B's mount succeeds, the VM must contain nothing of A that B
 could name, open, map, or observe. Resource by resource:
 
-### 6.1 Processes
+### 4.1 Processes
 
 - **`cgroup.kill`** (cgroup v2): writing one value to the agent cgroup's
   `kill` file SIGKILLs the whole tree atomically — background execs started
@@ -650,7 +333,7 @@ could name, open, map, or observe. Resource by resource:
   unmount (the logs live on the warden's own RAM filesystem, never inside
   the agent's volume).
 
-### 6.2 Filesystem
+### 4.2 Filesystem
 
 - **`umount` flushes and detaches.** Dirty pages are written back to the
   backing store on unmount; after it returns, no path in the guest reaches
@@ -669,7 +352,7 @@ could name, open, map, or observe. Resource by resource:
 - The masked mounts and the RAM-backed busybox bind are unmounted in the
   same pass (they are tmpfs-backed and would otherwise survive).
 
-### 6.3 Kernel objects that outlive processes
+### 4.3 Kernel objects that outlive processes
 
 Some state is not a process and not a file — and unlike both, it survives
 death of its creator. All of it is cleaned, because agents sharing a VM run
@@ -699,12 +382,12 @@ The sweep runs after the umount, when every agent process is provably dead
 — nothing can recreate an object past that point. It is silent in the
 common case and logs (with counts) whenever it actually removes something.
 
-### 6.4 Network metadata
+### 4.4 Network metadata
 
 - Every VM has its own guest network namespace and its own TAP on the host —
   but the TAPs all plug into ONE shared L2 bridge, so the tenant-to-tenant
   network boundary is the host-side filter set, not the bridge
-  (§7.4). Agent A's sockets die with A's processes. The exception is
+  (§5.4.2). Agent A's sockets die with A's processes. The exception is
   **dead-state
   TCP sockets** — `TIME_WAIT`, `FIN_WAIT1/2`, `CLOSE_WAIT`, `LAST_ACK`,
   `CLOSING` — which the kernel keeps after the owning process is gone and
@@ -725,7 +408,7 @@ common case and logs (with counts) whenever it actually removes something.
   attributed to the previous attachment, and the next agent starts with a
   fresh identity ([Egress Enabler Contract](egress-enabler.md)).
 
-### 6.5 Memory
+### 4.5 Memory
 
 There is no process of A left to hold an address space, no cached page
 that maps A's files, no tmpfs mount holding A's shared memory, and no
@@ -743,7 +426,7 @@ refuses `prlimit64`/`setpriority`/`sched_setparam`/`sched_setscheduler`/
 unmount rewrites the warden's own nice/affinity/scheduling policy on every
 thread (the worker-thread tids classic BPF cannot name) from a boot-time
 snapshot. Two residues sit outside this guarantee by design:
-the netns **cumulative counters** (§6.4 — aggregate totals only), and
+the netns **cumulative counters** (§4.4 — aggregate totals only), and
 **tenant linkability**: the VM's boot identity (`boot_id`, uptime
 continuity) and its external source IP/MAC persist across tenants, so an
 observer of two leases can correlate that one machine served both. The
@@ -757,7 +440,7 @@ third-party LLMs wholesale, so the sandbox must not contain either
 artifact. Both are pinned live (`e2e/share-root-gate.sh`:
 `mountinfo_name_free`, `stamp_masked`).
 
-### 6.6 What each layer closes
+### 4.6 What each layer closes
 
 | Leak vector | Closed by | What remains if the layer is skipped |
 |---|---|---|
@@ -781,15 +464,72 @@ process kills every guest process including D-state ones; the cost is a
 one-time cold boot, off the request path
 ([tinyVM Lifecycle](vm-lifecycle.md) §4).
 
-## 7. What agent code cannot reach
+## 5. The four isolation layers
 
-Everything above keeps agents apart. This section is the other direction:
-what the agent itself runs under, and what it still cannot do — even
-assuming the agent's code is fully hostile and the guest kernel is the
-shared boundary of last resort ([Threat Model](threat-model.md) covers the
-adversaries *outside* the VM).
+Isolation is organized as four layers from the inside out, and each layer
+is written as if the ones inside it may fail — the logic that keeps the
+set composable and each piece independently testable:
 
-### 7.1 Per-exec confinement
+| Layer | Where | Components | What it enforces |
+|---|---|---|---|
+| 1 | in-VM | warden (PID 1) + the guest kernel | what a guest process can *name* — the chroot/mount stack, the per-exec fence, the warden's self-hardening, and the hardened kernel underneath |
+| 2 | host, per VM | sandvmm | what *exists* for the guest at all — the virtio-fs `allowed_dirs` filter, and what even a compromised VMM is still bounded to |
+| 3 | host, per node | sandlot (exec/prov) | the strictly ordered swap — one sandfs ↔ one VM — and the storage plane's derived volume names |
+| 4 | the machine | the host | what no component can weaken from inside — mount flags, device ownership, the tenant network baseline, and the service-identity split |
+
+### 5.1 Layer 1: the warden (PID 1) and the guest kernel
+
+The innermost layer is everything inside the machine: the warden (PID 1)
+and, underneath it, the guest kernel. Why it isolates: a guest process can
+only *name* the current mount — the warden builds a mount stack whose root
+is the active SandFS and chroots every exec into it, so nothing above that
+root is reachable by path. The in-guest serialization that keeps this true
+across swaps — the `MOUNT_GATE` and the `mounted_volume` identity
+assertion of §3.2 — is the warden's work too. The sections below face the
+other direction than §§1–4: not what the platform does to the machine at a
+switch, but what the agent itself runs under, and what it still cannot do
+— even assuming the agent's code is fully hostile and the guest kernel is
+the shared boundary of last resort ([Threat Model](threat-model.md) covers
+the adversaries *outside* the VM). The kernel's own hardening is a page of
+its own ([Guest Kernel Hardening](guest-kernel-hardening.md)); §5.1.5
+summarizes what it contributes to this layer.
+
+#### 5.1.1 The guest-side boundary: chroot and the mount stack
+
+The guest-side boundary is built inside the VM by the warden at mount
+time, sitting under the filter (§5.2): the filter decides which host
+directories *exist* for the guest; the mount stack decides what a guest
+process can *name*. Even a chroot escape is still confined by the filter.
+
+- **`chroot` + `chdir`** into the bind-mounted volume on every exec — the
+  process's namespace root *is* the active SandFS. Nothing above it is
+  reachable by path.
+- **Masked `/proc`**: dangerous entries (`kcore`, `kallsyms`, `keys`, and
+  `kmsg` — kernel-log lines from the *previous* agent's OOM, for example)
+  are covered with `/dev/null`, then the whole proc is remounted read-only
+  so the agent cannot write `drop_caches` or cgroup knobs. The warden's
+  own `/proc/sys/vm/drop_caches` writes happen outside the chroot, where
+  the agent cannot reach.
+- **Minimal `/dev`**: a fresh tmpfs with only safe device nodes
+  (null/zero/full/urandom/random/tty), devpts for ptys, and a fresh,
+  size-capped `/dev/shm`. `/dev/mem`, `/dev/kmem`, `/dev/port` are never
+  created.
+- **Per-attachment `/tmp`** (overlay mode): fresh tmpfs — nothing an agent
+  writes there is visible to the next one, and nothing persists.
+- **File API's own guard**: file operations never trust a path. Each is
+  resolved by a component-by-component walk that refuses to follow
+  symlinks implicitly, re-expands in-workspace symlinks explicitly, and
+  finishes with a kernel-authoritative check that the *opened inode* lives
+  under the workspace before a byte is read or written; destructive flags
+  are deferred until after that check. This is defense in depth on top of
+  chroot and seccomp — the race-hardened replacement for a canonicalize
+  check that a symlink swap could beat. Shell commands bypass the file API,
+  but they cannot bypass chroot + the filter: a symlink a shell command
+  plants resolves inside the guest's own view (and a `chroot` escape is
+  still confined by the filter), so agent-created files and links cannot reach
+  another SandFS or the host *through the guest*.
+
+#### 5.1.2 Per-exec confinement
 
 Every exec goes through the same pipeline: new session (`setsid`), chroot
 into the active SandFS, environment cleared to a fixed set, no new
@@ -858,7 +598,7 @@ capabilities Docker grants that Sandswap withholds — `CAP_NET_RAW`,
 are exactly the persistence and escape
 primitives a chrooted workload does not need.
 
-### 7.2 The warden as a target
+#### 5.1.3 The warden as a target
 
 Agent code and the warden run as the same uid 0 in the same pid namespace,
 so the warden hardens itself at boot:
@@ -882,7 +622,7 @@ so the warden hardens itself at boot:
   `open_by_handle_at`, mount API, `unshare`/`setns`, `bpf` — are all
   seccomp-denied regardless of capabilities.
 
-### 7.3 The warden's vsock port
+#### 5.1.4 The warden's vsock port
 
 Seccomp does not block `socket`/`connect`, so reachability is closed at
 three layers. With the shipped guest kernel an agent cannot reach any
@@ -902,6 +642,16 @@ vsock listener must treat guest-originated connections as hostile
 ([Threat Model](threat-model.md)). Beyond the gate, the protocol is still
 written as if a hostile peer could connect:
 
+- **Every frame is authenticated by a per-VM session key.** The sandlot
+  generates a 32-byte key at VM creation and delivers it over the first
+  host connection (`OP_KEY_DELIVERY`, accepted from the host CID only);
+  after that every request's HMAC-SHA256 tag is verified **before the
+  body is read**, every response is tagged for the request nonce, and a
+  mismatch closes the connection — a peer that reaches the port cannot
+  inject or forge frames. The warden does not lean on the key alone (the
+  rest of this list holds without it), and the key never appears on the
+  kernel command line (the wire detail is
+  [Protocols](../reference/protocols.md)).
 - **Nothing a peer sends can affect another connection.** The warden
   serves each connection as an independent request/response task; its
   listening fd is PID 1's private descriptor (`/proc/1/fd/N` returns
@@ -932,7 +682,358 @@ written as if a hostile peer could connect:
   forged from inside a guest, so this gate holds even on a guest kernel
   where in-guest dialing would otherwise become reachable.
 
-### 7.4 The tenant network: one shared bridge, filtered
+#### 5.1.5 The guest kernel underneath
+
+Everything the warden enforces sits on the guest kernel, and the kernel is
+the executor of every in-VM clear — the kill sweep, the unmount, the cache
+drop — so an implant in it would survive the tenant switch and read the
+next attachment's volume. The kernel-side half of this layer is a story of
+its own, told in [Guest Kernel Hardening](guest-kernel-hardening.md): the
+kernel is a pinned upstream artifact nothing inside the sandbox can
+influence; it is minimized at build time (whole attack-surface subsystems
+compiled out, hardening compiled in, stable backports on the pinned tag),
+with build gates that fail on any re-enabled symbol; its runtime posture
+keeps user namespaces off and fresh allocations zeroed; and §5.1.2's seccomp
+fence decides what agent code may ask of whatever remains. What a kernel
+compromise still means — the per-VM blast radius, the reuse bounds that
+shrink it, and the dedicated-cluster answer for tenants that accept no
+cross-tenant reuse at all — is covered there (§§6–7).
+
+### 5.2 Layer 2: sandvmm and the virtio-fs filter
+
+The second layer is sandvmm, the VMM. Why it isolates: its virtio-fs
+filter decides which host directories *exist* for the guest at all — a
+sibling tenant is `ENOENT`, not merely forbidden.
+
+The guest never touches the host filesystem. Every file request from the
+guest travels to a program on the host — the virtio-fs server inside
+the sandvmm process — and that server answers with one
+rulebook, the filter:
+
+```
+guest (agent code)                 host (sandvmm)
+  open("/workspace/file.txt")  →   virtio-fs server
+                                     │  is /workspace on the allow-list?
+                                     │  the allow-list holds exactly ONE
+                                     │  directory: the active agent's volume
+                                     ├─ yes → serve the file
+                                     └─ no  → answer "no such file or
+                                              directory"
+```
+
+The boundary lives at the **share root** — the top directory of the shared
+volumes tree on the host (not the host's root directory `/`, and not the
+`root` user) — the only place where an agent directory can be named at all.
+
+#### 5.2.1 What the guest sees
+
+The guest sees one virtio-fs share at `/mnt/volumes` containing exactly one
+agent directory — presented under a per-generation alias (32 random hex
+characters, minted by the sandlot for each set-fs), never its real
+(seed-derived) name: names are secrets (§5.2.3), and every guest-pathable
+string — `/proc/self/mountinfo` root fields included — must stay free of
+them, because agents leak ambient strings to third-party LLMs wholesale.
+Everything else is answered as if it did not exist:
+
+- A lookup of any name outside the allow-list gets `ENOENT` — the same
+  reply a genuinely missing file gets, a real errno, not a synthesized I/O
+  error. Probing another tenant is indistinguishable from probing a name
+  that was never there.
+- A listing of the share root is answered **from the allow-list itself**,
+  not by filtering the real directory.
+- A chroot escape changes nothing: every path above the mount still
+  resolves through the filtered share (§5.1.1).
+
+Problem solved: all tenants live in one host directory tree, yet an agent
+must not be able to name, list, or even prove the existence of another
+tenant's directory. Attack this closes: an agent probing
+`/mnt/volumes/../<sibling>`, brute-forcing sibling names, or reading the
+mount table — all of it sees only the allowed directory.
+
+#### 5.2.2 What sandvmm enforces
+
+One virtio-fs device per VM, created at boot and never hot-plugged. There
+is no `vm.add-fs` route and a configuration with more than one fs device is
+refused — a second device would be a second, separately filtered window
+into the host that `vm.set-fs` (which addresses the one device by id)
+could neither see nor re-filter. The allow-list is swapped by the sandlot
+via `vm.set-fs` (~0.2 ms); the guest cannot influence it.
+
+The filter's rules, as implemented in the virtio-fs server:
+
+1. **Not on the list = does not exist.** Rule §5.2.1's uniform `ENOENT`. The
+   allow-list PRESENTS its single entry under the generation's alias
+   (lookups by the real directory name answer ENOENT too — the guest cannot
+   even spell the secret, let alone prove it exists). The alias is the
+   capability binding one filter generation to the warden mount that
+   follows it: after the next set-fs the old name is gone, so a mount
+   request that lost the race fails before it can touch the new export.
+   The same holds for invented objects: node ids and file handles are
+   numbers minted by the virtio-fs server's own tables, never guest-chosen — a
+   forged or revoked one names no host object and answers `ESTALE` /
+   `EBADF`. A guest can only ever ask about objects the virtio-fs server
+   itself handed it.
+2. **Nothing can be done at the share root either.** `mkdir`, `mknod`,
+   `create`, `symlink`, `link`, `unlink`, `rmdir`, all rename forms, the
+   four xattr operations, and `statfs` at the share root (the volumes
+   filesystem's real host capacity/usage is not exposed there; an allowed
+   directory's `statfs` is served from the backing filesystem — a coarse
+   node-wide capacity/free-byte signal, no tenant identity) are refused by
+   **one class check
+   before the per-opcode dispatch** — these handlers pass names straight to
+   the host and do not consult the filter themselves, so the gate sits above
+   all of them. The gate's match is exhaustive over the opcode enum: a new
+   opcode (an upstream merge, a protocol bump) fails to compile until it is
+   classified here, so none can silently skip the gate. A non-UTF-8 root
+   name can never match the UTF-8 allow-list keys and is denied — never a
+   panic. The wire surface itself is an allow-list: an opcode number that is
+   not part of the protocol enum is refused with `ENOSYS`, and the
+   per-opcode dispatch match carries no wildcard either — a newly added
+   opcode (an upstream merge, a protocol bump) fails to compile until it is
+   both routed and classified, so no request can reach a handler this build
+   did not intend to serve.
+3. **A guest-supplied name is exactly one path component.** `.` / `..` / an
+   embedded `/` / empty are refused, because host `*at()` calls treat the
+   name as a path — `../other-agent` would walk out of the share. In code
+   the name exists only as a validated type produced by the validating
+   constructor; there is no raw-bytes path left, so a new opcode cannot
+   reintroduce the hole without failing to compile. Legal-but-odd names
+   (`...`, backslashes, 200 bytes, non-UTF-8) still work.
+4. **The host never follows a path the guest chose.** Lookups go through
+   `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)` with `O_NOFOLLOW`,
+   rooted at the parent directory's descriptor; inodes are held as
+   descriptors, never as stored paths; `/proc/self/fd` reopens are limited
+   to regular files and directories. A planted symlink is never followed by
+   the virtio-fs server — the guest's own kernel resolves symlinks, through lookups
+   the filter gates.
+5. **The filter is always on.** An empty allow-list hides every share-root
+   entry and no configuration can turn filtering off: the config layer
+   defaults an omitted list to empty, the fs device normalizes any remaining
+   absence to empty, and the filter's constructor takes a list (there is no
+   "no list" value). A list swap validates the new list first (each
+   directory opened and stat'ed), then replaces the old one under a single
+   lock; a failed swap leaves the previous list in place.
+6. **The filter gates new lookups, not cached answers.** The guest kernel
+   caches directory entries, and an already-open file descriptor keeps
+   resolving. That is why the swap-out sequence (§3.3) kills the agent's
+   processes and drops the caches before the next attach: a dead process
+   holds no descriptors and `drop_caches` evicts the entries. The swap
+   itself is a second, kernel-side line of the same defence: every
+   `vm.set-fs` clears the virtio-fs server's inode and handle tables (the share root
+   alone survives) and bumps each store's revocation epoch under the same
+   lock the clear runs under. A lookup or open captures the epoch when it
+   starts and re-checks it at insertion, so a request that began before the
+   swap can never re-insert the previous agent's object after the clear —
+   it answers `ESTALE`. A stale node id or file handle minted under the
+   previous agent therefore answers `ESTALE` / `EBADF` even in the A→B→A
+   same-VM reuse case, where the outgoing guest kernel could otherwise
+   still be holding one. The read-only backend forwards the same revoke (the
+   virtio-devices default for an FS config that omits `read_only` is `true`,
+   so inheriting the trait's no-op default would leave that variant
+   unprotected). One node id survives by design: the
+   share root itself — the guest kernel holds a persistent reference to
+   it for the whole `/mnt/volumes` mount (established once; switches never
+   re-INIT), so the virtio-fs server keeps it alive across revokes while every
+   agent-content node id still dies.
+
+Attack examples this closes: a planted symlink pointing at a sibling
+(rule 4), a `renameat2` with a path-shaped name (rule 3), a planted device
+node handed back through `/proc/self/fd` (rule 4 — the virtio-fs server never reopens
+one, and the mount flags and missing capabilities make the inode inert
+anyway).
+
+#### 5.2.3 If sandvmm is compromised
+
+Assume sandvmm is hostile. It can skip the filter entirely — it is a
+host process in the shared storage group — and simply `stat` candidate
+paths under the share root.
+
+**What it can read:** every volume directory whose path it has been
+handed. sandvmm learns the path of each volume its own VM serves
+through `allowed_dirs`, so the exposure is the tenant history of that one
+VM (the current and previously served volumes), not the tree. **What it
+cannot do:** find a path it was never handed. Five facts bound that
+exposure:
+
+- **It cannot list the share root.** The share root is owned by `sandprov`
+  (uid 983) and sandvmm's group has **traverse only** — no read, no
+  write. There is no `ls` to enumerate tenant directories, and creating,
+  removing or renaming beside the allowed directory fails `EACCES` in the
+  kernel itself, even if the class gate (rule 2) were ever regressed away.
+- **It cannot guess a name.** Volume directories are named
+  `sf-` + base32(HMAC-SHA256(seed, id)) — 128 bits
+  (`sandlot/provision/volname`). The seed lives in the prov sandlot's
+  config (scoped `root:sandprov` 0640) and never reaches sandvmm: the
+  merged exec,prov sandlot carries the `sandprov` group to read the seed,
+  but every sandvmm spawn REPLACES its supplementary-group set with exactly
+  `tinyvm.vmm_groups` (`setpriv --groups`, `--clear-groups` when empty), so
+  it never inherits the grant.
+  The sandfs id itself is deliberately *not* the name: `sandfs-` + 8 hex is
+  32 bits — a `stat` loop finds some tenant of a 10 000-tenant node in well
+  under a second. A name collision between two volumes needs ~2^64 tries.
+- **Rotation revokes knowledge.** A sandvmm instance compromised earlier remembers
+  the paths it served. `deploy/baremetal/rotate-volume-seed.sh` re-keys
+  every name at once in a maintenance window. Each volume carries a
+  `.sandfs-id` stamp — the stamp, not the name, is the authority on which
+  sandfs a directory belongs to.
+- **It cannot reach the warden.** vsockguard admits only the sandlot uid
+  (985) on the warden port; sandvmm runs as 987 (§5.2.4). A full VMM
+  compromise cannot touch the guest control transport.
+- **It cannot write the storage plane.** sandvmm writes only through the
+  virtio-fs server, inside the one allowed directory. The share root and every
+  sibling tenant directory are outside its write reach: the root is owned by
+  `sandprov` (983) with traverse-only for sandvmm's group, and prov
+  sandlot instances are the only writer of the tree's structure. This is
+  also why a stamp inside a tenant-writable volume cannot be trusted by
+  itself: it carries an HMAC keyed by the volume-name seed (see
+  [Sandlot Configuration](../operations/configuration/sandlot.md)).
+
+#### 5.2.4 Why sandvmm has a dedicated identity
+
+The virtio-fs server parses untrusted guest file requests — the largest attack
+surface on the exec path. The whole process therefore runs as a dedicated
+user, `sandvmm` (987), spawned through a setpriv wrapper holding **zero capabilities**
+(`--inh-caps=-all --ambient-caps=-all`). The network provider creates the
+persistent TAP owned by that uid and pre-configures its MTU/bridge/up
+state; the VMM's attach is an owner-match `TUNSETIFF`, and its MTU/enable
+ioctls are skipped when the desired state is already present.
+The split is chosen so a full VMM compromise lands on an identity with
+nothing to take:
+
+- Not the warden-trusted uid (985): vsockguard's allow-list excludes 987,
+  so a compromised VMM cannot connect to any warden port.
+- Guest-planted setuid files land owned by 987 — an escalation target with
+  no warden access and no storage-write grant.
+- The virtio-fs server must read/write the volume it serves (shared storage group),
+  so the identity cannot be further reduced by permissions. The group is
+  not a whole-tree grant: the share root is traverse-only (no listing) and
+  derived names are 2^128, so only paths sandvmm has been handed are
+  reachable — the filter, the share-root permissions, and the derived
+  names are what hold (§5.2.2–§5.2.3, §5.4.1).
+- The sandlot (985) still reaches the API sockets through the `--api-gid`
+  shared-group grant (0660).
+
+Cost: the TAP work happens once at VM creation (the cold path), not per
+command; the VMM seccomp filter runs in the VMM's own threads, never in
+the guest's exec syscalls, and the kernel's seccomp cache makes a repeated
+syscall's filter cost tens of nanoseconds (measured on a nested-virt dev
+host; the guest's own syscalls are unaffected). The zero-cap split adds no
+warm-path command work.
+
+A VMM running as root, or as the sandlot uid, would turn any VMM bug into
+full host access or warden access; the dedicated identity caps the blast
+radius at "can read/write the volumes this VM has served" — bounded by the
+traverse-only share root and the seed-derived names, and revoked by a
+volume-name-seed rotation.
+
+#### 5.2.5 Summary: what the boundary covers, and what keeps it closed
+
+Every operation class a guest could attempt at the boundary, and the
+mechanism that stops it:
+
+| Operation class | Examples | Enforced by |
+|---|---|---|
+| Naming at the share root | `lookup`, `readdir`/`readdirplus` | the allow-list (and its validated snapshot) |
+| Mutating / host-leaking at the share root | `mkdir`, `mknod`, `create`, `symlink`, `link`, `unlink`, `rmdir`, `rename`/`rename2`, xattrs, `statfs` | the share-root class gate — one check before per-opcode dispatch, exhaustive over the opcode enum |
+| Any name spelling | `..`, `.`, `a/b`, absolute paths, empty, non-UTF-8 bytes | the single-component rule at the one name-extraction point (a validated type); non-UTF-8 root names denied, never a panic |
+| Reaching outside by path | planted symlinks, `..` inside a resolution, magic links | `openat2(RESOLVE_IN_ROOT)` + `O_NOFOLLOW` rooted at the parent descriptor; inodes held as descriptors |
+| File-type tricks | planted symlink/FIFO/socket, device nodes | the reopen guard (regular files and directories only), missing capabilities, `nodev`/`nosuid` mounts |
+| Metadata ops on the root itself (nodeid-scoped, no name operand) | `open`/`opendir`/`getattr`/`setattr`/`readlink` on the share root | standing allow-decisions: the root is the one exposed entry — open/opendir/getattr are the filtered listing path; `setattr` cannot write (sandvmm's group holds no write on the root, kernel `EACCES`) |
+| Unsupported paths | `tmpfile`, inode-handle mappings, opcode numbers outside the protocol enum | `tmpfile`/unknown opcodes answered `ENOSYS`; handle mappings `EINVAL` (no DAX cache); file handles are never generated |
+| Turning the filter off | an omitted or empty allow-list in any config layer | fail-closed defaults: config defaults to empty, the device normalizes absence to empty, no unfiltered mode exists |
+| Widening the filter via the VMM API | a forged `vm.set-fs`, a second fs device | no `vm.add-fs` route; multi-fs configurations refused; `vm.set-fs` DAC-admitted only to the socket's owner/group, and the **peer-uid gate then accepts only root or the configured sandlot uid** (`--api-allowed-uid`; `dispatch.rs:163`) — an `--api-gid` member with a different uid, such as prov, is still refused |
+| Cached answers after a swap | an open file descriptor, a cached dentry, a retained node id/handle naming A's files | two lines: every `vm.set-fs` clears the virtio-fs server's inode and handle tables and bumps their revocation epochs (an insertion that began before the swap answers `ESTALE`), and the swap-out sequence (§3.3) kills the agent's processes and drops the caches before the next attach |
+| Planting at the share root if the class gate were regressed | `mkdir`/`create`/`unlink`/`rename` beside the allowed directory | the share root's permissions: `sandprov` (uid 983) owns it, sandvmm's group has traverse only — the kernel answers `EACCES` |
+| Exhausting the virtio-fs server's open handles | `open`/`opendir` without a matching `release` | a hard handle-table cap (65 536) answers `EMFILE` past the bound — an unbounded table would exhaust the shared sandvmm process's file descriptors and take down every VM it serves |
+| Discovering a sibling's name offline (compromised sandvmm stats the host; no FUSE request) | guessing `<share-root>/<volume>` | derived names: `sf-` + HMAC-SHA256(seed, id) — 128 bits; the seed never reaches sandvmm; seed rotation re-keys every name |
+
+Two invariants keep the boundary closed, and both are written down where
+they are enforced: a FUSE name is one component and exists only as a
+validated value (§5.2.2 rule 3), and no host-side resolution follows a
+guest-controlled symlink (§5.2.2 rule 4). The share root's unwritability by
+the sandvmm identity is enforced by the kernel and checked live
+(`security/verify-host-security.sh`, `e2e/share-root-gate.sh`). The tests
+that pin the whole surface are enumerated in §6.
+
+### 5.3 Layer 3: the sandlot (exec/prov) node boundary
+
+The third layer is the sandlot — the exec role that drives every VM on
+the node, and the prov role that owns the storage plane. Why it isolates:
+one serializer drives a strictly ordered swap, and the seed behind the
+storage plane's names never reaches the VMM, so a compromised VMM has
+nothing to escalate with (§5.2.3).
+
+#### 5.3.1 One sandfs, one VM, strictly ordered
+
+The node-level guards are the ones §§1–3 already walked through; this
+section is the layer's index into them. The sandlot binds one sandfs to
+one VM (`resolveVMForMount`, the per-VM `mountMu` of §3.1) — the Node row
+of the four-level invariant table in §1. It drives the swap in one strict
+order: the filter before the mount, the stale mount out before the filter
+swap (§3.1), the guest unmount before the filter clear (§3.3). It treats
+the warden as a hostile peer on the wire (§3.4), and it publishes the
+egress identity binding before the mount RPC and revokes it at unmount
+([Egress Enabler Contract](egress-enabler.md)), so no guest traffic can
+ever run un-attributed.
+
+#### 5.3.2 The storage plane: derived volume names and the seed
+
+The prov role is the only writer of the volumes tree's structure; every
+other component — the virtio-fs server included — writes at most inside the one
+volume it serves (§5.2.3). The names themselves are the storage plane's own
+defence in depth: derived per volume from a deployment seed that never
+reaches sandvmm, and re-keyed wholesale by a maintenance-window seed
+rotation, so a compromised VMM can neither enumerate nor guess a sibling
+(§5.2.3).
+
+#### 5.3.3 The node never trusts agent-writable state
+
+Host-side reads of agent-writable paths trust nothing either: in flat
+mode the volume root IS the agent's chroot root, so host processes never
+treat anything there as storage-plane-written. The gateway sends the record's
+template only for **overlay** records; a flat record's mount commands say
+"no template", and the node then ignores the marker path entirely (mounts
+flat) — a planted marker can neither flip the volume into an unresolvable
+overlay mount nor, being ignored, be used to wedge it. Underneath that,
+the marker read itself is hardened (`O_NOFOLLOW` + regular-file check):
+a planted symlink cannot become a host-file read and a planted FIFO
+cannot block the node's mount path, covering the overlay-record path and
+version skew. The storage plane's copy never follows symlinks (it
+recreates them, and skips any that escape the source root), and deletion
+unlinks without following. Planted markers are ignored, never deleted —
+the volume root of a flat SandFS is the agent's own filesystem.
+
+### 5.4 Layer 4: the host
+
+The outermost layer is the host machine itself, and its rule is that
+nobody is trusted — not even the VMM. Every service lands on a dedicated
+identity with nothing left to take: the service-identity split (sandlot,
+sandserv, sandvmm, sandprov, sandtmpl — the uid table is
+[Deployment Prerequisites](../deployment/prerequisites.md)) is
+load-bearing, and identity drift is always fatal, never warned. The
+warden's vsock port admits the sandlot identity only, enforced by
+[vsockguard](vsockguard.md) (§5.1.4, §5.2.3). What follows are the controls no
+component can weaken from inside: the host-side mount and device controls
+behind the filter, and the tenant network baseline.
+
+#### 5.4.1 The host-side controls behind the filter
+
+The host layout closes what filter code alone cannot:
+
+- **`nosuid,nodev` on the volumes filesystem, every consumer host.** The
+  passthrough stores guest-requested setuid bits and `mknod`s verbatim; the
+  mount flags make them inert on the host. Checked by
+  `security/verify-host-security.sh` (check 8) and `e2e/seccomp.sh`.
+- **Per-owner device nodes.** `/dev/vhost-vsock` owner `sandvmm` 0600,
+  `/dev/vsock` owner `sandlot` 0600 — each vsock device is reachable by
+  exactly the identity that needs it.
+- **The share root's permissions** (§5.2.3) are the kernel-enforced backstop
+  for the filter's class gate.
+- **The sandvmm identity** (§5.2.4) is the backstop for everything else:
+  capabilities, storage access, and warden reachability are all fixed at
+  spawn, not by filter behavior.
+
+#### 5.4.2 The tenant network: one shared bridge, filtered
 
 The network is the one boundary that does NOT come from the tinyVM: every
 VM's TAP is enslaved to one shared host bridge, so without a filter set all
@@ -958,12 +1059,12 @@ bridge. The routed-ipv6 backend adds the same per-TAP anti-spoof plus the
 per-attachment identity stamp
 ([Egress Enabler Contract](egress-enabler.md)).
 
-What remains by design: aggregate per-netns counters (§6.4), and the
-machine-reuse linkability already listed in §6.5 — the bridge filtering
+What remains by design: aggregate per-netns counters (§4.4), and the
+machine-reuse linkability already listed in §4.5 — the bridge filtering
 isolates tenants from each other, it does not hide that one host serves
 them all.
 
-## 8. How this is verified
+## 6. How this is verified
 
 The swap and isolation behaviors are pinned by dedicated end-to-end
 suites, not by inspection:
@@ -972,10 +1073,11 @@ suites, not by inspection:
 |---|---|
 | `e2e/overlayfs-isolation.sh` | read-only rootfs (kernel-enforced), writable `/workspace`·`/home/agent`, only the active volume visible through the filter, `/tmp` local to the node, and planted markers (symlink / FIFO / regular junk file) inert on the host side — no host-file read, no mount-path hang, no mode flip |
 | `e2e/cross-tenant-residue.sh` | the A→B switch on one VM: A's SysV/`/dev/shm` plants are swept, mqueue creation and the keyring plant are denied by seccomp, the masked `/proc` (kmsg/kcore/kallsyms/keys/kernel-state files, read-only) and minimal `/dev` hold for B, no dead-state TCP rows survive, and the warden vsock port is unreachable from inside the guest (no loopback, no cross-VM routing) |
-| `e2e/warden-hostile.sh` | the hostile-peer contract (malformed frames, oversized bodies, hostile `mount_point`, connection/body DoS bounds — none may kill PID 1), plus `/proc/1` dumpable + fd-channel isolation, PID-1 signal immunity, the switch-window mount self-heal, the `setsid`-straggler sweep, and `RLIMIT_AS` enforcement |
+| `e2e/warden-hostile.sh` | the hostile-peer contract (malformed frames, oversized bodies, hostile `mount_point`, connection/body DoS bounds — none may kill PID 1), the per-VM session-key contract (delivered before any authenticated frame, never on the kernel command line), plus `/proc/1` dumpable + fd-channel isolation, PID-1 signal immunity, the switch-window mount self-heal, the `setsid`-straggler sweep, and `RLIMIT_AS` enforcement |
 | `e2e/seccomp.sh` | the exec profiles live: deny-list, `NO_NEW_PRIVS` + `nosuid` suid neutrality, capability bounds |
 | `e2e/share-root-gate.sh` | the filter as a namespace control, on a real stack: the escape-attempt matrix from inside an exec context (`/proc/1/root`, `..`, mount table, a `find` for the sibling volume — the share root must be unreachable), the agent's own tree still fully usable, the share root's entry set unchanged by a whole agent workload, a sibling volume's sentinel untouched, the running VMM's API surface (a second share is not attachable: no `vm.add-fs` route; `vm.set-fs` still applies), and the dispatch-level tests below run against the same binary |
-| `security/verify-host-security.sh` | the host-side invariants the VM boundary leans on: device ownership, mount hardening, and the network isolation baseline of §7.4 (check 12) |
+| `e2e/mount-identity-race.sh` | the generation-bound mount identity on a live stack: a mount naming a superseded generation's alias is refused (`mount_target_not_exported`) and executes nothing, an unmount naming a different identity answers `MISMATCH` and tears down nothing, `set-fs` never reuses a previous generation's alias, and the stale-mount probe leaves the live tenant's warm exec working |
+| `security/verify-host-security.sh` | the host-side invariants the VM boundary leans on: device ownership, mount hardening, and the network isolation baseline of §5.4.2 (check 12) |
 
 Unit-level pins live with the code they pin — the filter's fail-closed
 defaults and share-root class gate, the single-component name rule, the
@@ -986,16 +1088,20 @@ the sandlot's mount-identity cross-check and the file-op identity
 (`sandlot` suites); the volume-stamp MAC and the rotation tool's safe
 read/write (`sandlot/provision/volume`).
 
-## 9. In one paragraph
+## 7. In one paragraph
 
 A pooled tinyVM is time-shared across SandFS by swapping what it can see,
 never by rebooting: the sandlot drives the swap, the VMM's virtio-fs filter
 decides which host directories exist for the guest at all, and the warden —
 from inside — builds the guest mount stack, proves what it mounted, and at
 release kills every process, detaches every mount, drops every cache,
-sweeps every kernel object and socket, before the filter is cleared. If any
-step cannot be proven complete, the VM is destroyed rather than reused.
-The result is the guarantee this page set out to explain: **agent B's
-execution on a reused tinyVM starts with zero residual state from agent
-A** — no process, no reachable page, no shared memory, no filesystem
-metadata, no network trace, and no path in any layer that names A at all.
+sweeps every kernel object and socket, before the filter is cleared. Those
+are the four layers of §5 — the warden and the hardened guest kernel
+inside the machine, sandvmm's filter, the sandlot's swap discipline and
+storage plane, and the host's controls — and each layer assumes the ones
+inside it may fail. If any step cannot be proven complete, the VM is
+destroyed rather than reused. The result is the guarantee this page set out
+to explain: **agent B's execution on a reused tinyVM starts with zero
+residual state from agent A** — no process, no reachable page, no shared
+memory, no filesystem metadata, no network trace, and no path in any layer
+that names A at all.

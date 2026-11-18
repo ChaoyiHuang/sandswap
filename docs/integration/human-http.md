@@ -111,7 +111,7 @@ You never choose `agent_id` or `sandfs_id` — the gateway mints both:
   check is the authoritative collision test; on collision the gateway
   regenerates and retries (bounded draws) instead of failing the create.
 - The on-disk volume **directory is not the id**: names are derived
-  (`sf-` + HMAC of the deployment seed — [isolation §4](../how-it-works/isolation-and-swap.md#4-the-host-side-boundary-the-virtio-fs-filter)),
+  (`sf-` + HMAC of the deployment seed — [isolation §5.2.3](../how-it-works/isolation-and-swap.md#523-if-sandvmm-is-compromised)),
   so the record's `rootfs_path` is the only supported way to learn a host
   path. Never construct `<volumes>/<sandfs-id>`.
 

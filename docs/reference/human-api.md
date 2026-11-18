@@ -356,7 +356,7 @@ a symlink, a mid-provisioning partial run); `503` no prov instance connected;
 `500` other storage/store failures; `401`/`403`.
 
 Because directory names are **derived, not the id** (see
-[isolation §4.6](../how-it-works/isolation-and-swap.md)), `rootfs_path` is
+[isolation §5.2.3](../how-it-works/isolation-and-swap.md)), `rootfs_path` is
 the only supported way to learn a volume's host path — never construct
 `<volumes>/<sandfs-id>`.
 

@@ -19,8 +19,8 @@ is what makes that possible; it is implemented once, in
 
 | # | Rule | Why |
 |---|---|---|
-| 1 | **Directories: `g+rx`** (group traverse + list) | the daemon resolves paths through them; without group traverse every guest read EACCESes |
-| 2 | **Regular files: `g+r` where the owner can read; `g+x` where the owner can execute** | the daemon performs the guest's reads as its own uid; the group bit is the grant |
+| 1 | **Directories: `g+rx`** (group traverse + list) | the virtio-fs server resolves paths through them; without group traverse every guest read EACCESes |
+| 2 | **Regular files: `g+r` where the owner can read; `g+x` where the owner can execute** | the virtio-fs server performs the guest's reads as its own uid; the group bit is the grant |
 | 3 | setuid/setgid/sticky are preserved as authored | inert host-side (`nosuid,nodev` mounts, storage contract row 9); guest-side semantics (`su`, `umount`) stay intact |
 | 4 | Ownership inside the tree is irrelevant | materialization ignores tar uid/gid; the setgid store assigns the shared group |
 | 5 | Symlinks: tree-internal relative targets (absolute targets are rewritten at extraction) | extraction containment |

@@ -132,7 +132,7 @@ denied syscall returns EPERM in a live guest.
 Every exec runs with the capability bounding set dropped (Strict) or
 reduced to the package-manager set (Install), `NO_NEW_PRIVS`, a chroot,
 and a seccomp filter installed in `pre_exec` before `execve` — the full
-per-exec pipeline is [Isolation and Swap](isolation-and-swap.md) §7. The
+per-exec pipeline is [Isolation and Swap](isolation-and-swap.md) §5.1.2. The
 build (§2) decides what exists in the kernel; this filter decides what
 agent code may invoke.
 
