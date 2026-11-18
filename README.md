@@ -131,10 +131,10 @@ Full walkthrough (including distributed mode with etcd + DNS + TLS):
     ultra low latency engineering, etc.
 - **Blog (November 2026)** —
     ["Is the Per-Agent microVM the Biggest Waste in AI Infrastructure?"](https://chaoyihuang.github.io/posts/blog/per-agent-microvm-biggest-waste-in-ai-infrastructure.html) —
-    Why a per-agent microVM idles over 99% of the time waiting for the LLM
-    (P95 1.06–1.18 s) while tool execution needs only ~2 ms, and how Sandswap
-    time-shares a purpose-built tinyVM across agents at millisecond granularity
-    to cut sandbox cost 50–100×.
+    Why a per-agent microVM idles over 99% of the time waiting for LLM
+    responses of a second or more while tool execution needs only ~2 ms, and
+    how Sandswap time-shares a purpose-built tinyVM across agents at
+    millisecond granularity to cut sandbox cost 50–100×.
 
 ## Documentation
 
