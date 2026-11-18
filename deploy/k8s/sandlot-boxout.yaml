@@ -80,7 +80,7 @@ spec:
         supplementalGroups:
           - 982
       initContainers:
-        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §4;
+        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §5.4;
         # storage contract row 10b): the SHARE ROOT must be writable only by
         # the provision plane. The FUSE daemon runs as uid 987 with
         # supplementary gid 65536 (tinyvm.vmm_groups + api_gid in the sandlot

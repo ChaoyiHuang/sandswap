@@ -33,7 +33,7 @@
 //   - ROTATABLE: changing the seed re-keys every name, which REVOKES the
 //     knowledge a previously compromised daemon accumulated (it remembers the
 //     paths it served; a rotation makes all of them stale). See
-//     docs/how-it-works/isolation-and-swap.md §4 for the layer it belongs to.
+//     docs/how-it-works/isolation-and-swap.md §5.2.3 for the layer it belongs to.
 //
 // What it does NOT do: it is not access control. If a name leaks — a helper
 // process with the path in argv, an info-level log, a record read by an

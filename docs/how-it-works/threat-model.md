@@ -144,7 +144,7 @@ out of reach:
 
 - **Holds**: the guest's memory and console; the ability to serve any
   volume **whose path it knows** to its own guest (the `allowed_dirs`
-  filter lives inside this process, and the daemon learns each path the
+  filter lives inside this process, and it learns each path the
   VM is switched to). With the shared-group grant it can read/write those
   volumes directly on the host. It **cannot enumerate the volumes root**
   (2710, group execute-only) and cannot guess a name
@@ -219,7 +219,7 @@ here as deployment duties:
   installed. This is code-level blocking, not a deployment duty. If a
   future image ships without that rule, any host-side vsock service must
   still treat guest peers as unauthenticated-hostile (the warden's own port
-  applies the same rule to ITS peers — isolation-and-swap.md §7.3).
+  applies the same rule to ITS peers — isolation-and-swap.md §5.1.4).
 - **Guest console logs on the node**: the VMM captures the guest kernel
   console into per-VM `console.log`/`serial.log` on the host. Guest code
   can induce kernel printk at some rate, so the sandlot enforces a size cap

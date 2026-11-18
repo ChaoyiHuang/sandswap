@@ -502,8 +502,8 @@ every start via `/usr/local/lib/sandswap/apply-prov-ownership`, which reads
 | `/etc/sandswap/volume-seed` | root : `sandprov` | 0640 | name derivation secret — prov reads, sandvmm must not; minted once, never regenerated. The group is the `sandprov` account on EVERY shape: a dedicated prov instance runs AS sandprov, and the merged `exec,prov` sandlot carries sandprov as a SUPPLIED supplementary group (the sandvmm spawn replaces its own group set, so the grant never reaches the VMM/FUSE daemon) |
 | `/var/lib/sandswap` | root : root | 0755 | state root; the gateway's writable identity store + lock live in the private `state/` subdirectory (0700, gateway identity — unit shapes get that from `StateDirectory`), never at the root |
 | `/usr/local/lib/sandswap/guest` | root : root | 0755 (files 0644 + `SHA256SUMS`) | the guest TCB (kernel + initramfs). Executed as the in-VM root of trust and therefore never writable — not even renamable — by a service identity; the sandlot verifies the hashes at start |
-| `/var/lib/sandswap/volumes` | *prov identity* : shared group | 2710 | the virtio-fs share root: prov creates/removes, the FUSE daemon traverses only (no readdir, no create) |
-| `/var/lib/sandswap/templates`, `flat-templates`, `overlay-templates` | *prov identity* : shared group | 2750 | stores the prov writes and the daemon reads layer content; the `refs/` metadata tree inside is group `sandtmpl` (982 — prov + exec sandlot, never sandvmm) |
+| `/var/lib/sandswap/volumes` | *prov identity* : shared group | 2710 | the virtio-fs share root: prov creates/removes, sandvmm traverses only (no readdir, no create) |
+| `/var/lib/sandswap/templates`, `flat-templates`, `overlay-templates` | *prov identity* : shared group | 2750 | stores the prov writes and the virtio-fs server reads layer content; the `refs/` metadata tree inside is group `sandtmpl` (982 — prov + exec sandlot, never sandvmm) |
 
 Never hand-chown these paths in a deploy script: derive from `SS_PROV_USER`
 (and call `sandswap_write_prov_user_env` so the units agree).

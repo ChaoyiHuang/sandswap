@@ -561,7 +561,7 @@ unset _mp _mount_checked
 # guest-driven escape naming something AT the share root (mkdir/unlink/rename
 # beside the allowed directory) fails with EACCES even if the daemon's own root
 # gate is ever regressed away.
-# See docs/operations/storage.md and docs/how-it-works/isolation-and-swap.md §4.
+# See docs/operations/storage.md and docs/how-it-works/isolation-and-swap.md §5.2.3.
 # Template-store metadata tree: refs/ is 2750 and belongs to the template
 # metadata group (sandtmpl), NOT the shared volume group — the FUSE daemon
 # (sandvmm) reads layer CONTENT through the shared group and must not be able
@@ -748,7 +748,7 @@ else
 fi
 
 # The volume-name SEED is what makes tenant directory names unguessable
-# (isolation §4.6): every name is sf- + HMAC-SHA256(seed, id), so a seed the
+# (isolation §5.2.3): every name is sf- + HMAC-SHA256(seed, id), so a seed the
 # FUSE daemon can read collapses the name space back to guessable. It must be
 # readable by the provision identity ONLY. Checked here as a live read probe
 # with the daemon identity — the mode alone is not the point; the READ is.

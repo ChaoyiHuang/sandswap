@@ -252,7 +252,7 @@ const DENY_SYSCALLS: &[(u32, &str)] = &[
 ];
 
 // The deny-list SIZE is a documented interface: docs/how-it-works/syscall-surface.md
-// and docs/how-it-works/isolation-and-swap.md §7.1 both state the count. A
+// and docs/how-it-works/isolation-and-swap.md §5.1.2 both state the count. A
 // deliberate list change must move this pin and both docs in the same commit —
 // the same discipline PROTOCOL_VERSION follows — so the code and the docs can
 // never silently drift apart again (the comments in exec.rs once said "29"

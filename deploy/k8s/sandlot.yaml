@@ -101,7 +101,7 @@ spec:
           - 992  # /dev/vhost-vsock GID — auto-detected by deploy-k8s-embedded.sh (usually same as /dev/kvm)
           - 982  # sandtmpl: template-store metadata group (refs/); NOT granted to sandvmm
       initContainers:
-        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §4;
+        # Fourth isolation layer (docs/how-it-works/isolation-and-swap.md §5.4;
         # storage contract row 10b): the SHARE ROOT must be writable only by
         # the provision plane. The FUSE daemon runs as uid 987 with
         # supplementary gid 65536 (tinyvm.vmm_groups + api_gid in the sandlot

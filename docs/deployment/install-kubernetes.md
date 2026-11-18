@@ -320,7 +320,7 @@ full 8-variant matrix; the dimension flags restrict it.
       --template-tool /tmp/template-tool --run
   # 4) promote: re-point volume_seed_file at the new key and drop the staged
   #    one. The instance refuses the promotion while any volume still carries
-  #    the pre-promote generation (its own daemon-side gate, independent of
+  #    the pre-promote generation (its own instance-side gate, independent of
   #    the tool), so a premature promote cannot land. Wait until the pod's
   #    /run/sandswap/volume-seed-state.json reports the NEW current
   #    fingerprint before turning maintenance off; a refusal leaves the old

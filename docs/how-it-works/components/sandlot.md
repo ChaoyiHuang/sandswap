@@ -99,7 +99,7 @@ bounded concurrency (`-max-provision-ops`):
   daemon (sandvmm) out of other tenants: the volumes root is
   traverse-only for its group (`2710` — it cannot list the root), and the
   derived names (`sf-` + a 128-bit keyed hash) are unguessable; rotating
-  the seed revokes the paths a previously compromised daemon memorized
+  the seed revokes the paths a previously compromised sandvmm memorized
   (`sandlot/provision/volname`).
 
 ### 2.3 Merged deployment (`-roles=exec,prov`)
