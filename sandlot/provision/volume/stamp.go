@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"common/util"
+	"common/sandfs"
 	"sandlot/provision/volname"
 )
 
@@ -222,7 +222,7 @@ func writeVolumeStamp(volPath, id, mode string, seed []byte, createdUnix int64, 
 
 // readVolumeStamp parses the stamp. ok=false means the file is absent.
 //
-// The read is hardened with util.ReadMarkerFile (O_NOFOLLOW + O_NONBLOCK +
+// The read is hardened with sandfs.ReadMarkerFile (O_NOFOLLOW + O_NONBLOCK +
 // regular-file + 4 KiB cap). In flat mode the volume root is the tenant's
 // chroot: a planted `.sandfs-id -> /dev/zero` used to make this host-side read
 // loop until the prov process OOMed (the startup guard runs it for every
@@ -230,7 +230,7 @@ func writeVolumeStamp(volPath, id, mode string, seed []byte, createdUnix int64, 
 // usable marker is reported as an ERROR (tampering), never as "no stamp".
 func readVolumeStamp(volPath string) (volumeStamp, bool, error) {
 	path := filepath.Join(volPath, VolumeIdentityFile)
-	data, usable, err := util.ReadMarkerFile(path)
+	data, usable, err := sandfs.ReadMarkerFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return volumeStamp{}, false, nil
@@ -240,7 +240,7 @@ func readVolumeStamp(volPath string) (volumeStamp, bool, error) {
 	if !usable {
 		return volumeStamp{}, false, fmt.Errorf(
 			"%w: %s exists but is not a regular file of at most %d bytes (planted symlink/FIFO/oversize?) — treating the stamp as unreadable",
-			ErrVolumeStampUnreadable, path, util.MaxMarkerBytes,
+			ErrVolumeStampUnreadable, path, sandfs.MaxMarkerBytes,
 		)
 	}
 	var st volumeStamp

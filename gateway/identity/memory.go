@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"common/util"
+	"common/sandfs"
 )
 
 // MemoryStore implements Store with in-process maps.
@@ -566,7 +566,7 @@ func (s *MemoryStore) CountSandFSByTemplate(templateRef string) (int, []string) 
 		// Ref identity is the ref FILE identity: the ref->filename encoding
 		// is not injective, so "a:b_c" and "a_b:c" name the same template.
 		// A raw-string compare would let a colliding ref miss a live volume.
-		if rec.Mode == "overlay" && util.RefToFilename(rec.Template) == util.RefToFilename(templateRef) {
+		if rec.Mode == "overlay" && sandfs.RefToFilename(rec.Template) == sandfs.RefToFilename(templateRef) {
 			count++
 			if len(sample) < templateInUseSampleSize {
 				sample = append(sample, id)

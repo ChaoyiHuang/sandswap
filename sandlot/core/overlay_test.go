@@ -23,7 +23,7 @@ import (
 	"time"
 
 	pb "common/proto/stream"
-	"common/util"
+	"common/sandfs"
 	"sandlot/vmm"
 )
 
@@ -361,7 +361,7 @@ func TestGetCachedRefEntryRejectsHostPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := "rootfs:v1"
-	refFile := filepath.Join(tpl, "refs", util.RefToFilename(ref)+".overlay.json")
+	refFile := filepath.Join(tpl, "refs", sandfs.RefToFilename(ref)+".overlay.json")
 	good := filepath.Join(tpl, "layers", "sha256-good")
 
 	// Benign ref loads and caches.
@@ -376,7 +376,7 @@ func TestGetCachedRefEntryRejectsHostPaths(t *testing.T) {
 	// Host-path layer: refused (and the earlier cached entry is NOT poisoned —
 	// each ref name is its own cache key, so use a second ref for the attack).
 	evilRef := "evil:v9"
-	evilFile := filepath.Join(tpl, "refs", util.RefToFilename(evilRef)+".overlay.json")
+	evilFile := filepath.Join(tpl, "refs", sandfs.RefToFilename(evilRef)+".overlay.json")
 	evil := `{"name":"evil","version":"v9","layers":["/etc"]}`
 	if err := os.WriteFile(evilFile, []byte(evil), 0o644); err != nil {
 		t.Fatal(err)
@@ -387,7 +387,7 @@ func TestGetCachedRefEntryRejectsHostPaths(t *testing.T) {
 
 	// Relative escape form: also refused.
 	escRef := "esc:v1"
-	escFile := filepath.Join(tpl, "refs", util.RefToFilename(escRef)+".flat.json")
+	escFile := filepath.Join(tpl, "refs", sandfs.RefToFilename(escRef)+".flat.json")
 	if err := os.WriteFile(escFile, []byte(`{"name":"esc","version":"v1","layers":["../../etc"]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

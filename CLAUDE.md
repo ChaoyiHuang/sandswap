@@ -48,10 +48,10 @@ plus repo rules, nothing more.
 
 | Dir | Role |
 |---|---|
-| `common/` | Shared Go: stream proto (`proto/stream`), config defaults/validation, shell libs for deploy+e2e (`sh/`) |
+| `common/` | Shared Go: stream proto (`proto/stream`), config defaults/validation, SandFS volume metadata (`sandfs/`), shell libs for deploy+e2e (`sh/`) |
 | `gateway/` | HTTP + gRPC stream server: entry `cmd/main.go`, route wiring `app/`, handlers `handler/`, pool/lease/identity/registry/storage/stream packages |
-| `sandlot/` | Per-node daemon, entry `cmd/main.go`; exec role = VM lifecycle (`core/`, `vmm/`), prov role = storage plane (`provision/`) |
-| `boxout/` | Privileged VM-lifecycle sidecar for K8s (entry `main.go`, request protocol `server/`) |
+| `sandlot/` | Per-node daemon, entry `cmd/main.go`; exec role = VM lifecycle (`core/`, `vmm/`), prov role = storage plane (`provision/`), refuse-to-start checks (`preflight/`) |
+| `boxout/` | Privileged VM-lifecycle sidecar for K8s (entry `main.go`, startup plumbing `runtime/`, request protocol `server/`) |
 | `dns/` | sandns resolver (self-built wire codec, `wire/`) |
 | `sandctl/` | Operator CLI |
 | `vmm/` | sandvmm — KVM VMM (fork of Cloud Hypervisor), Rust workspace |

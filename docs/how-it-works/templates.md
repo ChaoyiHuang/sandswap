@@ -157,7 +157,7 @@ Two things to know:
   be pushed again).
 
 Publishing is `sandctl api template push <ref>` for something already in
-the local store, or the ORAS-based `build/build-template.sh` for an
+the local store, or the ORAS-based `build/push-oci-template.sh` for an
 assembled template directory
 ([Building Templates](../building/templates.md)). Pulling happens explicitly
 (`sandctl api template pull`) or automatically on the first SandFS creation
@@ -352,7 +352,7 @@ The repo ships sample templates under `templates/` — each is a
 description, timeouts, default env). Note the gateway consumes only the
 directory layout and the layer content at runtime; `template.json` is
 documentation, plus input to the ORAS publishing script
-(`build/build-template.sh`, which turns it into OCI annotations). The
+(`build/push-oci-template.sh`, which turns it into OCI annotations). The
 samples are starting points, not buildable rootfs directories on their own:
 
 | Sample | What it shows | How a real one is built |

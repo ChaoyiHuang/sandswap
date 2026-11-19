@@ -14,7 +14,7 @@ where it is stored, and how each mode consumes it are in
 [OCI Registry Integration](../integration/registry.md).
 
 Everything here is grounded in the repo's own scripts
-(`build/build-*-rootfs.sh`, `build/build-template.sh`) and the template
+(`build/build-*-rootfs.sh`, `build/push-oci-template.sh`) and the template
 manager (`sandlot/provision/template/manager.go`). The storage plane owns
 that code: a prov sandlot instance runs every scan, pull, push and
 save-as-template, and the gateway merely forwards those ops over the node
@@ -260,11 +260,11 @@ Expected output: `hi`.
 
 Assemble a versioned template directory — `layer-0/`, `layer-1/`, … plus a
 `template.json` (its fields feed the artifact's annotations) — and
-`build/build-template.sh` pushes it as an OCI artifact via
+`build/push-oci-template.sh` pushes it as an OCI artifact via
 [ORAS](https://oras.land):
 
 ```bash
-bash build/build-template.sh ./my-template-dir python-ml:v1 \
+bash build/push-oci-template.sh ./my-template-dir python-ml:v1 \
     registry.example.com/sandswap-templates
 ```
 
@@ -306,8 +306,8 @@ OCI annotations:
 
 | Field | Consumed by | Meaning |
 |---|---|---|
-| `name`, `version` | `build/build-template.sh` | identity; pushed as `sandswap.template.*` annotations; the scan derives the same from the directory name |
-| `description` | `build/build-template.sh` | artifact annotation; human documentation |
+| `name`, `version` | `build/push-oci-template.sh` | identity; pushed as `sandswap.template.*` annotations; the scan derives the same from the directory name |
+| `description` | `build/push-oci-template.sh` | artifact annotation; human documentation |
 | `workspace_path`, `default_timeout`, `is_serverless`, `idle_timeout`, `env` | nobody (documentation only) | sample metadata — the platform applies none of these; do not rely on them |
 | `vcpus`, `memory_mb` | save-template **request** fields (not this file) | the **minimum** resources a SandFS from the template requests; recorded in the ref file, overridable at create time; the create path resolves them to an internal VM spec |
 

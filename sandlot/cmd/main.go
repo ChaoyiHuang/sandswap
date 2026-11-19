@@ -13,17 +13,13 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"os/user"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +30,7 @@ import (
 	"sandlot/core"
 	"sandlot/hostbin"
 	"sandlot/network"
+	"sandlot/preflight"
 	"sandlot/provision/seed"
 	"sandlot/provision/template"
 	"sandlot/provision/volname"
@@ -285,11 +282,11 @@ func main() {
 	// container runtime may drop per-mount flags on a PVC bind, so those
 	// roles warn instead of refusing (the mount owner must harden it).
 	if cfg.VMMode != "boxout" && slices.Contains(cfg.NormalizedRoles(), "exec") {
-		if err := requireSecureVolumesMount(cfg.TinyVM.VolumesDir, *allowInsecureVolumes); err != nil {
+		if err := preflight.RequireSecureVolumesMount(cfg.TinyVM.VolumesDir, *allowInsecureVolumes); err != nil {
 			log.Fatalf("%v", err)
 		}
 	} else {
-		warnVolumesMountIfInsecure(cfg.TinyVM.VolumesDir)
+		preflight.WarnVolumesMountIfInsecure(cfg.TinyVM.VolumesDir)
 	}
 
 	// The warden-port BPF guard is a startup precondition for an embedded exec
@@ -299,7 +296,7 @@ func main() {
 	if slices.Contains(cfg.NormalizedRoles(), "exec") {
 		if cfg.VMMode == "boxout" {
 			log.Printf("vsockguard: pin verification skipped in boxout mode (unprivileged sandlot; the host-setup unit owns the guard)")
-		} else if err := verifyVsockguardPin(uint32(os.Geteuid()), *allowMissingVsockguard, log.Default()); err != nil {
+		} else if err := preflight.VerifyVsockguardPin(uint32(os.Geteuid()), *allowMissingVsockguard, log.Default()); err != nil {
 			log.Fatalf("%v", err)
 		}
 	}
@@ -402,7 +399,7 @@ func main() {
 	// Host rule: at most ONE sandlot process per host (exec-only / prov-only /
 	// merged are the blessed shapes; separate role processes on one host are
 	// not). Refuses loudly before anything starts.
-	roleRelease, err := acquireRoleLock(logger, effectiveNodeID, cfg.NormalizedRoles(), *allowColocated)
+	roleRelease, err := preflight.AcquireRoleLock(logger, effectiveNodeID, cfg.NormalizedRoles(), *allowColocated)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -453,7 +450,7 @@ func main() {
 				logger.Fatalf("%s owned by uid %d, want the sandvmm identity %d\n"+
 					"  fix: reinstall the udev rule (deploy/udev/99-sandswap-vsock.rules) and re-run host prep", vhostVsockDev, sys.Uid, cfg.TinyVM.VMMUid)
 			}
-			if err := checkCapsForVMMSpawn(cfg.TinyVM.VMMUid); err != nil {
+			if err := preflight.CheckCapsForVMMSpawn(cfg.TinyVM.VMMUid); err != nil {
 				logger.Fatalf("%v", err)
 			}
 		} else if f, err := os.OpenFile(vhostVsockDev, os.O_RDWR, 0); err != nil {
@@ -468,11 +465,11 @@ func main() {
 	// root-owned guest directory with a SHA256SUMS pin. Verify before the
 	// first VM; dev/e2e paths outside that directory are deliberately exempt.
 	if cfg.HasRole("exec") {
-		verifyGuestArtifacts(&cfg, logger)
+		preflight.VerifyGuestArtifacts(&cfg, logger)
 	}
 
 	// Default VMM config
-	vmmGroups, gerr := resolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger)
+	vmmGroups, gerr := preflight.ResolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger)
 	if gerr != nil {
 		logger.Fatalf("%v", gerr)
 	}
@@ -666,7 +663,7 @@ func main() {
 			// assumption (a second PROV instance on this host is not a
 			// supported shape — exec+prov colocation is, and that has one
 			// prov).
-			StatePath:               filepath.Join(filepath.Dir(roleLockPath), seed.StateFilename),
+			StatePath:               filepath.Join(filepath.Dir(preflight.RoleLockPath()), seed.StateFilename),
 			Logger:                  logger,
 			AllowGenerationMismatch: *allowSeedGenerationMismatch,
 		})
@@ -940,250 +937,4 @@ func main() {
 		return int(c)
 	}())
 	handler.Stop()
-}
-
-// resolveVMMGroups turns the tinyvm.vmm_groups spec (comma-separated numeric
-// gids or group NAMES — names carry per-host variance like "kvm", numbers
-// carry the contract pins like 985) into the supplementary group list for
-// the sandvmm child. The API gid is always included so the socket chgrp
-// (group-membership-only, no CAP_CHOWN) succeeds. Unresolvable names are a
-// warn-and-skip (a missing "kvm" group only costs /dev/kvm access, which
-// surfaces immediately at the first VM create with a clear error).
-func resolveVMMGroups(spec string, apiGid uint32, logger *log.Logger) ([]uint32, error) {
-	var out []uint32
-	seen := map[uint32]bool{}
-	add := func(g uint32) {
-		if g != 0 && !seen[g] {
-			seen[g] = true
-			out = append(out, g)
-		}
-	}
-	for _, tok := range strings.Split(spec, ",") {
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
-		}
-		if n, err := strconv.ParseUint(tok, 10, 32); err == nil {
-			add(uint32(n))
-			continue
-		}
-		g, err := user.LookupGroup(tok)
-		if err != nil {
-			logger.Printf("warning: tinyvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
-			continue
-		}
-		if n, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
-			add(uint32(n))
-		}
-	}
-	add(apiGid)
-	// The volume-seed group must never reach the sandvmm/FUSE child: it reads
-	// the seed and every tenant's derived volume name. A group list that
-	// resolves to it (by number or name, including api_gid) is refused at
-	// startup rather than silently handing the seed to the daemon.
-	if forbidden := sandprovGroupID(); forbidden != 0 {
-		for _, g := range out {
-			if g == forbidden {
-				return nil, fmt.Errorf("tinyvm.vmm_groups/api_gid resolves to the sandprov group %d — the VMM/FUSE child must never carry the volume-seed group; remove it from the group list", g)
-			}
-		}
-	}
-	return out, nil
-}
-
-// guestArtifactDir is the root-only location the deployers install the guest
-// TCB into, with a SHA256SUMS pin beside it. A sandlot whose kernel/initramfs
-// live here verifies both files before the first VM; dev/e2e paths outside
-// this directory are exempt (they are not a production TCB location).
-const guestArtifactDir = "/usr/local/lib/sandswap/guest"
-
-// verifyGuestArtifacts enforces the production TCB pin: both files must be
-// root-owned, non-group/world-writable regular files, and match SHA256SUMS.
-// A missing or mismatched pin is fatal — the guest kernel is the sandbox TCB.
-func verifyGuestArtifacts(cfg *sandlotconfig.SandlotConfig, logger *log.Logger) {
-	kernel := cfg.TinyVM.Kernel
-	initramfs := cfg.TinyVM.Initramfs
-	if filepath.Dir(kernel) != guestArtifactDir || filepath.Dir(initramfs) != guestArtifactDir {
-		logger.Printf("guest TCB hash check skipped: kernel/initramfs are outside %s (dev/e2e paths)", guestArtifactDir)
-		return
-	}
-	sumsPath := filepath.Join(guestArtifactDir, "SHA256SUMS")
-	sumsInfo, err := os.Lstat(sumsPath)
-	if err != nil {
-		logger.Fatalf("guest TCB pin %s is unavailable: %v\n  the deployer must install %s with sandswap_install_guest_artifacts", sumsPath, err, guestArtifactDir)
-	}
-	if !sumsInfo.Mode().IsRegular() || sumsInfo.Mode()&0o022 != 0 {
-		logger.Fatalf("guest TCB pin %s is not a non-group/world-writable regular file (mode %04o)", sumsPath, sumsInfo.Mode().Perm())
-	}
-	if st, ok := sumsInfo.Sys().(*syscall.Stat_t); ok && st.Uid != 0 {
-		logger.Fatalf("guest TCB pin %s is owned by uid %d, want root", sumsPath, st.Uid)
-	}
-	sums, err := os.ReadFile(sumsPath)
-	if err != nil {
-		logger.Fatalf("cannot read guest TCB pin %s: %v", sumsPath, err)
-	}
-	want := map[string]string{}
-	for _, line := range strings.Split(string(sums), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 {
-			want[fields[1]] = fields[0]
-		}
-	}
-	for _, path := range []string{kernel, initramfs} {
-		base := filepath.Base(path)
-		expected, ok := want[base]
-		if !ok {
-			logger.Fatalf("guest TCB pin %s has no entry for %s", sumsPath, base)
-		}
-		fi, err := os.Lstat(path)
-		if err != nil {
-			logger.Fatalf("guest TCB artifact %s is unavailable: %v", path, err)
-		}
-		if !fi.Mode().IsRegular() || fi.Mode()&0o022 != 0 {
-			logger.Fatalf("guest TCB artifact %s is not a non-group/world-writable regular file (mode %04o)", path, fi.Mode().Perm())
-		}
-		if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Uid != 0 {
-			logger.Fatalf("guest TCB artifact %s is owned by uid %d, want root", path, st.Uid)
-		}
-		blob, err := os.ReadFile(path)
-		if err != nil {
-			logger.Fatalf("cannot read guest TCB artifact %s: %v", path, err)
-		}
-		sum := sha256.Sum256(blob)
-		got := hex.EncodeToString(sum[:])
-		if !strings.EqualFold(got, expected) {
-			logger.Fatalf("guest TCB artifact %s hash mismatch: got %s, %s says %s", path, got, sumsPath, expected)
-		}
-		logger.Printf("guest TCB verified: %s sha256=%s", path, got[:16])
-	}
-}
-
-// vsockguardAttestation is the root-written statement that the warden-port BPF
-// guard is attached and which uid it allows. The sandlot (uid 985) cannot read
-// the bpffs pin itself: /sys/fs/bpf is root-only and bpf_obj_get needs both DAC
-// access and BPF privileges. The deploy/attach tooling (root) writes this file
-// after a successful attach; the systemd unit re-runs the same check in
-// ExecStartPre, so a stale file cannot outlive a detached pin or a reboot.
-const vsockguardAttestation = "/run/sandswap/vsockguard.allowed_uid"
-
-// verifyVsockguardPin proves the warden-port BPF guard is attached AND allows
-// THIS sandlot uid. Root sandlots skip the check (root is a trust root and the
-// hook admits root); a non-root sandlot verifies the root attestation's
-// ownership, mode and value. The dev/test admission downgrades a
-// missing/mismatched attestation to a warning.
-func verifyVsockguardPin(sandlotUID uint32, allowMissing bool, logger *log.Logger) error {
-	if sandlotUID == 0 {
-		logger.Printf("vsockguard: running as root — pin check skipped (root is a trust root and the BPF hook admits root)")
-		return nil
-	}
-	return verifyVsockguardAttestation(vsockguardAttestation, sandlotUID, allowMissing, logger)
-}
-
-func verifyVsockguardAttestation(path string, sandlotUID uint32, allowMissing bool, logger *log.Logger) error {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		if allowMissing {
-			logger.Printf("WARNING: vsockguard attestation absent (%v) — relying on the per-frame warden HMAC alone (-allow-missing-vsockguard is a DEV/TEST admission)", err)
-			return nil
-		}
-		return fmt.Errorf("vsockguard attestation %s is missing: an exec node must not run without the warden-port BPF guard\n"+
-			"  fix: run bash security/vsockguard-attach.sh %d (writes it after a successful attach) or the systemd unit's ExecStartPre; -allow-missing-vsockguard admits a dev/test host", path, sandlotUID)
-	}
-	if !fi.Mode().IsRegular() || fi.Mode()&0o022 != 0 {
-		return fmt.Errorf("vsockguard attestation %s is not a non-group/world-writable regular file (mode %04o)", path, fi.Mode().Perm())
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Uid != 0 {
-		return fmt.Errorf("vsockguard attestation %s is owned by uid %d, want root", path, st.Uid)
-	}
-	data, rerr := os.ReadFile(path)
-	if rerr != nil {
-		return fmt.Errorf("read vsockguard attestation %s: %w", path, rerr)
-	}
-	text := strings.TrimSpace(string(data))
-	got, perr := strconv.ParseUint(text, 10, 32)
-	if perr != nil {
-		return fmt.Errorf("vsockguard attestation %s holds %q (want a uid): %w", path, text, perr)
-	}
-	if uint32(got) != sandlotUID {
-		if allowMissing {
-			logger.Printf("WARNING: vsockguard allows uid %d but this sandlot runs as %d — proceeding under -allow-missing-vsockguard (DEV/TEST only)", got, sandlotUID)
-			return nil
-		}
-		return fmt.Errorf("vsockguard allows uid %d, but this sandlot runs as uid %d — the guard protects a different identity; re-attach it with the sandlot uid", got, sandlotUID)
-	}
-	logger.Printf("vsockguard attestation verified: allowed_uid=%d", got)
-	return nil
-}
-
-// sandprovGroupID resolves the provision identity's group id from the
-// deployer's environment (SANDSWAP_PROV_GID, then the identity.env key), with
-// a name lookup fallback for hosts that predate the export. 0 = unknown (the
-// check is skipped rather than failing every host without the account).
-func sandprovGroupID() uint32 {
-	for _, env := range []string{"SANDSWAP_PROV_GID", "SS_GID_SANDPROV"} {
-		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
-			if n, err := strconv.ParseUint(v, 10, 32); err == nil {
-				return uint32(n)
-			}
-		}
-	}
-	name := os.Getenv("SANDPROV_GROUP")
-	if name == "" {
-		name = "sandprov"
-	}
-	g, err := user.LookupGroup(name)
-	if err != nil {
-		return 0
-	}
-	n, err := strconv.ParseUint(g.Gid, 10, 32)
-	if err != nil {
-		return 0
-	}
-	return uint32(n)
-}
-
-// checkCapsForVMMSpawn verifies this process can actually perform the
-// identity-split spawn and teardown: the uid transition needs
-// CAP_SETUID/CAP_SETGID, and killing a different-uid child needs CAP_KILL.
-// Failing here (startup) beats failing per-VM-create with a bare EPERM.
-func checkCapsForVMMSpawn(vmmUid uint32) error {
-	data, err := os.ReadFile("/proc/self/status")
-	if err != nil {
-		return fmt.Errorf("cannot read /proc/self/status for capability pre-flight: %w", err)
-	}
-	var effHex string
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "CapEff:") {
-			effHex = strings.TrimSpace(strings.TrimPrefix(line, "CapEff:"))
-		}
-	}
-	if effHex == "" {
-		return fmt.Errorf("no CapEff line in /proc/self/status")
-	}
-	eff, err := strconv.ParseUint(effHex, 16, 64)
-	if err != nil {
-		return fmt.Errorf("parse CapEff %q: %w", effHex, err)
-	}
-	const (
-		capSetGID = 1 << 6 // CAP_SETGID (capability 6; 1 is DAC_OVERRIDE)
-		capSetUID = 1 << 7 // CAP_SETUID
-		capKill   = 1 << 5 // CAP_KILL
-	)
-	missing := []string{}
-	if eff&capSetUID == 0 {
-		missing = append(missing, "CAP_SETUID")
-	}
-	if eff&capSetGID == 0 {
-		missing = append(missing, "CAP_SETGID")
-	}
-	if eff&capKill == 0 {
-		missing = append(missing, "CAP_KILL")
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("sandlot lacks %s — required by the sandvmm identity split (uid %d):\n"+
-			"  fix: update the service unit / launch path to AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_ADMIN CAP_SETUID CAP_SETGID CAP_KILL\n"+
-			"  (deploy/baremetal/systemd/sandswap-sandlot.service, or common/sh/runtime.sh ss_service_exec)",
-			strings.Join(missing, ", "), vmmUid)
-	}
-	return nil
 }

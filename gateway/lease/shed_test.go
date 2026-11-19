@@ -216,3 +216,28 @@ func TestMaybeShedSkipsLocalMount(t *testing.T) {
 		t.Fatalf("MaybeShed without idle peer = %v, want ShedActionNone", got)
 	}
 }
+
+// TestShedNilAndDisabledGuards pins the shed controller's entry guards:
+// nil receiver (a nil controller on the hot path must be a no-op, never a
+// dereference) and the disabled configuration (Enabled=false must answer
+// None without touching pool/peers) plus the rate-token 0-sentinel.
+func TestShedNilAndDisabledGuards(t *testing.T) {
+	var nilS *ShedController
+	if act := nilS.MaybeShed("sf-x"); act != ShedActionNone {
+		t.Fatalf("nil controller must be a no-op, got %v", act)
+	}
+
+	// Constructed but disabled: pool/peers are nil — the Enabled gate must
+	// return before either is touched.
+	s := &ShedController{cfg: &ShedConfig{}, pool: nil, peers: nil}
+	if act := s.MaybeShed("sf-x"); act != ShedActionNone {
+		t.Fatalf("disabled controller must answer None, got %v", act)
+	}
+
+	// Rate-token 0-sentinel: rps<=0 disables token consumption.
+	tok := &ShedController{cfg: &ShedConfig{}}
+	tok.cfg.RatePerSec.Store(0)
+	if tok.takeToken() {
+		t.Fatal("rps=0 must disable token consumption (0 = off sentinel)")
+	}
+}

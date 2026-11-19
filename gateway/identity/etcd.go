@@ -36,7 +36,7 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"golang.org/x/sync/singleflight"
 
-	"common/util"
+	"common/sandfs"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1390,7 +1390,7 @@ func (s *EtcdStore) CountSandFSByTemplate(templateRef string) (int, []string) {
 	for id, rec := range s.sandfs {
 		// Ref identity is the ref FILE identity (see MemoryStore): colliding
 		// encodings name the same template and must count as in use.
-		if rec.Mode == "overlay" && util.RefToFilename(rec.Template) == util.RefToFilename(templateRef) {
+		if rec.Mode == "overlay" && sandfs.RefToFilename(rec.Template) == sandfs.RefToFilename(templateRef) {
 			count++
 			if len(sample) < templateInUseSampleSize {
 				sample = append(sample, id)

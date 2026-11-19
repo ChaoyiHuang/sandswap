@@ -33,7 +33,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/e2e/common.sh"
 
 # MCP e2e test binary
-MCP_E2E_DIR="$ROOT/gateway/mcp/e2e"
+MCP_E2E_DIR="$ROOT/gateway/mcp/e2eharness"
 MCP_E2E_BIN="/tmp/sandswap-mcp-e2e"
 
 cleanup() {

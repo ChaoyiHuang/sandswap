@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"common/util"
+	"common/sandfs"
 	"sandlot/vmm"
 )
 
@@ -67,7 +67,7 @@ func (h *Handler) getCachedRefEntry(templatesDir, ref string) (*overlayRefEntry,
 	h.overlayMu.RUnlock()
 
 	// Cache miss: search for mode-suffixed ref files on disk.
-	refBase := util.RefToFilename(ref)
+	refBase := sandfs.RefToFilename(ref)
 	var refData []byte
 	for _, mode := range []string{"overlay", "flat"} {
 		refFile := filepath.Join(templatesDir, "refs", refBase+"."+mode+".json")
@@ -211,7 +211,7 @@ func (h *Handler) ensureReadonlyOverlayMounted(volumePath, expectedRef string) (
 	// root IS the agent's chroot root, so a `.template` there was written by
 	// the agent, never by the storage plane — and a storage-plane marker is storage
 	// truth only for overlay volumes. Do NOT follow it (a planted
-	// symlink/FIFO is a host read / a hang — see util.ReadMarkerFile; a
+	// symlink/FIFO is a host read / a hang — see sandfs.ReadMarkerFile; a
 	// planted regular file would flip the volume into an unresolvable
 	// overlay mount) and do NOT delete it (inside a flat rootfs the name is
 	// the agent's own file: e.g. a project directory or config template —
@@ -398,7 +398,7 @@ func readTemplateMarker(sandfsDir string) (ref string, flat bool, err error) {
 	// block this mount path forever. A non-regular entry is never a marker
 	// the storage plane wrote — treat it as "no marker" (the flat volume keeps
 	// working) instead of following or blocking on it.
-	data, ok, err := util.ReadMarkerFile(marker)
+	data, ok, err := sandfs.ReadMarkerFile(marker)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if _, derr := os.Stat(sandfsDir); derr != nil {
@@ -808,7 +808,7 @@ func (h *Handler) cleanupStaleOverlays() {
 		// Lstat: presence of the ENTRY is what matters, never follow it (only
 		// overlay volumes are tracked here, and their roots are not
 		// agent-writable — this is the same no-follow discipline as
-		// util.ReadMarkerFile, kept uniform).
+		// sandfs.ReadMarkerFile, kept uniform).
 		templateMarker := filepath.Join(volumePath, ".template")
 		if _, err := os.Lstat(templateMarker); err == nil {
 			continue // still a valid overlay SandFS
@@ -1026,7 +1026,7 @@ func (s *OverlaySet) CleanupStale(unmount func(volumePath string) error) (cleane
 // handle), so one check covers both.
 func overlayStale(volumePath string) bool {
 	// Lstat: existence of the entry is what matters; never follow it (see
-	// util.ReadMarkerFile for why marker paths are treated as untrusted).
+	// sandfs.ReadMarkerFile for why marker paths are treated as untrusted).
 	_, err := os.Lstat(filepath.Join(volumePath, ".template"))
 	return err != nil
 }

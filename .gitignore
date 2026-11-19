@@ -11,6 +11,9 @@ warden/target/
 # Go test binaries
 *.test
 
+# Python bytecode caches (e2e checkers are imported by sibling tooling)
+__pycache__/
+
 # In-place Go binaries. Bare `go build` (or `go build ./...` in a module whose
 # only package is main) drops the executable into the CWD — never commit them.
 # Real builds always target output/ via build/build.sh (build.sh go).
@@ -18,7 +21,8 @@ warden/target/
 /boxout/boxout
 /sandctl/sandctl
 /gateway/cmd/cmd
-/gateway/mcp/e2e/e2e
+/gateway/mcp/e2eharness/e2e
+/gateway/mcp/e2eharness/e2eharness
 /sandlot/warden-probe
 /examples/openai-sandswap/openai-sandswap
 /examples/eino-sandswap/eino-sandswap

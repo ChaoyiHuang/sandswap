@@ -340,3 +340,90 @@ func TestDispatchInFlightProcessRegistration(t *testing.T) {
 		t.Fatal("released slot reported in-flight")
 	}
 }
+
+// TestMountLockSlotEviction pins the eviction conjunction
+// (refs<=0 && holder==nil && map identity): evicting a slot with LIVE
+// interests splits them across two slots and silently removes the mutual
+// exclusion the mount gate exists to provide.
+func TestMountLockSlotEviction(t *testing.T) {
+	ml := NewMountLock()
+
+	// One holder + one waiter: two interests on ONE slot.
+	holder, err := ml.Acquire("sf-evict")
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	type result struct {
+		tok *MountLockToken
+		err error
+	}
+	waitDone := make(chan result, 1)
+	go func() {
+		tok, err := ml.AcquireWait("sf-evict", 50*time.Millisecond)
+		waitDone <- result{tok, err}
+	}()
+
+	// Holder releases: the waiter must take over on the SAME slot, proving the
+	// slot was not evicted while an interest remained.
+	ml.Release(holder)
+	var r result
+	select {
+	case r = <-waitDone:
+		if r.err != nil {
+			t.Fatalf("waiter failed after holder release (slot evicted early?): %v", r.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter never woke — the slot was evicted while an interest remained")
+	}
+
+	// Full drain: after the waiter also releases, the slot is evicted.
+	ml.Release(r.tok)
+	ml.mu.Lock()
+	n := len(ml.slots)
+	ml.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("fully-released slot not evicted (leak): %d slot(s) remain", n)
+	}
+}
+
+// TestMountLockAcquireWaitDefault verifies the default-timeout wrapper
+// AcquireWaitDefault: it acquires when free, blocks a concurrent holder until
+// Release, then proceeds (the 10s timeout is only the worst-case bound, not
+// the typical wait).
+func TestMountLockAcquireWaitDefault(t *testing.T) {
+	ml := NewMountLock()
+
+	tok, err := ml.AcquireWaitDefault("s-1")
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+
+	// A concurrent waiter blocks until Release.
+	done := make(chan error, 1)
+	go func() {
+		t2, err := ml.AcquireWaitDefault("s-1")
+		if err == nil {
+			ml.Release(t2)
+		}
+		done <- err
+	}()
+
+	// Give the waiter a moment to enqueue, then confirm it is blocked.
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case err := <-done:
+		t.Fatalf("waiter should be blocked while holder active, got %v", err)
+	default:
+	}
+
+	ml.Release(tok)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("waiter after release: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter did not proceed after release")
+	}
+}

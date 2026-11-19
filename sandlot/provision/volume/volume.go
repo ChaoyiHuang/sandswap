@@ -38,7 +38,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"common/util"
+	"common/sandfs"
 	"sandlot/provision/copyfs"
 	"sandlot/provision/template"
 	"sandlot/provision/volname"
@@ -936,8 +936,8 @@ func (p *Provisioner) SwapTemplate(ctx context.Context, sandfsID, templateRef, h
 	// Overlay volumes only: the .template marker is the swap target (a flat
 	// volume copied its template content at creation — there is nothing to
 	// re-point). The symlink/FIFO-safe read guards a planted marker (in flat
-	// mode the volume root is the agent's chroot root; see util.ReadMarkerFile).
-	cur, ok, err := util.ReadMarkerFile(filepath.Join(volPath, ".template"))
+	// mode the volume root is the agent's chroot root; see sandfs.ReadMarkerFile).
+	cur, ok, err := sandfs.ReadMarkerFile(filepath.Join(volPath, ".template"))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s is not an overlay volume (no .template marker): %v", ErrInvalidArgument, sandfsID, err)
 	}
@@ -1202,12 +1202,12 @@ func (p *Provisioner) scanTemplateInUse(ctx context.Context, templateRef string)
 		go func(id string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			data, ok, err := util.ReadMarkerFile(filepath.Join(p.VolRoot, id, ".template"))
+			data, ok, err := sandfs.ReadMarkerFile(filepath.Join(p.VolRoot, id, ".template"))
 			// In-use identity is the ref FILE identity, not the raw string:
 			// RefToFilename is not injective ('a:b_c' and 'a_b:c' both encode
 			// to refs/a_b_c.overlay.json), and a collision must not hide a
 			// live volume from the delete gate.
-			if err != nil || !ok || util.RefToFilename(strings.TrimSpace(string(data))) != util.RefToFilename(templateRef) {
+			if err != nil || !ok || sandfs.RefToFilename(strings.TrimSpace(string(data))) != sandfs.RefToFilename(templateRef) {
 				return
 			}
 			// a.template marker alone is plantable by a tenant in a
