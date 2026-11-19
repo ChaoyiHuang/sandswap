@@ -96,7 +96,7 @@ real template needs the layer directories next to it
 #    templates/sqlite/layer-0/  ← busybox rootfs (build.sh rootfs-template)
 #    templates/sqlite/layer-1/  ← sqlite3 binary + libraries
 # 2. Publish with the ORAS-based script:
-bash build/build-template.sh ./templates/sqlite sqlite:v1 <registry>
+bash build/push-oci-template.sh ./templates/sqlite sqlite:v1 <registry>
 
 # Or, once the layers are registered in a gateway's local store, push from
 # the gateway instead:

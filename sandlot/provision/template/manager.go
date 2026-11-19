@@ -65,7 +65,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
-	"common/util"
+	"common/sandfs"
 	"sandlot/provision/copyfs"
 )
 
@@ -562,7 +562,7 @@ func (m *Manager) resolveOverlayLayerPath(layerID string) (string, error) {
 // overlayfs-isolation 8.1). Deliberate ref writers (PullTemplate,
 // SaveAsTemplate, writeRefFile callers) are unaffected.
 func (m *Manager) refFileExists(ref, mode string) bool {
-	filename := util.RefToFilename(ref) + "." + mode + ".json"
+	filename := sandfs.RefToFilename(ref) + "." + mode + ".json"
 	_, err := os.Stat(filepath.Join(m.refsDir(), filename))
 	return err == nil
 }
@@ -619,7 +619,7 @@ func (m *Manager) DeleteTemplate(templateRef, mode string) error {
 	m.scanMu.Lock()
 	defer m.scanMu.Unlock()
 
-	refFile := filepath.Join(m.refsDir(), util.RefToFilename(templateRef)+"."+mode+".json")
+	refFile := filepath.Join(m.refsDir(), sandfs.RefToFilename(templateRef)+"."+mode+".json")
 	if _, err := os.Stat(refFile); err != nil {
 		return fmt.Errorf("template %s (%s) not found: %w", templateRef, mode, err)
 	}
@@ -836,7 +836,7 @@ func (m *Manager) writeRefFile(ref string, entry RefEntry) error {
 		return fmt.Errorf("%w: entry names %q:%q, refusing to write it under ref %q", ErrRefIdentityMismatch, entry.Name, entry.Version, ref)
 	}
 	mode := entry.GetMode()
-	filename := util.RefToFilename(ref) + "." + mode + ".json"
+	filename := sandfs.RefToFilename(ref) + "." + mode + ".json"
 	path := filepath.Join(m.refsDir(), filename)
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
@@ -897,7 +897,7 @@ func (m *Manager) loadRefFile(ref, mode string) (*RefEntry, error) {
 	if err := validateRef(ref); err != nil {
 		return nil, err
 	}
-	filename := util.RefToFilename(ref) + "." + mode + ".json"
+	filename := sandfs.RefToFilename(ref) + "." + mode + ".json"
 	path := filepath.Join(m.refsDir(), filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1822,7 +1822,7 @@ type SaveAsTemplateResponse struct {
 // a crashed save never leaves a lock that must be broken by hand. The caller
 // holds the returned unlock for the whole check-copy-publish sequence.
 func (m *Manager) lockRefSave(ctx context.Context, ref string) (func(), error) {
-	name := "." + util.RefToFilename(ref) + ".save.lock"
+	name := "." + sandfs.RefToFilename(ref) + ".save.lock"
 	path := filepath.Join(m.refsDir(), name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
@@ -1903,7 +1903,7 @@ func (m *Manager) volumeStamp(dir string) (VolumeStamp, bool, error) {
 // readVolumeStampMode reads the signed stamp's mode field safely. The second
 // return is false when no stamp exists (legacy unsigned volume).
 func readVolumeStampMode(dir string) (string, bool, error) {
-	data, usable, err := util.ReadMarkerFile(filepath.Join(dir, volumeIdentityStamp))
+	data, usable, err := sandfs.ReadMarkerFile(filepath.Join(dir, volumeIdentityStamp))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", false, nil

@@ -7,7 +7,7 @@ grand_parent: Operations
 
 # Boxout Configuration
 
-> Sources: `boxout/main.go` (entry: config, network provider, socket) + `boxout/server/server.go` (request protocol).
+> Sources: `boxout/main.go` (entry: config, network provider, socket) + `boxout/runtime/` (startup plumbing: socket lifecycle, admission token, instance lock, hot-reload) + `boxout/server/server.go` (request protocol).
 
 **What boxout is.** In Kubernetes, the sandlot runs unprivileged (UID 65536 — the reserved sandbox identity, outside every id the node allocates on its own; see [Prerequisites](../../deployment/prerequisites.md) §3 — all capabilities dropped). Boxout is its privileged sidecar (UID 0): it owns the sandvmm process lifecycle (launch/kill/shutdown), network provisioning (TAP/IP, egress baseline), host-side OverlayFS mount/unmount, `/proc` re-adopt scanning, and crash detection — everything sandlot would do itself in [embedded mode](sandlot.md). Sandlot stays unprivileged on the hot path (mount-and-exec, warden vsock, leases) and relays privileged operations to boxout over a Unix socket using newline-delimited JSON. Deployment details are in [Install (Kubernetes)](../../deployment/install-kubernetes.md); the split of duties is covered in [Architecture](../../how-it-works/architecture.md).
 

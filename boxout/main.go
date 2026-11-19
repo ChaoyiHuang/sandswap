@@ -24,26 +24,15 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
-	"os/user"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
-	"common/config"
 	"sandlot/bindreg"
 	sandlotconfig "sandlot/config"
 	"sandlot/core"
@@ -51,10 +40,8 @@ import (
 	"sandlot/network"
 	"sandlot/vmm"
 
+	"boxout/runtime"
 	"boxout/server"
-
-	"bytes"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -187,7 +174,7 @@ func main() {
 	// fd-validated and lives in the private state root — never in the
 	// group-writable runtime dir — and its content is never trusted.
 	sandboxRoot := server.InstanceSandboxRoot(cfg)
-	instanceLock, err := acquireInstanceLock(core.StateRootFor(sandboxRoot), sandboxRoot, logger)
+	instanceLock, err := runtime.AcquireInstanceLock(core.StateRootFor(sandboxRoot), sandboxRoot, logger)
 	if err != nil {
 		logger.Fatalf("%v", err)
 	}
@@ -266,7 +253,7 @@ func main() {
 		// already-running VMs on the old identity.
 		VMMUID:      cfg.TinyVM.VMMUid,
 		VMMGID:      cfg.TinyVM.VMMGid,
-		VMMGroups:   resolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger),
+		VMMGroups:   runtime.ResolveVMMGroups(cfg.TinyVM.VMMGroups, cfg.TinyVM.APIGid, logger),
 		APIGID:      cfg.TinyVM.APIGid,
 		SeccompMode: cfg.TinyVM.VMMSeccomp,
 		VMMAPIAuth:  cfg.TinyVM.VMMAPIAuth,
@@ -291,7 +278,7 @@ func main() {
 	srv := server.New(cfg, vmmCfg, netProv, uint32(*allowedUID), logger)
 	srv.SetAllowInsecureVolumes(*allowInsecureVolumes)
 	if *clientTokenFile != "" {
-		token, terr := loadOrCreateClientToken(*clientTokenFile, *allowedUID)
+		token, terr := runtime.LoadOrCreateClientToken(*clientTokenFile, *allowedUID)
 		if terr != nil {
 			logger.Fatalf("client token %s: %v", *clientTokenFile, terr)
 		}
@@ -301,7 +288,7 @@ func main() {
 	}
 	totalMemMB := uint64(*maxTotalMemory)
 	if totalMemMB == 0 {
-		totalMemMB = hostMemoryLimitMB()
+		totalMemMB = runtime.HostMemoryLimitMB()
 	}
 	srv.SetLimits(*maxVMs, totalMemMB)
 	// Persist the overlay tracking map (volumePath → template ref) beside the
@@ -321,7 +308,7 @@ func main() {
 	// refills; no cross-process coordination is worth that complexity.
 	// Network settings and everything else stay restart-required (the
 	// provider is built at startup).
-	startConfigReload(cfg, srv, logger)
+	runtime.StartConfigReload(cfg, srv, logger)
 
 	// Create and listen on Unix socket.
 	//
@@ -332,7 +319,7 @@ func main() {
 	// an accepted server response, but the whole class is removed by not
 	// sharing the directory at all.
 	sockDir := filepath.Dir(*socketPath)
-	if err := prepareSocketDir(sockDir); err != nil {
+	if err := runtime.PrepareSocketDir(sockDir); err != nil {
 		logger.Fatalf("boxout socket dir %s: %v", sockDir, err)
 	}
 	// Remove a stale socket. The directory gate above proves no other identity
@@ -351,14 +338,14 @@ func main() {
 	// Bounded retry: a restart racing the previous instance's socket teardown
 	// must not turn into a crash-loop (each restart re-opened the
 	// socket-permission race window).
-	lis, err := listenWithRetry(*socketPath, logger)
+	lis, err := runtime.ListenWithRetry(*socketPath, logger)
 	if err != nil {
 		logger.Fatalf("listen on %s: %v", *socketPath, err)
 	}
 	// Hand the socket to the sandlot identity 0600 and VERIFY it: only the
 	// sandlot process can connect, and the file at the path is provably the
 	// socket this listener created.
-	if err := secureListeningSocket(*socketPath, *allowedUID, logger); err != nil {
+	if err := runtime.SecureListeningSocket(*socketPath, *allowedUID, logger); err != nil {
 		lis.Close()
 		logger.Fatalf("secure socket %s: %v", *socketPath, err)
 	}
@@ -419,323 +406,4 @@ func main() {
 
 	<-ctx.Done()
 	logger.Printf("boxout shutting down")
-}
-
-// prepareSocketDir creates and validates the boxout socket directory: it must
-// be a directory this (root) identity owns and no other identity can write
-// (0711 = traverse only). A shared or non-root-owned directory would let a
-// same-UID process replace the socket entry at will.
-func prepareSocketDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o711); err != nil {
-		return fmt.Errorf("create: %w", err)
-	}
-	// MkdirAll honors the umask; normalize explicitly.
-	if err := os.Chmod(dir, 0o711); err != nil {
-		return fmt.Errorf("chmod: %w", err)
-	}
-	var st unix.Stat_t
-	if err := unix.Lstat(dir, &st); err != nil {
-		return fmt.Errorf("lstat: %w", err)
-	}
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
-		return fmt.Errorf("%s is not a directory", dir)
-	}
-	if st.Uid != uint32(os.Geteuid()) {
-		return fmt.Errorf("%s is owned by uid %d, not the boxout identity %d — the socket must live in a directory only the sidecar can write", dir, st.Uid, os.Geteuid())
-	}
-	if st.Mode&0o022 != 0 {
-		return fmt.Errorf("%s is group/world-writable (mode %04o) — a same-UID process could replace the socket entry; use a boxout-private directory", dir, st.Mode&0o7777)
-	}
-	return nil
-}
-
-// listenWithRetry binds the Unix socket with a bounded retry. A boxout restart
-// racing the previous instance's teardown (the listener takes a moment to
-// release the path) must not crash-loop the sidecar.
-func listenWithRetry(path string, logger *log.Logger) (net.Listener, error) {
-	var lastErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		lis, err := net.Listen("unix", path)
-		if err == nil {
-			return lis, nil
-		}
-		lastErr = err
-		logger.Printf("listen %s (attempt %d/5): %v", path, attempt+1, err)
-		time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
-	}
-	return nil, lastErr
-}
-
-// secureListeningSocket hands the freshly bound socket to the sandlot identity
-// 0600 and VERIFIES the result. Every operation is relative to an O_NOFOLLOW
-// directory fd, never a path that resolves from /run: fchmod(2) on the
-// listener's own descriptor would act on the sockfs inode, not the filesystem
-// entry, so the directory-relative fchownat/fchmodat plus the inode-identity
-// post-check is the fd-relative form that actually covers the entry. A
-// mismatch (the entry was replaced between bind and chmod) fails startup.
-func secureListeningSocket(path string, uid int, logger *log.Logger) error {
-	name := filepath.Base(path)
-	dirFD, err := unix.Open(filepath.Dir(path), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return fmt.Errorf("open socket dir (no-follow): %w", err)
-	}
-	defer unix.Close(dirFD)
-	var before unix.Stat_t
-	if err := unix.Fstatat(dirFD, name, &before, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return fmt.Errorf("stat socket (no-follow): %w", err)
-	}
-	if before.Mode&unix.S_IFMT != unix.S_IFSOCK {
-		return fmt.Errorf("%s is not a socket (mode %04o)", path, before.Mode&0o7777)
-	}
-	if err := unix.Fchownat(dirFD, name, uid, uid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return fmt.Errorf("chown socket: %w", err)
-	}
-	if err := unix.Fchmodat(dirFD, name, 0o600, 0); err != nil {
-		return fmt.Errorf("chmod socket: %w", err)
-	}
-	var after unix.Stat_t
-	if err := unix.Fstatat(dirFD, name, &after, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return fmt.Errorf("stat socket after chmod: %w", err)
-	}
-	if after.Ino != before.Ino || after.Dev != before.Dev {
-		return fmt.Errorf("socket entry at %s was replaced during permission setup (inode %d→%d) — refusing to serve", path, before.Ino, after.Ino)
-	}
-	if after.Mode&unix.S_IFMT != unix.S_IFSOCK || after.Uid != uint32(uid) || after.Mode&0o777 != 0o600 {
-		return fmt.Errorf("socket %s is mode %04o uid %d after setup, want 0600 uid %d", path, after.Mode&0o7777, after.Uid, uid)
-	}
-	logger.Printf("socket %s: mode 0600 owner uid %d (verified)", path, uid)
-	return nil
-}
-
-// startConfigReload watches the sandlot config file and hot-applies the
-// tinyvm subset (kernel, initramfs, default resources). Everything else is
-// logged as restart-required — the same classification sandlot applies, so
-// the two processes stay consistent.
-func startConfigReload(cfg sandlotconfig.SandlotConfig, srv *server.Server, logger *log.Logger) *config.ReloadWatcher {
-	if cfg.ConfigFilePath == "" {
-		return nil
-	}
-
-	watchableCfg := config.NewWatchableConfig(cfg)
-	// The startup CLI overrides (bridge/subnet/gateway/dns/…) must be re-applied
-	// to every decoded revision, exactly as sandlot and the gateway do: without
-	// it each unrelated file edit re-logged phantom "requires a restart" lines
-	// for every flag-provided key (the diff compared the flag-applied startup
-	// config against a raw file decode).
-	_, err := config.NewReloadWatcher(cfg.ConfigFilePath, func(content []byte) {
-		newCfg := sandlotconfig.Defaults()
-		dec := yaml.NewDecoder(bytes.NewReader(content))
-		dec.KnownFields(true) // strict (shares sandlot's config: unknown keys are errors)
-		if err := dec.Decode(&newCfg); err != nil {
-			logger.Printf("config reload: failed to parse YAML (strict: unknown keys are errors): %v", err)
-			return
-		}
-		prev := watchableCfg.Get()
-		if err := sandlotconfig.ReapplyStartupFlags(&prev, &newCfg); err != nil {
-			logger.Printf("config reload: refusing the edit (%v); keeping the previous config", err)
-			return
-		}
-		if err := newCfg.Validate(); err != nil {
-			logger.Printf("config reload: invalid values (%v); keeping the previous config", err)
-			return
-		}
-		cs := watchableCfg.Swap(newCfg).Diff(newCfg)
-		for _, fc := range cs.HotReload {
-			switch fc.Name {
-			case "tinyvm.kernel", "tinyvm.initramfs",
-				"tinyvm.default_vcpus", "tinyvm.default_memory_mb":
-				srv.UpdateVMMConfig(newCfg.TinyVM.Kernel, newCfg.TinyVM.Initramfs,
-					newCfg.TinyVM.DefaultVCPUs, newCfg.TinyVM.DefaultMemoryMB)
-			}
-			// tinyvm.warden_* are restart-required (the shared classifier
-			// marks only tinyvm.{kernel,initramfs,default_vcpus,
-			// default_memory_mb} hot) and are deliberately not applied
-			// here: the warden cmdline (countdown / max exec timeout / log)
-			// is built per create_vm from this vmmCfg, so a hot-applied
-			// change would silently split the node's pool across two cmdline
-			// shapes (and an online warden_log=debug flip would tax the
-			// guest console on every new VM).
-		}
-		for _, fc := range cs.RestartReq {
-			logger.Printf("config reload: %s changed but requires a restart (not applied): %v -> %v",
-				fc.Name, fc.Old, fc.New)
-		}
-	})
-	if err != nil {
-		logger.Printf("warning: failed to watch config %s: %v (tinyvm hot-reload disabled)", cfg.ConfigFilePath, err)
-		return nil
-	}
-	logger.Printf("config hot-reload watcher started (tinyvm.* only): %s", cfg.ConfigFilePath)
-	return nil
-}
-
-// resolveVMMGroups turns the tinyvm.vmm_groups spec (comma-separated
-// numeric gids or group NAMES) into the sandvmm child's supplementary group
-// list — same contract as the embedded side's resolver (cmd/main.go), kept
-// local because the boxout module cannot import sandlot's package main.
-// The API gid is always included so the socket chgrp (group-membership
-// only, no CAP_CHOWN needed) succeeds. In k8s the spec is numeric by
-// construction (deploy-lib host-injects the kvm gid); name lookup stays
-// for dev runs, warn-and-skip on unresolvable entries (a missing "kvm"
-// group only costs /dev/kvm, surfacing loudly at the first create).
-func resolveVMMGroups(spec string, apiGid uint32, logger *log.Logger) []uint32 {
-	var out []uint32
-	seen := map[uint32]bool{}
-	add := func(g uint32) {
-		if g != 0 && !seen[g] {
-			seen[g] = true
-			out = append(out, g)
-		}
-	}
-	for _, tok := range strings.Split(spec, ",") {
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
-		}
-		if n, err := strconv.ParseUint(tok, 10, 32); err == nil {
-			add(uint32(n))
-			continue
-		}
-		g, err := user.LookupGroup(tok)
-		if err != nil {
-			logger.Printf("warning: tinyvm.vmm_groups entry %q unresolvable (skipped): %v", tok, err)
-			continue
-		}
-		if n, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
-			add(uint32(n))
-		}
-	}
-	add(apiGid)
-	return out
-}
-
-// loadOrCreateClientToken reads the per-pod token shared with sandlot, or
-// creates it on first start. The file must live in a pod-private directory
-// (an emptyDir shared by the two containers), mode 0400 owned by the sandlot
-// UID. A pre-existing valid token is reused so a boxout restart does not
-// invalidate the sandlot's copy.
-func loadOrCreateClientToken(path string, allowedUID int) (string, error) {
-	if data, err := os.ReadFile(path); err == nil {
-		tok := strings.TrimSpace(string(data))
-		if raw, derr := hex.DecodeString(tok); derr == nil && len(raw) == sha256.Size {
-			return tok, nil
-		}
-		return "", fmt.Errorf("existing token file is malformed (want 64 hex characters)")
-	} else if !os.IsNotExist(err) {
-		return "", err
-	}
-	var raw [sha256.Size]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	tok := hex.EncodeToString(raw[:])
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(tok+"\n"), 0o400); err != nil {
-		return "", err
-	}
-	if err := os.Chown(tmp, allowedUID, allowedUID); err != nil {
-		os.Remove(tmp)
-		return "", err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return "", err
-	}
-	return tok, nil
-}
-
-// hostMemoryLimitMB derives the default aggregate cap: 80% of MemTotal.
-// 0 on an unreadable /proc/meminfo (the count limit still applies).
-func hostMemoryLimitMB() uint64 {
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return 0
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "MemTotal:") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				if kb, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
-					return kb / 1024 * 8 / 10
-				}
-			}
-			break
-		}
-	}
-	return 0
-}
-
-// acquireInstanceLock enforces one boxout per sandbox root.
-//
-// boxout owns host-global state for its root — VM API sockets, host-side
-// overlay mounts, the /proc re-adopt scan — so a second instance aimed at the
-// same root would race every one of those. The lock file lives in the PRIVATE
-// per-instance state root (/run/sandswap-state/<tag>, root-owned 0710), which
-// the unprivileged sandlot cannot write; the descriptor is validated (regular
-// file, owned by this identity, mode 0600) before the flock, so a file planted
-// at the lock path makes the start fail closed instead of being "locked
-// through". The file's CONTENT is written for operator diagnostics only and is
-// never read or used for a decision.
-func acquireInstanceLock(stateRoot, sandboxRoot string, logger *log.Logger) (*os.File, error) {
-	if err := os.MkdirAll(stateRoot, 0o710); err != nil {
-		return nil, fmt.Errorf("boxout lock: create %s: %w", stateRoot, err)
-	}
-	rfd, err := unix.Open(stateRoot, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, fmt.Errorf("boxout lock: open state root %s (no-follow): %w", stateRoot, err)
-	}
-	defer unix.Close(rfd)
-	var rst unix.Stat_t
-	if err := unix.Fstat(rfd, &rst); err != nil {
-		return nil, fmt.Errorf("boxout lock: fstat state root: %w", err)
-	}
-	if rst.Mode&unix.S_IFMT != unix.S_IFDIR || rst.Uid != uint32(os.Geteuid()) {
-		return nil, fmt.Errorf("boxout lock: state root %s is not a directory owned by uid %d (mode %04o, uid %d) — refusing to lock in it",
-			stateRoot, os.Geteuid(), rst.Mode&0o777, rst.Uid)
-	}
-
-	const lockName = "boxout.lock"
-	fd, err := unix.Openat(rfd, lockName, unix.O_RDWR|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("boxout lock: open %s/%s (no-follow): %w", stateRoot, lockName, err)
-	}
-	keep := false
-	defer func() {
-		if !keep {
-			unix.Close(fd)
-		}
-	}()
-	var st unix.Stat_t
-	if err := unix.Fstat(fd, &st); err != nil {
-		return nil, fmt.Errorf("boxout lock: fstat lock file: %w", err)
-	}
-	if st.Mode&unix.S_IFMT != unix.S_IFREG {
-		return nil, fmt.Errorf("boxout lock: %s/%s is not a regular file (mode %04o)", stateRoot, lockName, st.Mode&0o777)
-	}
-	if st.Uid != uint32(os.Geteuid()) {
-		return nil, fmt.Errorf("boxout lock: %s/%s is owned by uid %d, not the writer uid %d — refusing to use it",
-			stateRoot, lockName, st.Uid, os.Geteuid())
-	}
-	if err := unix.Fchmod(fd, 0o600); err != nil {
-		return nil, fmt.Errorf("boxout lock: chmod lock file: %w", err)
-	}
-	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		if errors.Is(err, unix.EWOULDBLOCK) {
-			return nil, fmt.Errorf("another boxout instance already manages %s (lock %s/%s is held) — one boxout per sandbox root",
-				sandboxRoot, stateRoot, lockName)
-		}
-		return nil, fmt.Errorf("boxout lock: flock: %w", err)
-	}
-
-	// Diagnostic line only (see the function comment): content is never read.
-	_ = unix.Ftruncate(fd, 0)
-	_, _ = syscall.Write(fd, []byte(fmt.Sprintf("%d|%s\n", os.Getpid(), sandboxRoot)))
-
-	keep = true
-	path := filepath.Join(stateRoot, lockName)
-	logger.Printf("instance lock held for sandbox root %s (%s)", sandboxRoot, path)
-	return os.NewFile(uintptr(fd), path), nil
 }

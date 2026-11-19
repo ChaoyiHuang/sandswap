@@ -7,7 +7,7 @@ grand_parent: Operations
 
 # Sandlot Configuration
 
-> Sources: `sandlot/cmd/main.go` (CLI flags) + `sandlot/config/config.go` (YAML structure, defaults, reload classification) + `sandlot/core/reload.go` (reload application) + `sandlot/core/runner.go` (resilience reconnect state machine).
+> Sources: `sandlot/cmd/main.go` (CLI flags) + `sandlot/preflight/` (refuse-to-start checks) + `sandlot/config/config.go` (YAML structure, defaults, reload classification) + `sandlot/core/reload.go` (reload application) + `sandlot/core/runner.go` (resilience reconnect state machine).
 > Two entry points: CLI flags alone, or `-config <yaml>` plus flags. Only flags **explicitly set** on the command line override the YAML value (unset flags fall through to the file, then to built-in defaults).
 >
 > **Hot-reload vs restart**: when `-config` is set, the file is watched (fsnotify, debounced) and hot-reloadable fields apply live; everything else is logged as "requires restart". CLI flags always take effect at process start. See the `classifyField` summary at the bottom.

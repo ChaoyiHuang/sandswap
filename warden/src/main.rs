@@ -55,7 +55,7 @@ mod signal;
 // never compiled into the release binary.
 #[cfg(test)]
 mod test_sync;
-mod util;
+mod pump;
 mod version;
 
 use mount::general_mount;
@@ -102,7 +102,7 @@ async fn create_logger_task(rfd: RawFd, shutdown: Receiver<bool>) -> Result<()> 
     let mut reader = unsafe { tokio::fs::File::from_raw_fd(rfd) };
     let mut writer = tokio::io::stdout();
 
-    let _ = util::pump_until_shutdown(&mut reader, &mut writer, shutdown).await;
+    let _ = pump::pump_until_shutdown(&mut reader, &mut writer, shutdown).await;
 
     Ok(())
 }

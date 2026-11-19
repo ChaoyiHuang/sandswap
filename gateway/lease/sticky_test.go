@@ -1236,9 +1236,7 @@ func TestLeaseWindowRefreshedByArrival(t *testing.T) {
 	}
 }
 
-// TestBgHoldLifecyclePinsW4Survivors pins the background-hold lifecycle edges
-// the W4 lease mutation pass proved unpinned (all four survived every
-// operator flip):
+// TestBgHoldLifecycle pins the background-hold lifecycle edges:
 //
 //  1. StartBgExec with NO explicit lease_duration (0 — the default shape)
 //     must HOLD the entry for as long as the exec runs: the hold's deadline
@@ -1266,7 +1264,7 @@ func entryActive(l *Lease, sandfsID string) bool {
 	return l.hasActiveBg(e, time.Now())
 }
 
-func TestBgHoldLifecyclePinsW4Survivors(t *testing.T) {
+func TestBgHoldLifecycle(t *testing.T) {
 	l := New(100*time.Millisecond, 5*time.Second)
 
 	// 1. zero lease_duration holds

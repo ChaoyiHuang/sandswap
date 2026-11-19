@@ -41,7 +41,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"common/util"
+	"common/sandfs"
 	sandlotconfig "sandlot/config"
 	"sandlot/core"
 	"sandlot/network"
@@ -1592,10 +1592,10 @@ func checkOverlayMarkerAt(dirFD int, volumePath string) error {
 	if err != nil {
 		return fmt.Errorf("overlay marker for %s: %w", volumePath, err)
 	}
-	if !st.Mode().IsRegular() || st.Size() > util.MaxMarkerBytes {
+	if !st.Mode().IsRegular() || st.Size() > sandfs.MaxMarkerBytes {
 		return fmt.Errorf("overlay marker for %s is not a regular file (planted symlink, FIFO, device node or oversized entry) — refusing the mount", volumePath)
 	}
-	data, err := io.ReadAll(io.LimitReader(f, util.MaxMarkerBytes))
+	data, err := io.ReadAll(io.LimitReader(f, sandfs.MaxMarkerBytes))
 	if err != nil {
 		return fmt.Errorf("overlay marker for %s: %w", volumePath, err)
 	}

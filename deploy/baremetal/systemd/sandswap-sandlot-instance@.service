@@ -23,7 +23,7 @@ Type=simple
 #                        (uid 987, pinned). The kernel clears every capability
 #                        set at the uid transition, so sandvmm itself runs with
 #                        zero caps. Startup fail-fasts without these
-#                        (checkCapsForVMMSpawn in sandlot/cmd/main.go).
+#                        (CheckCapsForVMMSpawn in sandlot/preflight).
 #   CAP_KILL           — cross-uid SIGKILL of sandvmm (destroy, failed-launch
 #                        cleanup, re-adopt kill paths). Same-uid kill is denied
 #                        by the kernel after the identity split.

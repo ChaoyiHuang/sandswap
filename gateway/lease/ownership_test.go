@@ -20,6 +20,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"log/slog"
 
+	pb "common/proto/stream"
 	"gateway/stream"
 )
 
@@ -758,5 +759,172 @@ func TestSetAlertScanIntervalValidation(t *testing.T) {
 	}
 	if err := oc.SetAlertScanInterval(300 * time.Second); err != nil {
 		t.Errorf("interval 300s refused: %v", err)
+	}
+}
+
+// TestValidateTimingEqualityBoundary pins the equality edge of
+// T_warden >= T_clean: cleanup EXACTLY equal to the countdown is a valid
+// shape (flipping >= to > rejects it — a silent config regression no
+// strict-inequality case can catch).
+func TestValidateTimingEqualityBoundary(t *testing.T) {
+	// T_safe = 300 + 300 + 60 = 660; isolation 720 clears it.
+	eq := &pb.NodeTiming{ToleranceSec: 300, WardenCountdownSec: 300, CleanupSec: 300, IsolationSec: 720}
+	if err := validateTiming(eq); err != nil {
+		t.Fatalf("cleanup == warden is a VALID shape (T_warden >= T_clean), rejected: %v", err)
+	}
+	// one second past the boundary must still be rejected (the pin is the
+	// boundary, not a range shift)
+	over := &pb.NodeTiming{ToleranceSec: 300, WardenCountdownSec: 299, CleanupSec: 300, IsolationSec: 720}
+	if err := validateTiming(over); err == nil {
+		t.Fatal("cleanup > warden by any amount must be rejected")
+	}
+}
+
+// TestSetStalenessThresholdsTTLAtCeiling pins the guard/TTL pair's
+// equality edge: a live TTL exactly AT the ceiling (2×guard) is legal —
+// flipping > to >= in the refusal check would reject it, tightening the
+// documented ceiling without a config reason.
+func TestSetStalenessThresholdsTTLAtCeiling(t *testing.T) {
+	oc := newTestCache(nil) // TTL 30s default, guard 45s default
+	// TTL 20 == 2×guard(10): must be accepted; then a guard change whose
+	// ceiling equals the live TTL must also be accepted.
+	if err := oc.SetCacheTTL(20 * time.Second); err != nil {
+		t.Fatalf("lower TTL: %v", err)
+	}
+	if err := oc.SetStalenessThresholds(0, 10*time.Second, 0); err != nil {
+		t.Fatalf("guard whose ceiling (2×10=20) EQUALS the live TTL (20) must be accepted: %v", err)
+	}
+	// One second tighter is the violation the check exists for: restore the
+	// default guard (45s → ceiling 90 ≥ 21), raise the TTL to 21, then lower
+	// the guard to 10 — its 20s ceiling is now below the live 21s.
+	if err := oc.SetStalenessThresholds(0, 45*time.Second, 0); err != nil {
+		t.Fatalf("restore default guard: %v", err)
+	}
+	if err := oc.SetCacheTTL(21 * time.Second); err != nil {
+		t.Fatalf("raise TTL under the default guard's ceiling: %v", err)
+	}
+	if err := oc.SetStalenessThresholds(0, 10*time.Second, 0); err == nil {
+		t.Fatal("guard ceiling (20) BELOW live TTL (21) must be refused")
+	}
+}
+
+// TestSetStalenessAndCacheTTLOneSecond pins the joint setter's floor
+// edge: cacheTTL == 1s is the documented minimum (">= 1s") — the < flip
+// rejects exactly-1s, a legal value.
+func TestSetStalenessAndCacheTTLOneSecond(t *testing.T) {
+	oc := newTestCache(nil)
+	if err := oc.SetStalenessAndCacheTTL(0, 0, 0, 1*time.Second); err != nil {
+		t.Fatalf("cacheTTL == 1s is the documented minimum and must be accepted: %v", err)
+	}
+	if got := oc.cacheTTL(); got != 1*time.Second {
+		t.Fatalf("accepted 1s TTL not applied: %v", got)
+	}
+	// below the floor is the refusal the check exists for
+	if err := oc.SetStalenessAndCacheTTL(0, 0, 0, 999*time.Millisecond); err == nil {
+		t.Fatal("cacheTTL < 1s must be refused")
+	}
+}
+
+// TestOwnershipLoadRangesBucketed pins the ownership load partition: the
+// keyspace must be hex-bucketed (no serial chain — the 334-page serial scan
+// was the cold-start long pole at 1M) and the union exact (under-coverage
+// silently loses ownership records → false "unowned").
+func TestOwnershipLoadRangesBucketed(t *testing.T) {
+	ranges := ownershipLoadRanges()
+	if len(ranges) < 16 {
+		t.Fatalf("ownership keyspace not bucketed: %d ranges", len(ranges))
+	}
+	hit := func(key string) int {
+		n := 0
+		for _, r := range ranges {
+			if key >= r.start && key < r.end {
+				n++
+			}
+		}
+		return n
+	}
+	for i := 0; i < len(ownerHexDigits); i++ {
+		key := ownershipPrefix + "sandfs-" + string(ownerHexDigits[i]) + "0000000"
+		if n := hit(key); n != 1 {
+			t.Errorf("sandfs id bucket %q hit %d ranges, want 1", key, n)
+		}
+	}
+	// The '0' and 'f' buckets must be distinct ranges (single-chain regression).
+	var zeroIdx, fIdx int = -1, -1
+	for i, r := range ranges {
+		if ownershipPrefix+"sandfs-0aaaaaaa" >= r.start && ownershipPrefix+"sandfs-0aaaaaaa" < r.end {
+			zeroIdx = i
+		}
+		if ownershipPrefix+"sandfs-faaaaaaa" >= r.start && ownershipPrefix+"sandfs-faaaaaaa" < r.end {
+			fIdx = i
+		}
+	}
+	if zeroIdx == fIdx || zeroIdx < 0 || fIdx < 0 {
+		t.Fatalf("ownership not bucketed (zero=%d f=%d)", zeroIdx, fIdx)
+	}
+}
+
+// TestStalenessDefaults verifies the default staleness thresholds and their
+// ordering invariant: route (fast, cheap-to-be-wrong) < alert (early warning)
+// < claim-dead guard (slow, expensive-to-be-wrong). The health key has no
+// lease, so these thresholds ARE the per-consumer death times.
+func TestStalenessDefaults(t *testing.T) {
+	if defaultRouteStaleThreshold != 20*time.Second {
+		t.Errorf("defaultRouteStaleThreshold = %v, want 20s", defaultRouteStaleThreshold)
+	}
+	if defaultAlertStaleThreshold != 30*time.Second {
+		t.Errorf("defaultAlertStaleThreshold = %v, want 30s", defaultAlertStaleThreshold)
+	}
+	if defaultClaimDeadGuard != 45*time.Second {
+		t.Errorf("defaultClaimDeadGuard = %v, want 45s", defaultClaimDeadGuard)
+	}
+	if !(defaultRouteStaleThreshold < defaultAlertStaleThreshold && defaultAlertStaleThreshold < defaultClaimDeadGuard) {
+		t.Errorf("threshold ordering broken: route %v < alert %v < guard %v",
+			defaultRouteStaleThreshold, defaultAlertStaleThreshold, defaultClaimDeadGuard)
+	}
+}
+
+// TestOnNodeDisconnectRecordsPendingOwnerRelease verifies the owner-release
+// trigger: a node disconnect records the node in the pendingOwnerRelease set
+// (and stops tracking its presence lease), and a reconnect (OnNodeConnect)
+// cancels the pending owner-release.
+func TestOnNodeDisconnectRecordsPendingOwnerRelease(t *testing.T) {
+	oc := NewOwnershipCacheForTest("gw-test")
+	oc.OnNodeDisconnect("node-1")
+	oc.mu.Lock()
+	discTime, armed := oc.pendingOwnerRelease["node-1"]
+	_, presenceTracked := oc.presenceLeases["node-1"]
+	oc.mu.Unlock()
+	if !armed || discTime.IsZero() {
+		t.Fatal("OnNodeDisconnect should record the node in pendingOwnerRelease")
+	}
+	if presenceTracked {
+		t.Error("OnNodeDisconnect should stop tracking the presence lease (natural expiry)")
+	}
+
+	// Reconnect cancels the pending owner-release. Valid timings so the
+	// validation gate does not short-circuit before clearing the pending entry.
+	oc.OnNodeConnect("node-1", &pb.NodeTiming{ToleranceSec: 300, WardenCountdownSec: 300, CleanupSec: 300, IsolationSec: 720})
+	oc.mu.Lock()
+	_, still := oc.pendingOwnerRelease["node-1"]
+	oc.mu.Unlock()
+	if still {
+		t.Error("OnNodeConnect should cancel the pending owner-release")
+	}
+}
+
+// TestTSafeForTiming verifies T_safe derivation: T_tolerance + T_warden + margin,
+// with defaults for degenerate/missing timings.
+func TestTSafeForTiming(t *testing.T) {
+	if got := tSafeForTiming(&pb.NodeTiming{ToleranceSec: 300, WardenCountdownSec: 300}); got != 660*time.Second {
+		t.Errorf("tSafeForTiming(300,300) = %v, want 660s", got)
+	}
+	// Degenerate timings fall back to defaults (300+300+60 = 660s), never a
+	// pathologically short 60s.
+	if got := tSafeForTiming(nil); got != 660*time.Second {
+		t.Errorf("tSafeForTiming(nil) = %v, want 660s", got)
+	}
+	if got := tSafeForTiming(&pb.NodeTiming{}); got != 660*time.Second {
+		t.Errorf("tSafeForTiming(0,0) = %v, want 660s", got)
 	}
 }

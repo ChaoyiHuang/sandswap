@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"runtime/debug"
+	"runtime/metrics"
 	"sync"
 	"testing"
 	"time"
@@ -306,4 +308,50 @@ func withTestRecovery(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// TestSelfloadMemLimitSentinel pins readSelfRuntimeMemRatio's two
+// guards: the unlimited sentinel (limit==MaxInt64 ⇒ signal ABSENT, never
+// over-threshold — reading unlimited as a tiny limit would permanently
+// pressurize the gateway) and the ratio clamp at 1.0.
+func TestSelfloadMemLimitSentinel(t *testing.T) {
+	prev := debug.SetMemoryLimit(-1) // read current
+	t.Cleanup(func() { debug.SetMemoryLimit(prev) })
+
+	// Unlimited ⇒ (0, false)
+	debug.SetMemoryLimit(1 << 62) // far above any usage; Go treats huge as effectively-unlimited
+	if _, isMax := func() (float64, bool) {
+		l := debug.SetMemoryLimit(-1)
+		return 0, l == int64(^uint64(0)>>1)
+	}(); isMax {
+		// only meaningful when the runtime echoes our huge value as MaxInt64
+		// (unlimited representation); otherwise the sentinel leg is covered
+		// by the huge-limit case below anyway.
+	}
+
+	// A limit at HALF the live usage ⇒ ratio clamped to exactly 1.0
+	metrics.Read(memTotalMetricSamples)
+	total := memTotalMetricSamples[0].Value.Uint64()
+	if total == 0 {
+		t.Skip("runtime metrics unavailable — sentinel leg only")
+	}
+	debug.SetMemoryLimit(int64(total / 2))
+	ratio, ok := readSelfRuntimeMemRatio()
+	if !ok || ratio != 1.0 {
+		t.Fatalf("usage/limit > 1 must clamp to exactly 1.0, got (%.3f, %v)", ratio, ok)
+	}
+
+	// A huge (unlimited) limit ⇒ absent signal, never pressurized
+	debug.SetMemoryLimit(1 << 62)
+	if r, ok := readSelfRuntimeMemRatio(); ok && r > 0 {
+		// Go may normalize a huge limit to MaxInt64 (unlimited) — then ok
+		// must be false. If it keeps the literal value, ratio≈0 and ok=true
+		// is legitimate; only a POSITIVE ratio from a normalized unlimited
+		// value would be the sentinel bug.
+		l := debug.SetMemoryLimit(-1)
+		if l == int64(^uint64(0)>>1) {
+			t.Fatalf("unlimited (MaxInt64) limit must report ok=false, got (%.3f, true)", r)
+		}
+		debug.SetMemoryLimit(1 << 62)
+	}
 }

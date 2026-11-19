@@ -33,7 +33,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 
-	"common/util"
+	"common/sandfs"
 )
 
 // Severity of an offline validation finding. error = a runtime consumer
@@ -665,7 +665,7 @@ func validateRefFile(storeDir, path, filename string, flatRoots []string, reacha
 			fail("ref-identity", "entry names an invalid ref: %v", err)
 		} else if !refEncodesToFilename(entryRef, entry.Version, base) {
 			fail("ref-identity", "entry names %q:%q, which encodes to %q, but this file is %q — a colliding or tampered ref; every reader refuses it",
-				entry.Name, entry.Version, util.RefToFilename(entryRef), base)
+				entry.Name, entry.Version, sandfs.RefToFilename(entryRef), base)
 		}
 	}
 
@@ -732,12 +732,12 @@ func validateRefFile(storeDir, path, filename string, flatRoots []string, reacha
 // an explicit "sqlite:local" ref encodes WITH the suffix. Both are legal
 // encodings of the same entry identity, so version "local" accepts either.
 func refEncodesToFilename(ref, version, base string) bool {
-	if util.RefToFilename(ref) == base {
+	if sandfs.RefToFilename(ref) == base {
 		return true
 	}
 	if version == "local" {
 		name, _ := parseTemplateRef(ref)
-		return util.RefToFilename(name) == base
+		return sandfs.RefToFilename(name) == base
 	}
 	return false
 }
