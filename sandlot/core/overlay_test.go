@@ -13,6 +13,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,52 @@ import (
 	"common/sandfs"
 	"sandlot/vmm"
 )
+
+func TestEnsureReadonlyOverlayMounted_ReadOnly(t *testing.T) {
+	h := newTestHandler()
+	root := t.TempDir()
+	h.vmmCfg.TemplatesDir = filepath.Join(root, "templates")
+	h.vmmCfg.VolumesDir = filepath.Join(root, "volumes")
+	volume := filepath.Join(h.vmmCfg.VolumesDir, "sandfs-test")
+	layer := filepath.Join(h.vmmCfg.TemplatesDir, "layers", "test-layer")
+	refs := filepath.Join(h.vmmCfg.TemplatesDir, "refs")
+	for _, dir := range []string{volume, layer, refs} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ref := "test:v1"
+	for path, content := range map[string]string{
+		filepath.Join(volume, ".template"):                             ref,
+		filepath.Join(layer, "hello"):                                  "from template",
+		filepath.Join(refs, sandfs.RefToFilename(ref)+".overlay.json"): `{"name":"test","version":"v1","layers":["test-layer"]}`,
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Exercise the real mount syscall: older kernels reject "ro" in the
+	// filesystem-specific options even when MS_RDONLY is also set.
+	if _, err := h.ensureReadonlyOverlayMounted(volume, ref); err != nil {
+		if errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENODEV) {
+			t.Skipf("requires mount privileges and OverlayFS: %v", err)
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := h.cleanupHostOverlay(volume); err != nil {
+			t.Errorf("unmount overlay: %v", err)
+		}
+	})
+	path := filepath.Join(volume, "rootfs", "hello")
+	if data, err := os.ReadFile(path); err != nil || string(data) != "from template" {
+		t.Fatalf("read template file: data=%q err=%v", data, err)
+	}
+	if err := os.WriteFile(path, []byte("changed"), 0o644); !errors.Is(err, syscall.EROFS) {
+		t.Fatalf("write to read-only overlay: got %v, want EROFS", err)
+	}
+}
 
 // --- mountedOverlays tracking ---
 
