@@ -61,8 +61,9 @@ the real proc/dev inside the guest). Any source works — the repo ships two bui
   debootstrap), extracted and optionally extended with `UBUNTU_PACKAGES`
   via a chroot apt pass (~80 MB).
 
-Container images work too — `docker export`, an alpine/busybox minirootfs
-tarball — unpacked into a directory. Step-by-step recipes are in
+Container images work too — an OCI image archive or a plain rootfs tar,
+converted offline with `template-tool import`
+([§4](#4-import-from-an-oci-image)). Step-by-step recipes are in
 [Building Templates](../building/templates.md), and `template-tool validate`
 checks a finished tree against all of this offline before it is ever
 registered (rules and severities:
@@ -345,7 +346,55 @@ The upgrade workflow this completes: build the new template →
 ref's in-use count drops to zero exactly when the last marker stops naming
 it → delete the old template. Retirement is checkable, not assumed.
 
-## 4. Shipped samples
+## 4. Import from an OCI image
+
+Building a template through an agent ([§1](#1-the-workflow)) is the
+right path when the environment must be customized — packages
+installed, config written. A stock OCI image needs none of that:
+`template-tool import` converts it into a ready template, offline. The
+result is a template like any other — an overlay template (the shared
+read-only base layer), a flat template (the build base for §1's agent
+workflow), or a template in an OCI registry — and the grow-and-freeze
+loop of [§1.2](#12-make-it-real-work-through-an-agent)–
+[§1.3](#13-freeze-it-save-as-template) is one way to refine it further,
+not a prerequisite.
+
+```
+OCI image archive (docker save ≥25, skopeo oci-archive, buildx type=oci,
+podman oci-archive) or rootfs tar (docker export, minirootfs)
+        │
+        │  template-tool import — offline, no registry access, no root
+        ├────────────────────▶ (--push, optional, no --out needed)
+        │                        OCI registry, pulled on demand
+        │                        ([§1.4](#14-publish-it-the-oci-artifact))
+        ▼
+ <out>/<name>/<version>/   ──▶ flat scan root  → ref <name>:<version> (flat)
+        │                    build base for the §1 agent workflow
+        └───────────────────▶ template store  → ref <name>:<version> (overlay)
+                             read-only base for overlay SandFS, serve now
+```
+
+What the conversion actually does, and why an image cannot be consumed
+as-is: an image is a *distribution* format — an index pointing at
+compressed layer blobs (multi-arch) — while a template is a chroot-able
+tree. Image layers carry deletion semantics (`.wh.` whiteouts, opaque
+dirs) that the store's layer stacking does not interpret
+([§1.6](#16-serve-create-overlay-sandfs-from-the-template)), and
+deletions cannot be represented in a lowerdir stack at all. The import
+therefore merges the layers bottom→top into ONE tree with those
+markers applied, while selecting and verifying the `linux/amd64`
+manifest (the guest is x86_64-only and the runtime pull paths do no
+platform selection). Every blob is verified against its recorded
+digest, the tree passes the full template contract
+(normalize + validate) before anything is published, and the publish is
+an atomic no-replace install — version directories are immutable, the
+tool writes no ref files (discovery owns registration). The pushed
+artifact is mode-agnostic: the same tag pulls as flat or overlay.
+
+Commands, accepted formats, refusals (zstd, legacy docker-save) and
+credential handling: [Building Templates §2.1](../building/templates.md#21-automated-template-tool-import).
+
+## 5. Shipped samples
 
 The repo ships sample templates under `templates/` — each is a
 `template.json` metadata file demonstrating the schema (name, version,

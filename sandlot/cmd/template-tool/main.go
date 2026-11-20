@@ -60,6 +60,29 @@ func usage() {
                                   the contract + /bin/sh, skeleton dirs,
                                   volume control files, unsupported entry
                                   types; a scan root validates every leaf
+  template-tool import <src> --name N --version V [--out DIR] [--push REGISTRY/REPO]
+                                  offline conversion of a local OCI image
+                                  archive (docker save ≥25, skopeo
+                                  oci-archive, buildx type=oci, podman
+                                  oci-archive) or a plain rootfs tar
+                                  (docker export, minirootfs) into a
+                                  validated template — published as a local
+                                  tree at <out>/<name>/<version>/ and/or
+                                  pushed straight to an OCI registry as a
+                                  Sandswap template artifact (tag
+                                  <name>-<version>; no gateway needed;
+                                  the artifact is mode-agnostic — the
+                                  consuming side pulls it as flat or
+                                  overlay). Flags: --platform (linux/amd64
+                                  only), --description,
+                                  --registry-username/-password/-token/
+                                  -ca/-cert/-key; the credential flags fall
+                                  back to the SANDSWAP_REGISTRY_USERNAME,
+                                  SANDSWAP_REGISTRY_PASSWORD and
+                                  SANDSWAP_REGISTRY_TOKEN env vars (keep
+                                  secrets out of the process list).
+                                  Whiteouts and opaque dirs applied;
+                                  linux/amd64 only
   template-tool check-store <dir> [--flat-root <dir>]...
                                   integrity of a template store (refs/ +
                                   layers/): ref identity, layer trust
@@ -96,6 +119,9 @@ func main() {
 
 	// Subcommands that take flags (not a positional directory) dispatch
 	// BEFORE the <dir> validation below.
+	if cmd == "import" {
+		os.Exit(importCmd(os.Args[2:]))
+	}
 	if cmd == "volume-name" || cmd == "seed-generate" || cmd == "seed-scan" ||
 		cmd == "volume-stamp-read" || cmd == "volume-stamp-write" {
 		os.Exit(volumeNameCmd(cmd, os.Args[2:]))
