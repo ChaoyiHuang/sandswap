@@ -52,17 +52,138 @@ flat-templates/              templates/ (= the template store)/
 ## 2. Recipe: rootfs from a container image
 
 Any container image with a Linux amd64 userspace is a valid rootfs source —
-`docker export`, a distro minirootfs tarball, `debootstrap` output. Pick an
-image that satisfies three properties:
+an OCI image archive, `docker export`, a distro minirootfs tarball,
+`debootstrap` output. Pick an image that satisfies three properties:
 
 - **`/bin/sh` exists** — the warden execs through a shell.
 - **`dev/`, `proc/`, `sys/`, `tmp/` exist** (empty directories are fine —
-  the warden mounts the real proc/dev inside the guest).
+  the warden mounts the real proc/dev inside the guest; the importer
+  creates missing skeleton dirs itself).
 - **No kernel, no init system required.** Sandswap boots its own kernel +
   initramfs, and the warden is PID 1 — the image needs neither. This is
   why images without systemd (busybox, ubuntu-base, alpine) work as-is.
 
-Export an image's filesystem. Create a stopped container from the image:
+### 2.1 Automated: `template-tool import`
+
+The offline converter turns a local archive into a validated template tree
+in one step — no registry, no network, no root. It accepts:
+
+- an **OCI image archive or layout** (`oci-layout` + `index.json` +
+  `blobs/`): `docker save` on Docker 25+, `skopeo copy docker://… oci-archive:out.tar`,
+  `docker buildx build --output type=oci,dest=out.tar`, `podman save --format oci-archive`.
+  The archive may be a plain tar or gzip-compressed (`tar.gz`); detection is
+  by content, not extension;
+- a **plain rootfs tar** (`docker export`, distro minirootfs — tar or
+  `tar.gz`) or a plain rootfs directory.
+
+```bash
+# On a machine with registry access, produce the single package:
+skopeo copy docker://docker.io/library/python:3.12-slim oci-archive:python.tar
+# …or Docker 25+: docker pull python:3.12-slim && docker save -o python.tar python:3.12-slim
+
+# Offline anywhere (converts, applies whiteouts/opaque dirs, creates the
+# skeleton, normalizes the modes, and gates on the full template contract):
+output/template-tool import python.tar --name python --version 3.12-slim \
+    --out /var/sandswap/flat-templates
+```
+
+What the converter guarantees and enforces:
+
+- The output is `<out>/<name>/<version>/` — drop it under a
+  `-flat-templates` scan root (registers flat) or the template store
+  (`-templates-dir`, registers overlay). No ref files are written;
+  discovery owns registration, and an existing version directory is
+  refused (refs are immutable — pick a new version).
+- **Layers are merged into one tree** bottom→top with OCI whiteout
+  (`.wh.<name>`) and opaque-directory (`.wh..wh..opq`) semantics applied —
+  `docker save`/`skopeo` archives carry them, Sandswap's own template
+  format never produces them.
+- **`--platform` is `linux/amd64` only** (the shipped guest kernel and VMM
+  are x86_64-only); multi-arch archives select their amd64 manifest, and
+  an amd64-config image is verified. gzip and plain-tar layers are
+  supported; zstd-compressed and foreign/nondistributable layers are
+  refused with a re-export instruction, and a legacy Docker <25
+  `manifest.json` archive is refused the same way.
+- Every blob is verified against its recorded digest and size; the image's
+  env/entrypoint/user/volumes are not imported (the platform applies none
+  of them).
+- The tree passes `template-tool validate` before it is published — a
+  missing `/bin/sh`, a symlinked `dev/`, or volume control files
+  (`.sandfs-id` …) fail the import instead of producing a broken template.
+- **Ownership is the invoking user's.** The mode bits are contract-compliant
+  (group grant, no group/other write), but the group is whatever identity ran
+  the import. When staging the tree under a service scan root or the template
+  store as a different identity, apply the deployment's shared-group
+  discipline (`chgrp -R <shared group>` — the same step the deploy scripts
+  perform; never `chmod -R a+rX`).
+- **A plain rootfs archive carries no platform metadata** — export it from
+  an amd64 image (the import warns). OCI archives are verified against
+  their config: a `docker save` on an Apple-silicon host yields an arm64
+  image and is refused; use `skopeo copy --override-arch amd64 …` or export
+  on an amd64 host.
+
+**Publishing an imported template to a registry** uses the standard
+distribution flow — the same artifact format and auth as every other
+template ([§5](#5-example--publish-to-oci-pull-elsewhere);
+[OCI Registry Integration](../integration/registry.md)). Three entry
+points:
+
+```bash
+# 1. Standalone (no running stack): the tool itself pushes the converted
+#    template — optionally with NO local output at all (--out omitted).
+#    Credentials: flags, or the environment (preferred in CI — a password
+#    on the command line is visible in the process list and shell history).
+SANDSWAP_REGISTRY_USERNAME="$USER" SANDSWAP_REGISTRY_PASSWORD="$PASS" \
+output/template-tool import python.tar --name python --version 3.12-slim \
+    --push registry.example.com/sandswap-templates \
+    [--description "python 3.12 slim"]
+
+# ...or both: publish locally AND push. On a push failure the validated
+# local template is kept and the error names it.
+output/template-tool import python.tar --name python --version 3.12-slim \
+    --out /var/sandswap/templates \
+    --push registry.example.com/sandswap-templates
+
+# 2. Through a running cluster: import straight into the template store the
+#    prov instance scans, then push via the human API — the gateway
+#    forwards, the prov instance packs and pushes.
+output/template-tool import python.tar --name python --version 3.12 \
+    --out /var/sandswap/templates
+sandctl api template push python:3.12
+
+# 3. Fully offline with the ORAS script, with the imported tree as layer-0/
+mkdir -p my-template-dir && cp -a /path/to/python/3.12 my-template-dir/layer-0
+cp templates/base/template.json my-template-dir/   # name/version/description
+bash build/push-oci-template.sh my-template-dir python:v1 \
+    registry.example.com/sandswap-templates
+```
+
+The standalone push reuses the same packing/push code the prov instance
+serves (one merged layer, the sandswap config blob and annotations, plus
+producer metadata annotations recording the source image digest and
+platform), so the artifact is byte-compatible with what `template pull`
+expects. `--registry-token` / `--registry-ca` / `--registry-cert` +
+`--registry-key` cover the remaining auth methods (with
+`SANDSWAP_REGISTRY_USERNAME` / `SANDSWAP_REGISTRY_PASSWORD` /
+`SANDSWAP_REGISTRY_TOKEN` as the fallbacks for the credential flags);
+loopback registries (localhost) are
+auto-detected as plain HTTP, exactly like the prov instance. `--push`
+takes a REPOSITORY reference only — the artifact tag is always
+`<name>-<version>`, and a tag/digest on the target is refused rather
+than silently ignored. The artifact is **mode-agnostic** — there is no push-time
+flat/overlay choice, because the mode is a property of the CONSUMING
+side's local ref file, never of the artifact: the same tag pulls as
+either. What is pushed is the CONVERTED single merged tree, never the
+original image: a consuming cluster's `sandctl api template pull` (or
+the first create's auto-pull) receives a ready template with no
+whiteouts and no platform question left. The ref→registry tag encoding
+is the standard one
+([Templates §1.4](../how-it-works/templates.md#14-publish-it-the-oci-artifact)).
+
+### 2.2 Manual: `docker export`
+
+The manual equivalent, for when the tool is not at hand. Create a stopped
+container from the image:
 
 ```bash
 docker create --name rootfs-src <image>:<tag>
@@ -261,7 +382,9 @@ Expected output: `hi`.
 Assemble a versioned template directory — `layer-0/`, `layer-1/`, … plus a
 `template.json` (its fields feed the artifact's annotations) — and
 `build/push-oci-template.sh` pushes it as an OCI artifact via
-[ORAS](https://oras.land):
+[ORAS](https://oras.land). An imported image template needs no assembly:
+its single merged tree drops in unchanged as `layer-0/` (see
+[§2.1](#21-automated-template-tool-import)).
 
 ```bash
 bash build/push-oci-template.sh ./my-template-dir python-ml:v1 \

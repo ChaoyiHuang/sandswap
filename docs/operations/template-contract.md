@@ -45,6 +45,11 @@ output/template-tool validate /path/to/rootfs
   stage templates into the flat scan dir do the same and `chgrp` the tree to the shared
   group (the group is the grant — **do not** "fix" readability with `chmod -R a+rX`,
   which widens to every local user instead of the service group).
+- `template-tool import` (an OCI image archive / rootfs tar → template tree
+  or OCI registry;
+  [Building Templates](../building/templates.md#21-automated-template-tool-import))
+  normalizes and validates as part of the conversion — its output needs no
+  extra pass.
 - `save-template` and OCI template *pulls* are normalized by the prov role itself at
   materialization; when it has to repair a non-conformant artifact it logs a warning naming
   the layer — run `template-tool normalize` on the source to fix it upstream.

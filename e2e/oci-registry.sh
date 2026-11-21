@@ -699,6 +699,200 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
+log_section "Phase 11: Imported image template → push → pull (the offline-converter path)"
+# ══════════════════════════════════════════════════════════════════
+
+# The documented converter flows (Building Templates §2.1): an offline
+# `template-tool import` lands a validated tree in the template store, the
+# scan registers an ABSOLUTE-PATH ref, and the standard push/pull cycle
+# distributes it (the only leg exercising PushTemplate over a scan-registered
+# source tree — every other phase pushes save-as-template refs under
+# layers/local-*). Then the STANDALONE form: the same binary pushes the
+# converted template straight to the registry with credentials on the
+# command line — no gateway, no running stack, no local output.
+IMPORT="$OUTPUT/template-tool"
+[[ -x "$IMPORT" ]] || { fail_ "missing $IMPORT (bash build/build.sh go)"; }
+if [[ -x "$IMPORT" ]]; then
+    IMPORT_TAR=$(mktemp /tmp/sandswap-oci-import-src-XXXXXX.tar.gz)
+    (cd "$OUTPUT/rootfs-template" && tar -C . -czf "$IMPORT_TAR" .)
+
+    # Import straight into the prov instance's template store.
+    if "$IMPORT" import "$IMPORT_TAR" --name imported --version v1 \
+        --out "$OVERLAY_DIR" >/tmp/sandswap-oci-import.log 2>&1; then
+        log_pass "template-tool import published $OVERLAY_DIR/imported/v1"
+    else
+        fail_ "template-tool import failed: $(head -c 300 /tmp/sandswap-oci-import.log)"
+    fi
+
+    # The listing runs the lazy discovery scan → the absolute-path ref.
+    IMPORT_LISTED=$(curl -s "$HUMAN_URL/human/templates" 2>/dev/null | python3 -c "
+import sys, json
+ts = json.load(sys.stdin)
+print('yes' if any(t.get('name')=='imported' and t.get('version')=='v1' for t in ts) else 'no')
+" 2>/dev/null)
+    if [[ "$IMPORT_LISTED" == "yes" ]]; then
+        log_pass "scan registered imported:v1 (absolute-path overlay ref)"
+    else
+        fail_ "imported:v1 not listed after import (lazy scan missed the dropped tree)"
+    fi
+
+    # Push it through the standard API (gateway forwards, prov packs).
+    PUSH_IMP_RESP=$(curl -s -X POST "$HUMAN_URL/human/templates/imported:v1/push" \
+        -H "Content-Type: application/json")
+    PUSH_IMP_DIGEST=$(echo "$PUSH_IMP_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null)
+    if [[ -n "$PUSH_IMP_DIGEST" && "$PUSH_IMP_DIGEST" != "None" ]]; then
+        log_pass "PushTemplate over the imported tree succeeded: digest=$PUSH_IMP_DIGEST"
+    else
+        fail_ "PushTemplate over the imported tree failed: $PUSH_IMP_RESP"
+    fi
+
+    # Delete the local registration (verify-first): source tree + ref file.
+    IMPORT_REF="$OVERLAY_DIR/refs/imported_v1.overlay.json"
+    if [[ ! -d "$OVERLAY_DIR/imported" || ! -e "$IMPORT_REF" ]]; then
+        fail_ "imported tree/ref missing before delete (layout drift?)"
+    else
+        rm -rf "$OVERLAY_DIR/imported" "$IMPORT_REF"
+        log_pass "local imported tree + ref cleared"
+    fi
+
+    # Pull it back — the artifact must carry the whole tree as one layer.
+    PULL_IMP_RESP=$(curl -s -X POST "$HUMAN_URL/human/templates/imported:v1" \
+        -H "Content-Type: application/json")
+    PULL_IMP_NAME=$(echo "$PULL_IMP_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('name',''))" 2>/dev/null)
+    if [[ "$PULL_IMP_NAME" == "imported" ]]; then
+        log_pass "PullTemplate (imported:v1) succeeded"
+    else
+        fail_ "PullTemplate (imported:v1) failed: $PULL_IMP_RESP"
+    fi
+
+    # Serve from the pulled artifact and exec through it.
+    IMPORT_OCI_RESP=$(curl -s -X POST "$HUMAN_URL/human/sandfs" \
+        -H "Content-Type: application/json" \
+        -d "{\"agent_id\":\"$AGENT_ID\",\"name\":\"imported-oci-sandfs\",\"template\":\"imported:v1\",\"mode\":\"overlay\"}")
+    IMPORT_OCI_ID=$(echo "$IMPORT_OCI_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sandfs_id',''))" 2>/dev/null)
+    if [[ -n "$IMPORT_OCI_ID" ]]; then
+        log_pass "overlay SandFS created from the pulled imported:v1"
+        EXEC_IMP_RESP=$(curl -s -X POST "$GATEWAY_URL/agent/execute" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -d "{\"code\":\"echo imported-ok\",\"language\":\"shell\",\"timeout\":10,\"sandfs_id\":\"$IMPORT_OCI_ID\"}")
+        IMP_OUT=$(echo "$EXEC_IMP_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('stdout','').strip())" 2>/dev/null)
+        if [[ "$IMP_OUT" == "imported-ok" ]]; then
+            log_pass "exec on the pulled imported template works"
+        else
+            fail_ "exec on the pulled imported template failed: '$IMP_OUT'"
+        fi
+    else
+        fail_ "create from pulled imported:v1 failed: $IMPORT_OCI_RESP"
+    fi
+
+    # ── Standalone direct push: no gateway, no local output ─────────
+    # Credentials come from the environment here: the flags fall back to
+    # SANDSWAP_REGISTRY_USERNAME/_PASSWORD, keeping secrets out of the
+    # command line (process list / shell history).
+    if SANDSWAP_REGISTRY_USERNAME="$OCI_REGISTRY_USER" \
+        SANDSWAP_REGISTRY_PASSWORD="$OCI_REGISTRY_PASS" \
+        "$IMPORT" import "$IMPORT_TAR" --name imported --version v2 \
+        --push "localhost:$OCI_REGISTRY_PORT/sandswap-templates" \
+        --description "standalone import push" >>/tmp/sandswap-oci-import.log 2>&1; then
+        log_pass "standalone --push (env credentials) published imported-v2 straight to the registry (no gateway)"
+    else
+        fail_ "standalone --push failed: $(tail -c 300 /tmp/sandswap-oci-import.log)"
+    fi
+
+    # The registry-only ref must be absent locally, then pull + serve.
+    # (The imported/ directory may legitimately exist from the v1 leg's
+    # pull; the v2 REF file is what proves the push-only run registered
+    # nothing locally.)
+    if [[ -e "$OVERLAY_DIR/refs/imported_v2.overlay.json" ]]; then
+        fail_ "push-only run left a local v2 ref — it must not touch the store"
+    else
+        log_pass "push-only run left no local v2 ref"
+    fi
+    PULL2_RESP=$(curl -s -X POST "$HUMAN_URL/human/templates/imported:v2" \
+        -H "Content-Type: application/json")
+    PULL2_NAME=$(echo "$PULL2_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('name',''))" 2>/dev/null)
+    if [[ "$PULL2_NAME" == "imported" ]]; then
+        log_pass "PullTemplate (imported:v2, standalone-pushed) succeeded"
+    else
+        fail_ "PullTemplate (imported:v2) failed: $PULL2_RESP"
+    fi
+    STANDALONE_RESP=$(curl -s -X POST "$HUMAN_URL/human/sandfs" \
+        -H "Content-Type: application/json" \
+        -d "{\"agent_id\":\"$AGENT_ID\",\"name\":\"imported-standalone\",\"template\":\"imported:v2\",\"mode\":\"overlay\"}")
+    STANDALONE_ID=$(echo "$STANDALONE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sandfs_id',''))" 2>/dev/null)
+    if [[ -n "$STANDALONE_ID" ]]; then
+        EXEC2_RESP=$(curl -s -X POST "$GATEWAY_URL/agent/execute" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -d "{\"code\":\"echo standalone-ok\",\"language\":\"shell\",\"timeout\":10,\"sandfs_id\":\"$STANDALONE_ID\"}")
+        EXEC2_OUT=$(echo "$EXEC2_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('stdout','').strip())" 2>/dev/null)
+        if [[ "$EXEC2_OUT" == "standalone-ok" ]]; then
+            log_pass "overlay SandFS from the standalone-pushed template execs"
+        else
+            fail_ "exec on the standalone-pushed template failed: '$EXEC2_OUT'"
+        fi
+    else
+        fail_ "create from standalone-pushed imported:v2 failed: $STANDALONE_RESP"
+    fi
+
+    # ── Combined local publish + push ───────────────────────────────
+    # --out and --push together: the local tree is published first, then
+    # pushed FROM the published path (not the staging dir).
+    COMBINED_OUT=$(mktemp -d /tmp/sandswap-import-local-XXXXXX)
+    if "$IMPORT" import "$IMPORT_TAR" --name imported --version v3 \
+        --out "$COMBINED_OUT" \
+        --push "localhost:$OCI_REGISTRY_PORT/sandswap-templates" \
+        --registry-username "$OCI_REGISTRY_USER" \
+        --registry-password "$OCI_REGISTRY_PASS" >>/tmp/sandswap-oci-import.log 2>&1; then
+        log_pass "combined --out + --push published locally and pushed imported-v3"
+    else
+        fail_ "combined --out + --push failed: $(tail -c 300 /tmp/sandswap-oci-import.log)"
+    fi
+    if [[ -x "$COMBINED_OUT/imported/v3/bin/sh" ]]; then
+        log_pass "combined run left the validated local tree"
+    else
+        fail_ "combined run's local tree missing"
+    fi
+    PULL3_RESP=$(curl -s -X POST "$HUMAN_URL/human/templates/imported:v3" \
+        -H "Content-Type: application/json")
+    PULL3_NAME=$(echo "$PULL3_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('name',''))" 2>/dev/null)
+    if [[ "$PULL3_NAME" == "imported" ]]; then
+        log_pass "PullTemplate (imported:v3, combined run) succeeded"
+    else
+        fail_ "PullTemplate (imported:v3) failed: $PULL3_RESP"
+    fi
+
+    # ── Failed push keeps the validated local template ──────────────
+    BAD_OUT=$(mktemp -d /tmp/sandswap-import-bad-XXXXXX)
+    if "$IMPORT" import "$IMPORT_TAR" --name imported --version v4 \
+        --out "$BAD_OUT" \
+        --push "localhost:$OCI_REGISTRY_PORT/sandswap-templates" \
+        --registry-username "$OCI_REGISTRY_USER" \
+        --registry-password "definitely-wrong" >>/tmp/sandswap-oci-import.log 2>&1; then
+        fail_ "wrong-password push SUCCEEDED"
+    else
+        log_pass "wrong-password push failed as expected"
+    fi
+    if [[ -x "$BAD_OUT/imported/v4/bin/sh" ]]; then
+        log_pass "failed push kept the validated local template"
+    else
+        fail_ "failed push did not keep the local template"
+    fi
+    V4_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+        -u "$OCI_REGISTRY_USER:$OCI_REGISTRY_PASS" \
+        "http://localhost:$OCI_REGISTRY_PORT/v2/sandswap-templates/manifests/imported-v4")
+    if [[ "$V4_CODE" == "404" ]]; then
+        log_pass "failed push left no imported-v4 tag in the registry"
+    else
+        fail_ "failed push left an imported-v4 tag (HTTP $V4_CODE)"
+    fi
+
+    rm -rf "$COMBINED_OUT" "$BAD_OUT"
+    rm -f "$IMPORT_TAR"
+fi
+
+# ══════════════════════════════════════════════════════════════════
 log_section "Results"
 # ══════════════════════════════════════════════════════════════════
 
@@ -712,6 +906,8 @@ echo -e "  ${TC_GREEN}✓${TC_NC} PullTemplate from OCI registry"
 echo -e "  ${TC_GREEN}✓${TC_NC} Overlay SandFS from pulled template"
 echo -e "  ${TC_GREEN}✓${TC_NC} Flat push → pull (digests pinned, no cache) → flat SandFS from OCI"
 echo -e "  ${TC_GREEN}✓${TC_NC} Auto-pull ON CREATE, flat + overlay (pull_status pulled → cached)"
+echo -e "  ${TC_GREEN}✓${TC_NC} Imported image template (template-tool import) → push → pull → overlay SandFS"
+echo -e "  ${TC_GREEN}✓${TC_NC} Standalone --push (env credentials), combined --out+--push, failed push keeps the local tree"
 if [[ "$OCI_FAILS" -gt 0 ]]; then
     echo -e "  ${TC_RED}✗ $OCI_FAILS assertion(s) failed${TC_NC}"
     exit 1

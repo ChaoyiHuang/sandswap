@@ -24,8 +24,8 @@ parent: Testing
 > [Storage Requirements §4](../operations/storage.md#4-production-storage-isolation-must--the-storage-service-is-not-a-tenant-network).
 
 Every suite script under `e2e/` — what it validates, how to run it, and
-what it needs. 67 files, each with exactly one row in
-`e2e/run-matrix.sh`'s SPEC: 64 suite scripts — 52 battery rows (class A,
+what it needs. 68 files, each with exactly one row in
+`e2e/run-matrix.sh`'s SPEC: 65 suite scripts — 53 battery rows (class A,
 executed in order by the runner's phase A) and 12 self-contained rows
 (class C, run outside the battery) — plus the libraries `common.sh` and
 `pin.sh` (CPU/NUMA pinning) and the runner `run-matrix.sh` itself
@@ -359,10 +359,35 @@ local cache → pull → overlay SandFS, plus **auto-pull on create** for
 both modes (the create response's `pull_status` asserted `pulled` then
 `cached`) and a negative check that the registry rejects unauthenticated
 access (401) — the prov instance carries registry credentials for every
-pull. The executable companion of
+pull. Phase 11 adds the offline-converter legs: `template-tool import`
+into the template store → push over the scan-registered absolute-path
+ref → delete local → pull → overlay SandFS; the STANDALONE push form
+(`--push` with credentials from the environment, no gateway, no local
+output) pulled and served the same way; a combined `--out` + `--push`
+run (local tree published first, then pushed from it); and a
+wrong-password push asserting the failure keeps the validated local
+tree and leaves no tag in the registry. The executable companion of
 [OCI Registry Integration](../integration/registry.md).
 
-### 5.7 `volume-seed-rotation.sh` — the seed-rotation window
+### 5.7 `oci-template-import.sh` — offline image archive → template conversion
+
+Run `sudo bash e2e/oci-template-import.sh` · KVM. `template-tool import`
+over synthetic archives built with nothing but `tar` + `sha256sum` (no
+docker, no oras, no registry): a two-layer amd64 image whose upper layer
+carries a file whiteout, an opaque directory, a dir→file type
+transition, a setuid binary and an absolute symlink. The suite imports
+it into the flat scan root AND the template store, gates both on
+`template-tool validate`, then serves SandFS from each and asserts the
+merge semantics INSIDE the guest (deletions applied, setuid 4755 kept,
+absolute link rewritten tree-relative, overlay base read-only,
+workspace writable). Also covers the plain-rootfs-tar path
+(`docker export` shape) and the negatives: arm64 archive refused
+(x86_64-only), corrupt blob refused with nothing published, legacy
+Docker <25 `manifest.json` archive refused, re-import over an existing
+version refused (refs are immutable). The executable companion of
+[Building Templates §2.1](../building/templates.md#21-automated-template-tool-import).
+
+### 5.8 `volume-seed-rotation.sh` — the seed-rotation window
 
 Run `sudo bash e2e/volume-seed-rotation.sh` · KVM. The maintenance-window
 rotation, end to end on the real stack: maintenance ON refuses agent
@@ -371,7 +396,7 @@ reachable), the next seed generation is STAGED via the prov config
 hot-reload, volumes are renamed and records updated, PROMOTE completes,
 and traffic resumes with data and identity stamps intact.
 
-### 5.8 `volume-seed-injection.sh` — the seed channels and their guards
+### 5.9 `volume-seed-injection.sh` — the seed channels and their guards
 
 Run `sudo bash e2e/volume-seed-injection.sh` · KVM. The properties an
 INJECTOR (a Vault agent, an External Secrets Operator, a systemd credential,

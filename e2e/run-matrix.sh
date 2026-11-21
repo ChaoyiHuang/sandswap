@@ -158,6 +158,7 @@ MATRIX_SPEC=(
     "e2e/resilience-e2e.sh|A||-|"
     "e2e/switch-under-adversarial.sh|A||-|"
     "e2e/oci-registry.sh|A||-|"
+    "e2e/oci-template-import.sh|A||-|offline OCI image archive → template conversion (whiteout merge, flat+overlay)"
     "e2e/scale-rehearsal.sh|A||-|||fast:skip"
     "e2e/eino-agent-mcp.sh|A||-|needs llm key||artifacts:output/rootfs-ubuntu"
     "e2e/latency-benchmark-aiagent.sh|A||-|needs llm key||fast:skip"

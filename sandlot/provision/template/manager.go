@@ -34,6 +34,7 @@ package template
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
@@ -287,21 +288,12 @@ func tplGroupGID() int {
 func NewManager(cfg Config) (*Manager, error) {
 	var repo *remote.Repository
 	if cfg.Registry != "" {
+		// Shared construction (auth + the loopback plain-HTTP carve-out):
+		// NewRegistryRepository, also used by the offline push paths.
 		var err error
-		repo, err = remote.NewRepository(cfg.Registry)
+		repo, err = NewRegistryRepository(cfg.Registry, cfg.Auth)
 		if err != nil {
-			return nil, fmt.Errorf("create repository: %w", err)
-		}
-		authClient, err := cfg.Auth.toClient()
-		if err != nil {
-			return nil, fmt.Errorf("setup auth: %w", err)
-		}
-		repo.Client = authClient
-
-		// Auto-detect plain HTTP for local registries (e.g., localhost:15000/repo).
-		// The OCI distribution spec requires TLS for non-localhost endpoints.
-		if strings.HasPrefix(cfg.Registry, "localhost") || strings.HasPrefix(cfg.Registry, "127.0.0.1") {
-			repo.PlainHTTP = true
+			return nil, err
 		}
 	}
 
@@ -1330,27 +1322,13 @@ func (m *Manager) PushTemplate(ctx context.Context, templateRef, mode string) (*
 		return nil, fmt.Errorf("template %s (%s) records no local layers; nothing to push", templateRef, mode)
 	}
 
-	// Create a temporary build directory
-	buildDir, err := os.MkdirTemp("", "sandswap-push-")
-	if err != nil {
-		return nil, fmt.Errorf("create build dir: %w", err)
-	}
-	defer os.RemoveAll(buildDir)
-
-	store, err := file.New(buildDir)
-	if err != nil {
-		return nil, fmt.Errorf("create store: %w", err)
-	}
-	defer store.Close()
-
-	// Pack each layer as tar.gz and add to the store
-	var layers []ocispec.Descriptor
+	// Containment before any read: a ref file is shared-storage input and
+	// the packing side would otherwise Stat/pack an absolute path named by
+	// it verbatim (a local host file published into the registry). Flat
+	// refs may name a configured flat-template root; overlay refs must stay
+	// inside the template store.
+	layerPaths := make([]string, len(entry.Layers))
 	for i, layerID := range entry.Layers {
-		// Containment before any read: a ref file is shared-storage input and
-		// the packing side would otherwise Stat/pack an absolute path named by
-		// it verbatim (a local host file published into the registry). Flat
-		// refs may name a configured flat-template root; overlay refs must stay
-		// inside the template store.
 		var layerPath string
 		var perr error
 		if mode == "flat" {
@@ -1361,88 +1339,10 @@ func (m *Manager) PushTemplate(ctx context.Context, templateRef, mode string) (*
 		if perr != nil {
 			return nil, fmt.Errorf("pack layer %d: %w", i, perr)
 		}
-		if info, err := os.Stat(layerPath); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("layer %d not found: %s", i, layerPath)
-		}
-
-		layerArchive := filepath.Join(buildDir, fmt.Sprintf("layer-%d.tar.gz", i))
-		if err := packTarGz(layerPath, layerArchive); err != nil {
-			return nil, fmt.Errorf("pack layer %d: %w", i, err)
-		}
-
-		desc, err := store.Add(ctx, fmt.Sprintf("layer-%d", i), MediaTypeLayerGzip, layerArchive)
-		if err != nil {
-			return nil, fmt.Errorf("add layer %d: %w", i, err)
-		}
-		desc.Annotations = map[string]string{
-			"sandswap.layer.type":        "rootfs",
-			"sandswap.layer.description": fmt.Sprintf("Layer %d of template %s", i, templateRef),
-		}
-		layers = append(layers, desc)
+		layerPaths[i] = layerPath
 	}
 
-	// Create config
-	config := map[string]interface{}{
-		"workspace_path":  "/workspace",
-		"template_mode":   mode,
-		"default_timeout": 30,
-	}
-	configData, _ := json.Marshal(config)
-	configFile := filepath.Join(buildDir, "config.json")
-	if err := os.WriteFile(configFile, configData, 0640); err != nil {
-		return nil, fmt.Errorf("write config: %w", err)
-	}
-	configDesc, err := store.Add(ctx, "config", MediaTypeTemplateConfig, configFile)
-	if err != nil {
-		return nil, fmt.Errorf("add config: %w", err)
-	}
-
-	annotations := map[string]string{
-		"sandswap.template.name":        entry.Name,
-		"sandswap.template.version":     entry.Version,
-		"sandswap.template.description": entry.Description,
-	}
-
-	manifestDesc, err := oras.Pack(ctx, store, ArtifactTypeTemplate, layers, oras.PackOptions{
-		ConfigDescriptor:    &configDesc,
-		ManifestAnnotations: annotations,
-		PackImageManifest:   true, // OCI Image Manifest for broad registry compatibility
-	})
-	if err != nil {
-		return nil, fmt.Errorf("pack artifact: %w", err)
-	}
-
-	// Tag the packed manifest so oras.Copy can resolve it by reference.
-	// Use a digest-based tag to avoid colon conflicts with OCI reference parsing.
-	pushTag := "push-" + manifestDesc.Digest.Encoded()[:16]
-	if err := store.Tag(ctx, manifestDesc, pushTag); err != nil {
-		return nil, fmt.Errorf("tag manifest: %w", err)
-	}
-
-	// Convert templateRef (e.g., "myapp:v1") to a valid OCI tag.
-	// OCI tags must match [a-zA-Z0-9_.-]+ and cannot contain colons.
-	ociTag := strings.ReplaceAll(templateRef, ":", "-")
-
-	pushStart := time.Now()
-	_, err = oras.Copy(ctx, store, pushTag, m.repo, ociTag, oras.DefaultCopyOptions)
-	if err != nil {
-		return nil, fmt.Errorf("push template: %w", err)
-	}
-
-	totalSize := int64(0)
-	layerDigests := make([]string, len(layers))
-	for i, l := range layers {
-		totalSize += l.Size
-		layerDigests[i] = l.Digest.String()
-	}
-
-	return &PushTemplateResponse{
-		TemplateRef: templateRef,
-		Digest:      manifestDesc.Digest.String(),
-		Layers:      layerDigests,
-		Size:        totalSize,
-		PushTimeMs:  time.Since(pushStart).Milliseconds(),
-	}, nil
+	return pushTemplateArtifact(ctx, m.repo, templateRef, mode, entry.Description, layerPaths, nil)
 }
 
 // ListLocalTemplates returns all locally stored template refs by scanning the
@@ -2691,11 +2591,13 @@ var maxExtractedLayerEntries = 1 << 20
 type cappedReader struct {
 	r         io.Reader
 	remaining int64
+	// limit names the cap for the error message (equals remaining at start).
+	limit int64
 }
 
 func (c *cappedReader) Read(p []byte) (int, error) {
 	if c.remaining <= 0 {
-		return 0, fmt.Errorf("layer exceeds the decompressed-size cap (%d bytes)", maxExtractedLayerBytes)
+		return 0, fmt.Errorf("layer exceeds the decompressed-size cap (%d bytes)", c.limit)
 	}
 	if int64(len(p)) > c.remaining {
 		p = p[:c.remaining]
@@ -2739,6 +2641,26 @@ type extractOptions struct {
 	// what the dedicated-identity model requires (the setgid volume root
 	// keeps the group consistent without any chown).
 	flatVolume bool
+	// plainTar accepts an UNCOMPRESSED tar stream (detected by the absence of
+	// the gzip magic). The runtime paths are gzip-only by contract (the
+	// shared store materializes tar+gzip layer blobs); offline importers opt
+	// in because `docker save` (classic store) and hand-rolled `tar -c` both
+	// produce plain tars. Zero value keeps the gzip-only requirement.
+	plainTar bool
+	// allowRootDirEntry skips directory entries whose cleaned name is "." —
+	// legitimate in archives packed with `tar -C rootfs -c .`. The runtime
+	// keeps rejecting them: a NON-directory root entry (symlink, file) names
+	// the staging dir itself and is refused regardless of this flag.
+	allowRootDirEntry bool
+	// maxBytes / maxEntries override the package caps when > 0 (offline
+	// imports bound the OUTER archive differently than a store layer).
+	maxBytes   int64
+	maxEntries int
+	// onSkip, when set, receives every entry the extractor does NOT land:
+	// entries under a symlinked ancestor (containment) and unsupported
+	// special entries (device/FIFO/socket). It replaces the per-entry warn
+	// log on the symlink-ancestor path. nil = current runtime behavior.
+	onSkip func(ExtractedSpecial, string)
 }
 
 // extractTarGzToDir extracts a tar.gz stream into the target directory.
@@ -2784,11 +2706,32 @@ func extractTarGzToDir(reader io.Reader, dir string, opts extractOptions) error 
 		return target, nil
 	}
 
-	gzr, err := gzip.NewReader(reader)
-	if err != nil {
-		return fmt.Errorf("create gzip reader: %w", err)
+	// Sniff the stream: gzip magic → gzip stream; anything else is a plain
+	// tar, accepted only when the caller opted in (the runtime paths are
+	// gzip-only by contract). A buffered reader keeps the sniffed bytes.
+	br := bufio.NewReader(reader)
+	var tarSrc io.Reader
+	if magic, _ := br.Peek(2); len(magic) == 2 && magic[0] == 0x1f && magic[1] == 0x8b {
+		gzr, err := gzip.NewReader(br)
+		if err != nil {
+			return fmt.Errorf("create gzip reader: %w", err)
+		}
+		defer gzr.Close()
+		tarSrc = gzr
+	} else if opts.plainTar {
+		tarSrc = br
+	} else {
+		return fmt.Errorf("not a gzip stream (plain tar requires the explicit plain-tar option)")
 	}
-	defer gzr.Close()
+
+	maxBytes := maxExtractedLayerBytes
+	if opts.maxBytes > 0 {
+		maxBytes = opts.maxBytes
+	}
+	maxEntries := maxExtractedLayerEntries
+	if opts.maxEntries > 0 {
+		maxEntries = opts.maxEntries
+	}
 
 	// bound the DECOMPRESSED stream. A small hostile blob can expand
 	// ~1000x (a 42KB layer wrote 41.9MB in the blind probe, no error); the
@@ -2796,7 +2739,7 @@ func extractTarGzToDir(reader io.Reader, dir string, opts extractOptions) error 
 	// 8 GiB sits far above any legitimate distro layer, far below "fill the
 	// disk". The reader errors (not a silent truncation) so extraction fails
 	// with a named cause.
-	tr := tar.NewReader(&cappedReader{r: gzr, remaining: maxExtractedLayerBytes})
+	tr := tar.NewReader(&cappedReader{r: tarSrc, remaining: maxBytes, limit: maxBytes})
 	entries := 0
 	for {
 		header, err := tr.Next()
@@ -2811,8 +2754,17 @@ func extractTarGzToDir(reader io.Reader, dir string, opts extractOptions) error 
 		// admits ~16.7M empty-file entries — each one an inode in the shared
 		// store. Loud error, not a silent stop.
 		entries++
-		if entries > maxExtractedLayerEntries {
-			return fmt.Errorf("layer exceeds the entry-count cap (%d entries)", maxExtractedLayerEntries)
+		if entries > maxEntries {
+			return fmt.Errorf("layer exceeds the entry-count cap (%d entries)", maxEntries)
+		}
+
+		// A "." / "./" directory entry names the extraction root itself.
+		// The runtime path rejects it (safeJoin: a symlink at that name
+		// would replace the staging dir); opt-in importers skip it because
+		// archives packed with `tar -C dir -c .` legitimately carry it.
+		// Non-directory root entries stay rejected regardless.
+		if opts.allowRootDirEntry && header.Typeflag == tar.TypeDir && filepath.Clean(header.Name) == "." {
+			continue
 		}
 
 		target, err := safeJoin(header.Name)
@@ -2830,8 +2782,12 @@ func extractTarGzToDir(reader io.Reader, dir string, opts extractOptions) error 
 		// symlinked directory are pathological, and this is the only check
 		// that is accurate regardless of lexical math.
 		if hasSymlinkAncestor(absDir, target) {
-			slog.Warn("tar extraction: skipping entry under a symlinked ancestor (containment)",
-				"entry", header.Name, "target", target)
+			if opts.onSkip != nil {
+				opts.onSkip(ExtractedSpecial{Name: header.Name, Typeflag: header.Typeflag}, SkipSymlinkAncestor)
+			} else {
+				slog.Warn("tar extraction: skipping entry under a symlinked ancestor (containment)",
+					"entry", header.Name, "target", target)
+			}
 			continue
 		}
 
@@ -3005,6 +2961,22 @@ func extractTarGzToDir(reader io.Reader, dir string, opts extractOptions) error 
 						return fmt.Errorf("chmod hardlink copy %s: %w", target, err)
 					}
 				}
+			}
+		default:
+			// Device/FIFO/socket entries (and any unknown typeflag) are not
+			// landed: the template contract does not support them (inert
+			// under nodev, never read through the passthrough daemon, skipped
+			// by the packer). Runtime callers rely on the silent drop; an
+			// opt-in skip callback lets an importer surface them instead
+			// (legacy 0/0 device whiteouts must be INTERPRETED, not lost).
+			if opts.onSkip != nil {
+				opts.onSkip(ExtractedSpecial{
+					Name:     header.Name,
+					Typeflag: header.Typeflag,
+					Mode:     header.Mode,
+					DevMajor: header.Devmajor,
+					DevMinor: header.Devminor,
+				}, SkipSpecialEntry)
 			}
 		}
 	}

@@ -98,6 +98,11 @@ Matrix engine: `common/sh/matrix.sh`. Battery contents and framework rules:
 
 ## Repo rules for code changes
 
+- **Code is the authority**: verify every behavioral claim against the
+  implementation before asserting it — quote the function, not the doc
+  paragraph. Docs state intent and can drift ahead of or behind the code;
+  doc prose, comments, and session memory are not evidence of behavior
+  (`e2e/check-docs-truth.py` applies the same principle mechanically).
 - **Canon**: `docs/how-it-works/concepts.md` + `architecture.md` define the
   terminology and architecture; facts are stated once there and linked, never
   restated. Legacy wording living in code strings is not drift to "fix".
