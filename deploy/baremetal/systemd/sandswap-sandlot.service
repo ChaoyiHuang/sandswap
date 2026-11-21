@@ -47,6 +47,11 @@ SystemCallErrorNumber=EPERM
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes
+# ProtectClock installs a device filter inherited by the child VMMs. Admit
+# their required devices; file ownership still separates sandlot and sandvmm.
+DeviceAllow=/dev/kvm rw
+DeviceAllow=/dev/vhost-vsock rw
+DeviceAllow=/dev/net/tun rw
 ProtectHostname=yes
 RestrictNamespaces=yes
 LockPersonality=yes

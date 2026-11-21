@@ -367,7 +367,8 @@ func (h *Handler) ensureReadonlyOverlayMounted(volumePath, expectedRef string) (
 
 	// Mount read-only overlay (no upperdir, no workdir). The target is the
 	// /proc/self/fd magic link, so no path component is re-resolved.
-	opts := fmt.Sprintf("lowerdir=%s,ro", strings.Join(lowerdirs, ":"))
+	// Read-only is a mount flag; older OverlayFS parsers reject "ro" in data.
+	opts := fmt.Sprintf("lowerdir=%s", strings.Join(lowerdirs, ":"))
 	if err := syscall.Mount("overlay", mountTarget, "overlay", syscall.MS_RDONLY, opts); err != nil {
 		// EBUSY means already mounted (race with concurrent call) — treat as
 		// success; the trackOverlay below lands the tracking (idempotent map
