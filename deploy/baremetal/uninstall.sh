@@ -85,33 +85,14 @@ se_replay_ephemeral
 echo "  ✓ EPHEMERAL entries reversed (ledger retained as .done)"
 
 # ── 2. Kill leftover processes ───────────────────────────────────────
-# Note: pgrep -x matches the comm name, which Linux truncates to 15 chars
-# (e.g. "sandswap-gateway" → "sandswap-gatewa"). Use -f (full command line)
-# to reliably match all sandswap processes.
+# PID-exact kill (deploy-lib): unit-cgroup survivors + kernel-verified exe
+# identity — never a cmdline-text match. Foreign etcd is protected: the
+# shared etcd binary only dies with one of OUR instance markers in argv
+# (the docs explicitly support pointing at an existing cluster via
+# etcd.endpoints; a foreign service on :2379 is left alone).
 echo "[2/11] Processes"
-killed=0
-for proc in sandswap-sandvmm sandswap-sandlot sandswap-gateway sandns sandswap-boxout; do
-    pids="$(pgrep -f "/usr/local/bin/$proc" 2>/dev/null || true)"
-    if [[ -n "$pids" ]]; then
-        echo "  Killing $proc: $pids"
-        echo "$pids" | xargs -r kill -9 2>/dev/null || true
-        killed=$((killed + 1))
-    fi
-done
-# kill ONLY sandswap-managed processes — never a foreign etcd (the
-# docs explicitly support pointing at an existing cluster via etcd.endpoints,
-# and this host's own k3s etcd matched the old `pgrep -x etcd`). Scope:
-#   (a) processes running OUR binaries (path-scoped -f match), and
-#   (b) the port sweep below, restricted to ports whose listener belongs to
-#       one of our binaries (checked via the /proc/<pid>/exe path) — a foreign
-#       service on :2379 is left alone.
-for proc in sandswap-gateway sandswap-sandlot sandswap-sandvmm sandns sandswap-boxout; do
-    pids="$(pgrep -f "/usr/local/bin/$proc" 2>/dev/null || true)"
-    if [[ -n "$pids" ]]; then
-        echo "  Killing $proc: $pids"
-        echo "$pids" | xargs -r kill -9 2>/dev/null || true
-    fi
-done
+bm_kill_leftover_processes
+killed=${BM_LEFTOVER_KILLS:-0}
 # Port stragglers — only when the listener is one of OUR binaries. NOTE: :53
 # is deliberately NOT in this list (systemd-resolved owns it on most hosts;
 # sandns is already matched above).

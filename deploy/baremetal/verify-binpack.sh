@@ -115,13 +115,9 @@ UNITS
         rm -f "/etc/systemd/system/${svc}.service"
     done
     systemctl daemon-reload 2>/dev/null || true
-    # -x never matches sandswap-gateway/sandlot (comm truncated to 15 chars);
-    # etcd scoped to OUR instances so an unrelated host etcd is never killed.
-    pkill -9 -f '/usr/local/bin/sandswap-gateway' 2>/dev/null || true
-    pkill -9 -f '/usr/local/bin/sandswap-sandlot' 2>/dev/null || true
-    pkill -9 -x sandns 2>/dev/null || true
-    pkill -9 -f 'sandswap-.*etcd' 2>/dev/null || true
-    pkill -9 -f 'sandswap-sandvmm' 2>/dev/null || true
+    # PID-exact leftover kill (unit-cgroup survivors + kernel-verified exe
+    # identity); no cmdline-pattern kills. Foreign etcd stays untouched.
+    bm_kill_leftover_processes
     sleep 1
     rm -rf "$RUN_DIR" /tmp/sandswap-binpack-etcd
     # Clear stale sandlot persisted state (gateway-state.json / cleanup-state.json)
@@ -151,7 +147,7 @@ cleanup() {
         rm -f "/etc/systemd/system/${svc}.service"
     done
     systemctl daemon-reload 2>/dev/null || true
-    pkill -9 -f 'sandswap-sandvmm' 2>/dev/null || true
+    bm_kill_leftover_processes
     [[ -n "$ETCD_PID" ]] && kill "$ETCD_PID" 2>/dev/null || true
     rm -f "$EINO_BIN" 2>/dev/null || true
     rm -rf /run/sandswap/instance-prod1 /run/sandswap/instance-prod2 /run/sandswap-state/prod1 /run/sandswap-state/prod2

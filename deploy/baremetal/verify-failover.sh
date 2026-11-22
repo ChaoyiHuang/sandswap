@@ -78,14 +78,9 @@ pre_clean() {
         rm -f "/etc/systemd/system/${svc}.service"
     done
     systemctl daemon-reload 2>/dev/null || true
-    # -x never matches sandswap-gateway/sandlot (comm is truncated to 15 chars);
-    # match the installed binary paths instead. etcd is scoped to OUR instances
-    # (data dirs contain "sandswap-") so an unrelated host etcd is never killed.
-    pkill -9 -f '/usr/local/bin/sandswap-gateway' 2>/dev/null || true
-    pkill -9 -f '/usr/local/bin/sandswap-sandlot' 2>/dev/null || true
-    pkill -9 -x sandns 2>/dev/null || true
-    pkill -9 -f 'sandswap-.*etcd' 2>/dev/null || true
-    pkill -9 -f 'sandswap-sandvmm' 2>/dev/null || true
+    # PID-exact leftover kill (unit-cgroup survivors + kernel-verified exe
+    # identity); no cmdline-pattern kills. Foreign etcd stays untouched.
+    bm_kill_leftover_processes
     sleep 1
     rm -rf "$RUN_DIR" /tmp/sandswap-failover-etcd /tmp/fo-etcd 2>/dev/null
     # Wipe the sandlot's persisted reconnect state (node_id "failover-sl" is
@@ -118,7 +113,7 @@ cleanup() {
         rm -f "/etc/systemd/system/${svc}.service"
     done
     systemctl daemon-reload 2>/dev/null || true
-    pkill -9 -f 'sandswap-sandvmm' 2>/dev/null || true
+    bm_kill_leftover_processes
     [[ -n "$ETCD_PID" ]] && kill "$ETCD_PID" 2>/dev/null || true
     rm -rf "$RUN_DIR" /tmp/sandswap-failover-etcd
     # Leave no sandlot reconnect state behind (node_id "failover-sl" is reused).
@@ -451,9 +446,24 @@ log "  sandlot connected to $CONNECTED_GW"
 KILL_GW="$CONNECTED_GW"
 KILL_IDX="${CONNECTED_GW#exec}"
 OTHER_GW="exec$(( 3 - KILL_IDX ))"
-log "  killing $KILL_GW (sandswap-gateway-fail${KILL_IDX}); expecting sandlot to fail over to $OTHER_GW"
-systemctl stop "sandswap-gateway-fail${KILL_IDX}" 2>/dev/null || true
-pkill -9 -f "sandswap-gateway.*gw-exec${KILL_IDX}" 2>/dev/null || true
+KILL_UNIT="sandswap-gateway-fail${KILL_IDX}"
+log "  killing $KILL_GW (${KILL_UNIT}); expecting sandlot to fail over to $OTHER_GW"
+# Kill BY REMEMBERED PID, never by cmdline pattern: read the unit's PID
+# registry BEFORE the stop (MainPID + the unit cgroup's cgroup.procs —
+# after the stop both are gone), stop, then kill exactly those PIDs (each
+# re-verified as the installed gateway binary first).
+kill_pids="$(systemctl show -p MainPID --value "$KILL_UNIT" 2>/dev/null)"
+kill_pids="$kill_pids $(find /sys/fs/cgroup/system.slice -maxdepth 4 -type f \
+    -path "*${KILL_UNIT}*" -name cgroup.procs -exec cat {} + 2>/dev/null | sort -u | tr '\n' ' ')"
+systemctl stop "$KILL_UNIT" 2>/dev/null || true
+for pid in $kill_pids; do
+    [[ "$pid" =~ ^[0-9]+$ && "$pid" != "0" ]] || continue
+    exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+    exe="${exe% \((deleted)\)}"
+    [[ "$exe" == "/usr/local/bin/sandswap-gateway" ]] || continue
+    kill -9 "$pid" 2>/dev/null || true
+    log "  killed $KILL_GW pid $pid (remembered from ${KILL_UNIT})"
+done
 
 log "[8/8] Waiting for the sandlot to fail over to $OTHER_GW (health poll + reconnect)..."
 # The reconnect lands after T_tolerance(5s) + T_clean(5s) + T_isolation(75s)

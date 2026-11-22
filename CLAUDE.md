@@ -96,6 +96,12 @@ sudo bash deploy/run-matrix.sh    # deploy battery alone
 Matrix engine: `common/sh/matrix.sh`. Battery contents and framework rules:
 `docs/testing/e2e.md`, `docs/testing/script-framework.md`.
 
+Before each battery/round (and while it runs): check disk (≥ ~5 GB free) and
+memory headroom against the next script's prerequisites; if short, clear build
+intermediates in cost order — package caches / journals / stale logs, then
+`go clean -cache`, then cargo `target/` dirs as the last resort. Never delete
+`output/` and the kernel binary for space.
+
 ## Repo rules for code changes
 
 - **Code is the authority**: verify every behavioral claim against the
@@ -119,6 +125,15 @@ Matrix engine: `common/sh/matrix.sh`. Battery contents and framework rules:
 - **Protocol changes** (stream, vsock frames, VMM API): land on both sides in
   one change with negotiated version windows; `e2e/protocol-version-e2e.sh`
   must pass.
+- **Script process kills**: kill by target PID, never by cmdline pattern —
+  `pkill`/`pgrep -f` also match unrelated processes whose argv merely
+  mentions a name (editors, invoking shells, the deploy script itself when
+  called by absolute path). PID sources: systemd's registry (`MainPID`, unit
+  `cgroup.procs`), the script's own `$!`/pidfile, or kernel identity —
+  `/proc/<pid>/exe` resolving to our installed binary (a shared binary such
+  as etcd additionally needs a sandswap instance marker in argv). Re-verify
+  identity immediately before each kill. `bm_kill_leftover_processes` in
+  `deploy/baremetal/deploy-lib.sh` is the one implementation.
 - **Transport caps**: the alignment rules (gateway send-buffer ≥ sandlot
   max-concurrent-commands; the 16 MB FileOp chain across warden and gRPC; the
   50 MB `/agent/file` body limit) live in `docs/operations/configuration/index.md`
