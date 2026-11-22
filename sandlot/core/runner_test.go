@@ -352,3 +352,16 @@ func TestResolveGatewayTarget_BadAddr(t *testing.T) {
 		t.Error("expected error for unparseable gateway addr, got nil")
 	}
 }
+
+// TestNodeBuildVersion verifies the NodeHello build-info version: the
+// ldflags-stamped value from RunOptions when set, the dev placeholder when
+// unset (embedded core, tests). The proto keeps this string apart from
+// protocol_version — it is display-only, never a negotiation input.
+func TestNodeBuildVersion(t *testing.T) {
+	if got := nodeBuildVersion(RunOptions{BuildVersion: "v0.1.1"}); got != "v0.1.1" {
+		t.Errorf("set build version: got %q, want v0.1.1", got)
+	}
+	if got := nodeBuildVersion(RunOptions{}); got != "0.0.0-dev" {
+		t.Errorf("unset build version: got %q, want 0.0.0-dev", got)
+	}
+}

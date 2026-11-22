@@ -862,3 +862,43 @@ func (s *erroringStore) CountSandFSByTemplate(templateRef string) (int, []string
 type errStore string
 
 func (e errStore) Error() string { return string(e) }
+
+// TestHandleInitialize_ServerInfoBuildVersion verifies serverInfo.version
+// carries the gateway build version set via SetServerVersion (cmd copies the
+// ldflags var at startup) and falls back to the dev placeholder when unset.
+func TestHandleInitialize_ServerInfoBuildVersion(t *testing.T) {
+	env := newTestEnv(t)
+	conn := &mcpConnection{AgentKey: env.agentKey}
+	ctx := context.Background()
+
+	orig := serverVersion
+	defer func() { serverVersion = orig }()
+
+	initialize := func() string {
+		resp := env.server.handleInitialize(ctx, conn, &jsonRPCRequest{
+			JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize", Params: nil,
+		})
+		if resp.Error != nil {
+			t.Fatalf("initialize errored: %+v", resp.Error)
+		}
+		result, ok := resp.Result.(mcpInitializeResult)
+		if !ok {
+			t.Fatalf("result not mcpInitializeResult: %T", resp.Result)
+		}
+		return result.ServerInfo.Version
+	}
+
+	serverVersion = "v0.0.0-dev"
+	if got := initialize(); got != "v0.0.0-dev" {
+		t.Errorf("serverInfo.version = %q, want v0.0.0-dev", got)
+	}
+	SetServerVersion("v0.1.1")
+	if got := initialize(); got != "v0.1.1" {
+		t.Errorf("serverInfo.version = %q, want v0.1.1", got)
+	}
+	// Empty values never clobber the stamped version.
+	SetServerVersion("")
+	if got := initialize(); got != "v0.1.1" {
+		t.Errorf("serverInfo.version after empty set = %q, want v0.1.1", got)
+	}
+}

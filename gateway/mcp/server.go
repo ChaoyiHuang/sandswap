@@ -51,6 +51,19 @@ import (
 	"gateway/pool"
 )
 
+// serverVersion is the gateway build version advertised in the MCP
+// initialize response's serverInfo. cmd sets it once from the ldflags
+// vars at startup (same pattern as handler.SetMetricsBuildInfo); unset
+// builds keep the dev placeholder.
+var serverVersion = "0.0.0-dev"
+
+// SetServerVersion sets the build version advertised in serverInfo.
+func SetServerVersion(v string) {
+	if v != "" {
+		serverVersion = v
+	}
+}
+
 // MCPServer is the gateway's embedded MCP server.
 type MCPServer struct {
 	identityStore identity.Store
@@ -409,7 +422,7 @@ func (s *MCPServer) handleInitialize(ctx context.Context, conn *mcpConnection, r
 		},
 		ServerInfo: mcpServerInfo{
 			Name:    "sandswap-gateway",
-			Version: "1.0.0",
+			Version: serverVersion,
 		},
 		Instructions: s.renderedInstructions(),
 	}

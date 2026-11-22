@@ -33,8 +33,13 @@ type RunOptions struct {
 	Handler         *Handler
 	TLSCfg          *tls.Config
 	EffectiveNodeID string
-	PoolTarget      uint32
-	Logger          *log.Logger
+	// BuildVersion is the ldflags-stamped release version of this sandlot
+	// process, advertised in NodeHello's build-info `version` string (never
+	// used for decisions — the proto keeps it apart from protocol_version).
+	// Empty falls back to the dev placeholder.
+	BuildVersion string
+	PoolTarget   uint32
+	Logger       *log.Logger
 	// HeartbeatNow triggers an immediate heartbeat when ResizePool changes the
 	// pool (so the gateway reconciles quickly).
 	HeartbeatNow <-chan struct{}
@@ -51,6 +56,16 @@ type RunOptions struct {
 	// EgressBinding is the identity-binding mode in force ("none"/"shm"/"bpf"/
 	// "routed-ipv6"), reported in every heartbeat for /stats.
 	EgressBinding string
+}
+
+// nodeBuildVersion returns the build version advertised in NodeHello: the
+// ldflags-stamped version main() copied into RunOptions, or the same dev
+// placeholder cmd.Version defaults to when unset (embedded core, tests).
+func nodeBuildVersion(opts RunOptions) string {
+	if opts.BuildVersion != "" {
+		return opts.BuildVersion
+	}
+	return "0.0.0-dev"
 }
 
 // saveCleanupState persists the exec-role resilience phase. Prov-only
@@ -224,7 +239,7 @@ func RunNode(ctx context.Context, opts RunOptions) {
 		count, ids := handler.ActiveVMs()
 		hello := &pb.NodeHello{
 			NodeId:        opts.EffectiveNodeID,
-			Version:       "0.1.0",
+			Version:       nodeBuildVersion(opts),
 			TotalCpus:     readSystemCPUs(),
 			TotalMemoryMb: readSystemMemMB(),
 			ActiveVmIds:   ids,

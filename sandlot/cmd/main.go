@@ -917,6 +917,7 @@ func main() {
 		Handler:         handler,
 		TLSCfg:          tlsCfg,
 		EffectiveNodeID: effectiveNodeID,
+		BuildVersion:    Version,
 		PoolTarget:      poolTarget,
 		Logger:          logger,
 		HeartbeatNow:    heartbeatNow,
