@@ -215,6 +215,108 @@ pin_installers_ship_library() {
         || fail "uninstall.sh does not remove /usr/local/lib/sandswap/runtime.sh"
 }
 
+# ── residue-sweep pins ────────────────────────────────────────────────
+# Each pin guards one residue class that a completed uninstall/cleanup must
+# clear: deploy-installed unit files, the sandlot drop-in dir, the guest TCB
+# and runtime helpers, legacy empty slices, inter-round runtime state, the
+# k8s modules-load persistence, and the udev-pinned vsock owner. Every class
+# was observed surviving a clean uninstall/cleanup on a real host, so a
+# refactor that drops a sweep fails here with the residue named.
+pin_uninstall_residue_sweep() {
+    section "uninstall/cleanup sweep the recorded residue classes"
+    local u="$ROOT/deploy/baremetal/uninstall.sh"
+    local c="$ROOT/deploy/baremetal/cleanup.sh"
+    local k="$ROOT/deploy/k8s/k8s-cleanup.sh"
+    # Assertions anchor to the COMMAND lines, never to prose or the
+    # self-verification block — a pin matching a comment passes after the
+    # sweep itself was deleted.
+    grep -qE '^[[:space:]]+sandswap-vsock-retune\.service; do' "$u" \
+        && pass "uninstall lists sandswap-vsock-retune.service for removal" \
+        || fail "uninstall does not remove sandswap-vsock-retune.service"
+    grep -qE '^[[:space:]]*rmdir /etc/systemd/system/sandswap-sandlot\.service\.d' "$u" \
+        && pass "uninstall sweeps the sandlot drop-in dir" \
+        || fail "uninstall does not sweep /etc/systemd/system/sandswap-sandlot.service.d/"
+    if grep -qE '^[[:space:]]*for tcb in vmlinux\.bin initramfs\.cpio\.gz SHA256SUMS' "$u" \
+       && grep -qE '^[[:space:]]*rm -f "/usr/local/lib/sandswap/guest/\$tcb"' "$u" \
+       && grep -qE '^[[:space:]]*rmdir /usr/local/lib/sandswap/guest' "$u"; then
+        pass "uninstall removes the guest TCB item-wise and rmdirs the dir"
+    else
+        fail "uninstall does not sweep the guest TCB item-wise (rm -rf would take operator files)"
+    fi
+    grep -qE '^[[:space:]]*rm -f /usr/local/lib/sandswap/apply-prov-ownership' "$u" \
+        && pass "uninstall removes apply-prov-ownership" \
+        || fail "uninstall does not remove /usr/local/lib/sandswap/apply-prov-ownership"
+    if grep -qE '^[[:space:]]*rm -rf "?/usr/local/lib/sandswap/?"?( |$)' "$u"; then
+        fail "uninstall rm -rf's /usr/local/lib/sandswap itself (operator hooks must survive)"
+    else
+        pass "uninstall never rm -rf's the shared lib dir"
+    fi
+    grep -qE '^[[:space:]]*systemctl stop system-sandswap-gateway\.slice' "$u" \
+        && pass "uninstall stops the legacy empty slices" \
+        || fail "uninstall does not stop the legacy system-sandswap-*.slice"
+    grep -qE '^[[:space:]]*for dropin in egress-bpf\.conf sandprov\.conf' "$c" \
+        && pass "cleanup.sh sweeps the sandprov drop-in" \
+        || fail "cleanup.sh does not sweep sandprov.conf"
+    local f
+    for f in "$c" "$k"; do
+        if grep -qE '^[[:space:]]*rm -rf /run/sandswap /run/sandswap-state /run/sandswap-boxout' "$f" \
+           && grep -q 'sandswap-harness.pid' "$f"; then
+            pass "$(basename "$f") sweeps /run/sandswap* and guards the live harness pidfile"
+        else
+            fail "$(basename "$f") does not sweep /run/sandswap* with the stale-pidfile guard"
+        fi
+    done
+    grep -qE '^[[:space:]]*rm -f /etc/modules-load\.d/sandswap\.conf' "$k" \
+        && pass "k8s-cleanup removes modules-load.d/sandswap.conf (deploy re-asserts it)" \
+        || fail "k8s-cleanup does not remove /etc/modules-load.d/sandswap.conf"
+    grep -qE '^[[:space:]]*udevadm trigger --action=add --sysname-match=vhost-vsock' "$k" \
+        && pass "k8s-cleanup re-pins vhost-vsock ownership after the module reload" \
+        || fail "k8s-cleanup reloads vhost_vsock without re-applying the udev-pinned owner"
+    local unit
+    for unit in sandswap-sandlot sandswap-sandlot-instance@; do
+        f="$ROOT/deploy/baremetal/systemd/${unit}.service"
+        grep -qE '^DevicePolicy=closed' "$f" \
+            && pass "$unit.service pins DevicePolicy=closed" \
+            || fail "$unit.service lost DevicePolicy=closed (the VM-device allow-list is no longer fail-closed)"
+    done
+    f="$ROOT/deploy/baremetal/systemd/sandswap-sandlot-instance@.service"
+    if grep -qE '^ConditionPathExists=/dev/kvm' "$f" \
+       && grep -qE '^ConditionPathExists=/dev/vhost-vsock' "$f"; then
+        pass "instance template carries the kvm/vhost-vsock device guards"
+    else
+        fail "instance template lost its ConditionPathExists device guards"
+    fi
+}
+
+# pin_helper_before_gateway_start — every deployer that starts a gateway
+# instance must install the gateway TEMPLATE through
+# sandswap_install_systemd_unit FIRST: its side effect is the ExecStartPost
+# helper (/usr/local/lib/sandswap/apply-prov-ownership). A deployer that
+# writes its instance units by hand and starts them before any unit
+# install dies 203/EXEC on a properly uninstalled host (observed as a
+# round failure; the sim used to survive on an older deploy's residue).
+pin_helper_before_gateway_start() {
+    section "gateway deployers install the ExecStartPost helper before start"
+    helper_order_ok() { # <file> <start-pattern>
+        local file="$1" i s
+        i="$(grep -nE 'sandswap_install_systemd_unit .*sandswap-gateway@' "$file" | head -1 | cut -d: -f1)"
+        s="$(grep -nE "$2" "$file" | head -1 | cut -d: -f1)"
+        [[ -n "$i" && -n "$s" && "$i" -lt "$s" ]]
+    }
+    local spec
+    for spec in \
+        "$ROOT/deploy/baremetal/deploy-cluster-multi-gw-simulation.sh|systemctl enable --now sandswap-gateway-exec1" \
+        "$ROOT/deploy/baremetal/deploy-cluster-one-gw.sh|systemctl enable --now sandswap-gateway@exec" \
+        "$ROOT/deploy/baremetal/deploy-cluster-one-gw-simulation.sh|systemctl enable --now sandswap-gateway@exec"; do
+        local file="${spec%%|*}" start="${spec##*|}"
+        if helper_order_ok "$file" "$start"; then
+            pass "$(basename "$file") installs the unit helper before starting a gateway"
+        else
+            fail "$(basename "$file") starts a gateway before installing /usr/local/lib/sandswap/apply-prov-ownership (203/EXEC on a clean host)"
+        fi
+    done
+}
+
 # ── log-helper resolution ──────────────────────────────────────────────────────────────
 # undefined_log_helpers FILE -> the log_* names the file references but the
 # runtime environment (e2e/common.sh + common/sh/runtime.sh) does not define.
@@ -1506,6 +1608,8 @@ echo "deploy-tree-pins: $ROOT"
 start_http_stub || exit 1
 pin_setup_network_runtime
 pin_installers_ship_library
+pin_uninstall_residue_sweep
+pin_helper_before_gateway_start
 pin_log_helper_resolution
 pin_stage_targets
 pin_human_post_status

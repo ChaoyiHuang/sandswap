@@ -747,6 +747,13 @@ k8s_phase_host_prep() {
         if ! grep -qx vhost_vsock /etc/modules-load.d/sandswap.conf 2>/dev/null; then
             echo "vhost_vsock" >> /etc/modules-load.d/sandswap.conf 2>/dev/null || true
         fi
+        # tun boot-time persistence: the pods' device allow-lists resolve at
+        # cgroup apply, so /dev/net/tun must exist before a network-enabled
+        # sandlot starts (harmless when tun is built into the kernel).
+        if ! grep -qx tun /etc/modules-load.d/sandswap.conf 2>/dev/null; then
+            echo "tun" >> /etc/modules-load.d/sandswap.conf 2>/dev/null || true
+        fi
+        modprobe tun 2>/dev/null || true
         udevadm trigger --action=add --name-match=vhost-vsock 2>/dev/null || true
         udevadm trigger --action=add --name-match=vsock 2>/dev/null || true
         sleep 1

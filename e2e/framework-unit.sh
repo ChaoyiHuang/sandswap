@@ -42,6 +42,7 @@ for fn in tc_ensure_volume_seed tc_cleanup_deployed_artifacts \
           ss_ensure_volume_seed ss_apply_share_plane ss_ensure_dev_nodes \
           ss_kill_ports ss_wait_until ss_host_network_setup ss_stack_residue_clean \
           ss_host_network_teardown ss_script_host_prep \
+          ss_e2e_root_teardown ss_storage_nfs_teardown \
           ss_fwd_policy_guard ss_fwd_tagged_flush ss_container_runtime_clean \
           ss_gw_exec ss_gw_exec_retry ss_gw_exec_raw ss_gw_exec_headers \
           ss_gw_status ss_gw_kill ss_pool_clean ss_wait_pool_ready ss_wait_health \
@@ -243,6 +244,58 @@ else
     tc_fail "tc_skip_suite did not record the reason (got '$(cat "$tmp_skip/probe.sh" 2>/dev/null)')"
 fi
 rm -rf "$tmp_skip"
+
+# ── 8b. battery-root teardown ownership (ss_e2e_root_teardown) ────────
+# The battery owns SANDSWAP_E2E_ROOT and nothing else removes it after the
+# last round; the teardown must REFUSE unset and production roots (a row's
+# crash path must never gain a way to sweep /var/lib/sandswap through this
+# helper) and must remove an isolated root's tree. The GUARD is probed as a
+# PURE predicate — this suite runs as root inside the battery, so calling
+# the destructive function with a production path would, on a guard
+# regression, delete the very tree the guard exists to protect. Only
+# synthetic roots are ever handed to the destructive call.
+tmp_rt="$(mktemp -d)"
+for bad in "" / /var/lib/sandswap /var/lib/sandswap/ /var/lib/sandswap/. \
+           /var/lib/sandswap/volumes //var/lib/sandswap relative/root; do
+    if ss_e2e_root_teardown_target "$bad" >/dev/null 2>&1; then
+        tc_fail "teardown guard ACCEPTS '$bad' (must refuse)"
+    else
+        tc_pass "teardown guard refuses '$bad'"
+    fi
+done
+if [[ "$(ss_e2e_root_teardown_target "$tmp_rt/root" 2>/dev/null)" == "$tmp_rt/root" ]]; then
+    tc_pass "teardown guard accepts an isolated root and prints it normalized"
+else
+    tc_fail "teardown guard did not accept the synthetic isolated root"
+fi
+g_out="$(SANDSWAP_E2E_ROOT= ss_e2e_root_teardown 2>&1)"; g_rc=$?
+if [[ "$g_rc" -eq 0 && "$g_out" == *"no isolated battery root"* ]]; then
+    tc_pass "e2e-root teardown no-ops on an unset root"
+else
+    tc_fail "e2e-root teardown with unset root: rc=$g_rc out=${g_out:-<none>}"
+fi
+mkdir -p "$tmp_rt/root/volumes"
+echo marker > "$tmp_rt/root/volumes/data"
+r_out="$(SANDSWAP_E2E_ROOT="$tmp_rt/root" ss_e2e_root_teardown 2>&1)"; r_rc=$?
+if [[ "$r_rc" -eq 0 && ! -e "$tmp_rt/root" ]]; then
+    tc_pass "e2e-root teardown removes an isolated root tree"
+else
+    tc_fail "e2e-root teardown of an isolated root: rc=$r_rc still-present=$([[ -e "$tmp_rt/root" ]] && echo yes || echo no)"
+fi
+rm -rf "$tmp_rt"
+# NFS teardown: only the no-op half is probeable here — when the export file
+# exists (an nfs-profile row or host state), exercising the teardown would
+# mutate host state, which this suite never does.
+if [[ ! -f /etc/exports.d/sandswap-e2e.exports ]]; then
+    n_out="$(ss_storage_nfs_teardown 2>&1)"; n_rc=$?
+    if [[ "$n_rc" -eq 0 ]]; then
+        tc_pass "NFS teardown no-ops when the e2e export file is absent"
+    else
+        tc_fail "NFS teardown without an export file: rc=$n_rc out=${n_out:-<none>}"
+    fi
+else
+    tc_log_info "(e2e NFS export present on this host — NFS teardown behavior probe skipped)"
+fi
 
 # ── 9. Matrix engine + runner isolation (common/sh/matrix.sh) ─────────
 # The engine IS the framework's own machinery (ledger, closure, reuse,

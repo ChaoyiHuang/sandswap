@@ -392,6 +392,7 @@ bm_preclean() {
     if command -v nft >/dev/null 2>&1; then
         nft delete table netdev sandswap_baseline 2>/dev/null || true
         nft delete table bridge sandswap_baseline 2>/dev/null || true
+        nft delete table inet sandswap_baseline 2>/dev/null || true
         nft delete table inet sandswap_routed6 2>/dev/null || true
     fi
 

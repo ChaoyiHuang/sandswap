@@ -243,7 +243,22 @@ fi
 
 # ── 5. Remove runtime state directories ──────────────────────────────
 echo "[5/9] Runtime state"
-rm -rf /run/sandswap /run/sandswap-state 2>/dev/null || true
+# Every /run/sandswap* path is volatile runtime state — the state dir,
+# the boxout socket dir, logs — with ONE exception: the harness
+# exclusivity pidfile (/run/sandswap-harness.pid, common/sh/runtime.sh
+# ss_harness_guard). A LIVE pidfile must survive: this cleanup also runs
+# from a live row's exit trap, and deleting the file disarms the guard (a
+# missing pidfile admits a second concurrent run, the two-runs-kill-each-
+# other incident). Stale entries (owner dead) are safe to remove — the
+# guard would overwrite them anyway.
+rm -rf /run/sandswap /run/sandswap-state /run/sandswap-boxout 2>/dev/null || true
+if [[ -r /run/sandswap-harness.pid ]]; then
+    read -r _hp _hc < /run/sandswap-harness.pid 2>/dev/null || true
+    if [[ -z "${_hp:-}" ]] || ! kill -0 "$_hp" 2>/dev/null; then
+        rm -f /run/sandswap-harness.pid 2>/dev/null || true
+    fi
+fi
+unset _hp _hc
 # follow-up: /var/lib/sandswap's VOLUMES ROOT is a self-bind carrying
 # nosuid,nodev (invariant 8; ss_harden_volumes_mount). A mountpoint cannot be
 # removed by rm -rf, so unmount it (and the parent if it is bound) BEFORE the
@@ -294,14 +309,25 @@ udev_removed=0
 # 99-sandswap-vsock.rules (vsock device lockdown); the "kvm/vhost-vsock"
 # names match nothing but are kept for backwards compatibility with very
 # old installs.
-# The egress-enabler's bpf-carrier syscall-filter drop-in (installed only by
-# deploy-egress-enabler.sh; harmless when absent — an additive allow for bpf(2)).
-if [[ -f /etc/systemd/system/sandswap-sandlot.service.d/egress-bpf.conf ]]; then
-    rm -f /etc/systemd/system/sandswap-sandlot.service.d/egress-bpf.conf
+# Drop-in sweep for the sandlot unit's .d/ dir — every drop-in there is
+# ours (deploy-egress-enabler installs egress-bpf.conf, an additive bpf(2)
+# syscall allow; deploy-single-node installs sandprov.conf, the merged
+# exec,prov supplementary-group shape for the next round's role). Remove the
+# known files and rmdir; an operator's own drop-in would block the rmdir and
+# stay visible instead of being silently swept.
+_dropin_removed=0
+for dropin in egress-bpf.conf sandprov.conf; do
+    if [[ -f "/etc/systemd/system/sandswap-sandlot.service.d/$dropin" ]]; then
+        rm -f "/etc/systemd/system/sandswap-sandlot.service.d/$dropin"
+        _dropin_removed=$((_dropin_removed + 1))
+    fi
+done
+if [[ $_dropin_removed -gt 0 ]]; then
     rmdir /etc/systemd/system/sandswap-sandlot.service.d 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
-    echo "  ✓ egress-bpf syscall-filter drop-in removed"
+    echo "  ✓ removed $_dropin_removed sandlot drop-in(s) (egress-bpf/sandprov)"
 fi
+unset _dropin_removed dropin
 
 for rule in /etc/udev/rules.d/99-sandswap.rules \
             /etc/udev/rules.d/99-sandswap-vsock.rules \

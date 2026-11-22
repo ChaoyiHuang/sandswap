@@ -47,8 +47,19 @@ SystemCallErrorNumber=EPERM
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes
-# ProtectClock installs a device filter inherited by the child VMMs. Admit
-# their required devices; file ownership still separates sandlot and sandvmm.
+# Unit-wide device cgroup allow-list: sandlot and its sandvmm children share
+# this cgroup, so it must cover both — /dev/kvm and /dev/vhost-vsock for
+# sandvmm, /dev/net/tun for TAP create/attach. ProtectClock= merges its
+# implied "char-rtc r" into the list; under the default auto policy a
+# non-empty allow-list already selects allow-list mode (these three entries
+# are what admit the VM devices), and the explicit DevicePolicy=closed keeps
+# that guarantee fail-closed if a drop-in ever clears the list (auto + empty
+# list = allow everything) and makes the posture directly assertable. Never
+# "strict" — it drops the implicit /dev/urandom allowance. Per-identity
+# isolation remains the udev OWNER rules + DAC (vhost-vsock 0600 sandvmm,
+# vsock 0600 sandlot), never this list.
+# See docs/how-it-works/isolation-and-swap.md §5.4.1.
+DevicePolicy=closed
 DeviceAllow=/dev/kvm rw
 DeviceAllow=/dev/vhost-vsock rw
 DeviceAllow=/dev/net/tun rw
@@ -56,8 +67,9 @@ ProtectHostname=yes
 RestrictNamespaces=yes
 LockPersonality=yes
 # The shared group (volumes root, /run/sandswap, logs) is the sandlot user's
-# PRIMARY group — no supplementary grant needed for it. kvm is the device
-# grant for /dev/kvm + /dev/vhost-vsock. NO sandprov by default: an exec-only
+# PRIMARY group — no supplementary grant needed for it. kvm is the /dev/kvm
+# device grant; /dev/vhost-vsock is OWNER=sandvmm 0600 (deploy/udev), never
+# a kvm-group device. NO sandprov by default: an exec-only
 # node must not be able to read the volume-name seed (a leaked seed makes
 # every tenant's directory name computable). A MERGED (exec,prov) shape adds
 # it with a drop-in:

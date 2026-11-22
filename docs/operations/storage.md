@@ -77,9 +77,15 @@ on the other node can use.
 
 The single-node e2e suite validates real NFS semantics on every run with
 `STORAGE_BACKEND=nfs` (a loopback `nfs-kernel-server` export under
-`/srv/sandswap-nfs`): numeric identity, setgid inheritance, OverlayFS
+`/srv/sandswap-nfs`, declared in `/etc/exports.d/sandswap-e2e.exports`):
+numeric identity, setgid inheritance, OverlayFS
 lowerdir over NFS, and the umount barrier all execute through the actual
-client-server path. Production exports should follow the same shape:
+client-server path. The export and its backing tree are battery-owned:
+`ss_storage_nfs_teardown` (called from both batteries' final cleanup)
+unmounts the loopback mounts, drops the exports file and re-reads the export
+set, and removes the backing tree — no export, mount, or backing tree
+survives a completed round (the nfs-kernel-server packages stay installed).
+Production exports should follow the same shape:
 
 ```text
 # /etc/exports on the storage server.

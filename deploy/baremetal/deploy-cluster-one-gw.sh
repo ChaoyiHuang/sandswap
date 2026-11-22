@@ -576,7 +576,12 @@ UNIT
     # Gateway instances (template unit). Disable the legacy combined unit if a
     # previous single-process deploy left it enabled.
     systemctl disable --now sandswap-gateway 2>/dev/null || true
-    cp "$DEPLOY_DIR/systemd/sandswap-gateway@.service" /etc/systemd/system/
+    # Shared installer, not a bare cp: its side effect installs the
+    # ExecStartPost helper (/usr/local/lib/sandswap/apply-prov-ownership)
+    # the template's instances need at start — a bare cp leaves a properly
+    # uninstalled host (helper removed by uninstall.sh) failing 203/EXEC on
+    # the first `enable --now`.
+    sandswap_install_systemd_unit "$DEPLOY_DIR/systemd/sandswap-gateway@.service"
     install_vsock_retune_unit
     systemctl daemon-reload
     systemctl enable --now sandswap-gateway@exec sandswap-gateway@human

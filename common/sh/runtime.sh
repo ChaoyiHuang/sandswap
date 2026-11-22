@@ -1487,6 +1487,131 @@ ss_storage_nfs_mount() {
     fi
 }
 
+# ss_storage_nfs_teardown — the teardown twin of ss_storage_nfs_setup:
+# remove the loopback e2e export at battery end. The exports FILE's
+# presence is the proof the export is ours (nothing else writes it):
+# unmount every loopback mount served from SS_NFS_EXPORT_ROOT, drop the
+# file, re-read the export set, remove the backing tree (test data only —
+# recreating it is a mkdir). Best-effort and idempotent.
+ss_storage_nfs_teardown() {
+    local exports_file=/etc/exports.d/sandswap-e2e.exports
+    [[ -f "$exports_file" ]] || return 0
+    local src="127.0.0.1:$SS_NFS_EXPORT_ROOT" mp
+    # Unmount every loopback mount served from the export root. Call sites
+    # mount SUBDIRS ($SS_NFS_EXPORT_ROOT/volumes, /templates), never the
+    # bare root, so match the SOURCE by PREFIX. findmnt -r: raw output, no
+    # tree-decoration glyphs glued to TARGET. The umount is bounded — a
+    # wedged loopback mount must not hang the battery end or a row trap.
+    while IFS= read -r mp; do
+        [[ -n "$mp" ]] || continue
+        timeout 10 umount "$mp" 2>/dev/null \
+            || timeout 10 umount -l "$mp" 2>/dev/null || true
+    done < <(findmnt -rn -t nfs4 -o TARGET,SOURCE 2>/dev/null \
+        | awk -v src="$src" 'index($2, src) == 1 { print $1 }')
+    local left
+    left="$(findmnt -rn -t nfs4 -o TARGET,SOURCE 2>/dev/null \
+        | awk -v src="$src" 'index($2, src) == 1 { print $1 }' | tr '\n' ' ')"
+    rm -f "$exports_file"
+    exportfs -ra 2>/dev/null || true
+    if [[ -n "${left// /}" ]]; then
+        # Do NOT claim success: an rm -rf of a still-mounted export root
+        # silently keeps the tree, and the next run would inherit it.
+        tc_log_warn "NFS e2e teardown: export file removed, but mount(s) still live: $left"
+        return 1
+    fi
+    rm -rf "$SS_NFS_EXPORT_ROOT" 2>/dev/null || true
+    tc_log_pass "NFS e2e export removed: $SS_NFS_EXPORT_ROOT (+ mounts, exports state)"
+    return 0
+}
+
+# ss_e2e_root_teardown — remove the battery's isolated root at battery end
+# and on a row's crash path. The battery owns SANDSWAP_E2E_ROOT outright
+# (the isolation is the design goal); without this the last round's tree
+# (volumes data, DEPLOY_DIR state, the nosuid,nodev self-bind
+# ss_harden_volumes_mount leaves on the volumes dir) survives forever —
+# tc_clean_environment only sweeps at the START of the NEXT suite.
+#   ownership guard: acts ONLY when SANDSWAP_E2E_ROOT names a non-production
+#   root ("/var/lib/sandswap" and "/" are refused; unset = production
+#   default). A baremetal cleanup.sh/uninstall.sh run is blind to this root
+#   (its VOL_ROOT is hardcoded), so the battery must sweep it itself.
+#   never touches build outputs: removing this tree triggers no rebuild —
+#   the next battery's tc_clean_environment recreates the layout (mkdir +
+#   chown); the kernel/initramfs live in $ROOT/output.
+# ss_e2e_root_teardown_target <root> — print the NORMALIZED root this helper
+# is allowed to tear down, or return 1 to refuse. PURE: no side effects, so
+# the unit suite can exercise the guard on production-shaped inputs without
+# ever risking a destructive call. Rules: absolute; normalized ("//", "/./",
+# trailing slashes, and symlinks when resolvable); never "/" and never the
+# production root or anything beneath it (a nested path would let the helper
+# delete a production subtree).
+ss_e2e_root_teardown_target() {
+    local root="${1:-}" norm
+    [[ -n "$root" && "$root" == /* ]] || return 1
+    norm="$(realpath -e -- "$root" 2>/dev/null || true)"
+    [[ -n "$norm" ]] || norm="$(realpath -m -- "$root" 2>/dev/null || true)"
+    [[ -n "$norm" ]] || norm="$root"
+    [[ "$norm" == "/" ]] && return 1
+    [[ "$norm" == "/var/lib/sandswap" || "$norm" == "/var/lib/sandswap/"* ]] && return 1
+    printf '%s\n' "$norm"
+    return 0
+}
+
+# ss_e2e_root_teardown — remove the battery's isolated root at battery end
+# and on a row's crash path.
+ss_e2e_root_teardown() {
+    local root
+    root="$(ss_e2e_root_teardown_target "${SANDSWAP_E2E_ROOT:-}")" || {
+        tc_log_info "ss_e2e_root_teardown: no isolated battery root — nothing to do"
+        return 0
+    }
+    [[ -d "$root" ]] || return 0
+    # Child-first unmount of everything UNDER the root (self-bind, overlays,
+    # a leftover NFS mount): a mountpoint survives rm -rf and resurrects the
+    # tree's skeleton. The root itself is never unmounted — a dedicated
+    # mount the operator provided is cleaned in place, not detached.
+    # HOW the list is built matters: `findmnt -R` walks mountinfo's PARENT
+    # linkage, which goes MISSING exactly in this scenario's shapes (a mount
+    # created under a since-shadowed stack, an NFS layer over the volumes
+    # self-bind) and then lists NOTHING while the mount is live (observed:
+    # findmnt -R empty, direct umount succeeds). Match by PATH PREFIX over
+    # the full mount table instead — immune to linkage, and a stacked
+    # mountpoint shows both layers, so the loop peels one per round.
+    local mp submounts _round
+    for _round in 1 2 3 4 5; do
+        submounts="$(findmnt -rn -o TARGET 2>/dev/null \
+            | awk -v p="$root/" 'index($0, p) == 1' \
+            | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2- || true)"
+        [[ -z "$submounts" ]] && break
+        while IFS= read -r mp; do
+            [[ -n "$mp" ]] || continue
+            # Bounded: a wedged backing store must not hang the battery end
+            # or a row's exit trap.
+            timeout 10 umount "$mp" 2>/dev/null \
+                || timeout 10 umount -l "$mp" 2>/dev/null || true
+        done <<<"$submounts"
+    done
+    unset _round
+    if mountpoint -q "$root" 2>/dev/null; then
+        local child
+        for child in "$root"/* "$root"/.[!.]* "$root"/..?*; do
+            [[ -e "$child" ]] && rm -rf "$child" 2>/dev/null || true
+        done
+        if [[ -n "$(ls -A "$root" 2>/dev/null)" ]]; then
+            tc_log_warn "ss_e2e_root_teardown: $root is a dedicated mount and its contents were not fully removed"
+            return 1
+        fi
+        tc_log_pass "e2e root contents removed (dedicated mount kept): $root"
+        return 0
+    fi
+    rm -rf "$root" 2>/dev/null || true
+    if [[ -e "$root" ]]; then
+        tc_log_warn "ss_e2e_root_teardown: $root survived removal (mount held?)"
+        return 1
+    fi
+    tc_log_pass "e2e root removed: $root"
+    return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════
 # Script prelude — the ONE call a host-mutating script makes
 # ═══════════════════════════════════════════════════════════════════════
@@ -2082,6 +2207,7 @@ ss_stack_residue_clean() {
     if command -v nft >/dev/null 2>&1; then
         nft delete table netdev sandswap_baseline 2>/dev/null || true
         nft delete table bridge sandswap_baseline 2>/dev/null || true
+        nft delete table inet sandswap_baseline 2>/dev/null || true
         nft delete table inet sandswap_routed6 2>/dev/null || true
     fi
     return 0

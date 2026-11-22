@@ -572,11 +572,19 @@ Properties worth knowing:
 - **The exec sandlot runs as `sandlot` (985) with the ambient capability
   set from §10** (KVM, vhost-vsock, mounts, network namespaces) — no
   `NoNewPrivileges`/`ProtectSystem` for it.
-- **Exec units retain `ProtectClock=yes` and explicitly allow their devices**:
-  `/dev/kvm`, `/dev/vhost-vsock`, and `/dev/net/tun` need read/write access
-  through the device filter that also applies to child VMMs. Group membership
-  alone cannot override that filter. These grants do not bypass the per-owner
+- **Exec units retain `ProtectClock=yes` with an explicitly closed device
+  policy**: `DevicePolicy=closed` plus read/write `DeviceAllow=` grants for
+  `/dev/kvm`, `/dev/vhost-vsock`, and `/dev/net/tun`. The unit's device
+  cgroup filter applies to the child VMMs too, and `ProtectClock=yes` merges
+  an implied `char-rtc r` grant, which already selects allow-list mode under
+  the default `auto` policy — without the three grants VM creation fails
+  with EPERM. Group membership alone
+  cannot override that filter, and these grants do not bypass the per-owner
   device permissions described in [Host Prerequisites](prerequisites.md#44-device-node-permissions-udev-lockdown).
+  The instance template carries the same `ConditionPathExists=/dev/kvm` /
+  `/dev/vhost-vsock` guards as the main unit; `/dev/net/tun` is deliberately
+  not guarded (network-less instances are valid — host prep loads `tun` at
+  boot via modules-load.d instead).
 - **Sandlot uses `KillMode=process`**: `systemctl stop/restart` signals only
   the sandlot main process; child sandvmm processes stay alive in memory and
   are re-adopted at restart. This is what makes rolling sandlot upgrades

@@ -1366,6 +1366,81 @@ if (( _unit_seen == 0 )); then
 fi
 unset _unit_seen _u
 
+# ── 13c. sandlot units: closed device policy + the exact VM-device list ─────
+# The exec units' three DeviceAllow= lines are what admit the VM devices
+# through the unit's device cgroup filter (sandlot and its sandvmm children
+# share the cgroup). The explicit DevicePolicy=closed keeps the allow-list
+# guarantee fail-closed if a drop-in ever clears it (auto + empty list =
+# allow everything) and makes the posture assertable; a lost directive or a
+# widening drop-in silently reopens the device surface. The EFFECTIVE
+# allow-list also carries ProtectClock's implied "char-rtc r" (merged
+# unconditionally on the systemd versions this repo targets), which is
+# tolerated here and is the only extra entry.
+echo "[13c/13] sandlot units: DevicePolicy=closed + exact VM-device allow-list"
+_unit_seen=0
+for _u in sandswap-sandlot sandswap-sandlot-instance@; do
+    _uf="/etc/systemd/system/${_u}.service"
+    [[ -f "$_uf" ]] || continue
+    _unit_seen=1
+    # static shape: the directive pair ships with the unit file
+    if grep -qE '^[[:space:]]*DevicePolicy=closed([[:space:]]|$)' "$_uf"; then
+        ok "$_uf declares DevicePolicy=closed"
+    else
+        bad "$_uf does NOT declare DevicePolicy=closed — the device allow-list is not pinned fail-closed (fix: restore the shipped unit)"
+    fi
+    for _dev in /dev/kvm /dev/vhost-vsock /dev/net/tun; do
+        if grep -qE "^[[:space:]]*DeviceAllow=${_dev} rw([[:space:]]|$)" "$_uf"; then
+            ok "$_uf admits ${_dev} rw"
+        else
+            bad "$_uf is missing 'DeviceAllow=${_dev} rw' — the closed device filter would deny it and VM creation fails (fix: restore the shipped unit)"
+        fi
+    done
+    # live shape: the loaded unit's effective policy and allow set. A
+    # TEMPLATE name cannot be queried directly (systemctl rejects
+    # "foo@.service" with "neither a valid invocation ID nor unit name"), so
+    # check each loaded instance and say so when none exists — the static
+    # checks above still cover the shipped file.
+    if command -v systemctl >/dev/null 2>&1; then
+        _live=()
+        if [[ "$_u" == *@ ]]; then
+            while IFS= read -r _iu; do
+                [[ -n "$_iu" ]] || continue
+                _live+=("${_iu%.service}")
+            done < <(systemctl list-units "${_u}*.service" --all --no-legend --no-pager 2>/dev/null | awk '{print $1}')
+            if (( ${#_live[@]} == 0 )); then
+                echo "  – $_u: no instances loaded (template; static checks above cover the shipped file)"
+            fi
+        else
+            _live=("$_u")
+        fi
+        for _iu in "${_live[@]}"; do
+            _pol="$(systemctl show "$_iu.service" -p DevicePolicy --value 2>/dev/null | tr -d '[:space:]')"
+            if [[ -z "$_pol" ]]; then
+                continue
+            fi
+            if [[ "$_pol" == "closed" ]]; then
+                ok "$_iu.service effective DevicePolicy=closed"
+            else
+                bad "$_iu.service effective DevicePolicy='${_pol}' (want closed)"
+            fi
+            # pair up "<path> <perms>" tokens; the device set must be exactly
+            # our three plus ProtectClock's implied char-rtc
+            _devs="$(systemctl show "$_iu.service" -p DeviceAllow --value 2>/dev/null \
+                | tr -s '[:space:]' '\n' | grep -v '^$' | paste - - \
+                | awk '{print $1}' | sort | tr '\n' ' ' | sed 's/ $//')"
+            if [[ "$_devs" == "/dev/kvm /dev/net/tun /dev/vhost-vsock char-rtc" ]]; then
+                ok "$_iu.service effective allow-list is exactly the three VM devices (+ ProtectClock's char-rtc)"
+            else
+                bad "$_iu.service effective allow-list is '$_devs' — want '/dev/kvm /dev/net/tun /dev/vhost-vsock char-rtc' (a widening drop-in or an extra grant reopens the device surface)"
+            fi
+        done
+    fi
+done
+if (( _unit_seen == 0 )); then
+    echo "  – no bare-metal sandlot units installed (k8s/gateway-only host)"
+fi
+unset _unit_seen _u _uf _dev _pol _devs _live _iu
+
 echo
 echo "=== RESULT: $PASS passed, $FAIL failed, $WARN warnings ==="
 [[ $FAIL -eq 0 ]] && echo "✅ all host security invariants hold" || echo "❌ some invariants FAIL — vsock impersonation/sniffing or binding-region forgery surface may be open"
