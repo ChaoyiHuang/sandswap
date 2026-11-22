@@ -61,35 +61,13 @@ sandswap_stop_services
 
 # ── 1. Kill all sandswap processes ───────────────────────────────────
 echo "[1/9] Processes"
-killed=0
-# Match the full command line — comm names are truncated to 15 chars
-# ("sandswap-sandvmm" -> "sandswap-sandvm"), so pkill -x by bare name misses them.
-# IMPORTANT: -f patterns must stay SPECIFIC. A bare -f 'etcd'/'boxout' matches
-# every unrelated process whose command line merely contains the word (editors,
-# invoking shells, test scripts) and kills them.
-for proc in 'sandswap-sandvmm' 'sandswap-sandlot' 'sandswap-gateway' 'sandns' 'sandswap-boxout'; do
-    # path-scoped — a cmdline merely CONTAINING the name is never killed.
-    pids="$(pgrep -f "/usr/local/bin/$proc" 2>/dev/null || true)"
-    if [[ -n "$pids" ]]; then
-        echo "  Killing $proc: $pids"
-        echo "$pids" | xargs -r kill -9 2>/dev/null || true
-        killed=$((killed + 1))
-    fi
-done
-# kill ONLY sandswap-managed processes — never a foreign etcd (the
-# docs explicitly support pointing at an existing cluster via etcd.endpoints,
-# and this host's own k3s etcd matched the old `pgrep -x etcd`). Scope:
-#   (a) processes running OUR binaries (path-scoped -f match), and
-#   (b) the port sweep below, restricted to ports whose listener belongs to
-#       one of our binaries (checked via the /proc/<pid>/exe path) — a foreign
-#       service on :2379 is left alone.
-for proc in sandswap-gateway sandswap-sandlot sandswap-sandvmm sandns sandswap-boxout; do
-    pids="$(pgrep -f "/usr/local/bin/$proc" 2>/dev/null || true)"
-    if [[ -n "$pids" ]]; then
-        echo "  Killing $proc: $pids"
-        echo "$pids" | xargs -r kill -9 2>/dev/null || true
-    fi
-done
+# PID-exact kill (deploy-lib): unit-cgroup survivors + kernel-verified exe
+# identity — never a cmdline-text match, so processes that merely MENTION a
+# path in argv (editors, invoking shells, test scripts) are never touched.
+# Foreign etcd is protected: the shared etcd binary only dies with one of
+# OUR instance markers in argv.
+bm_kill_leftover_processes
+killed=${BM_LEFTOVER_KILLS:-0}
 # Port stragglers — only when the listener is one of OUR binaries. NOTE: :53
 # is deliberately NOT in this list (systemd-resolved owns it on most hosts;
 # sandns is already matched above).

@@ -333,19 +333,100 @@ bm_preflight() {
 #                       an OLD persisted phase and wedge the reconnect)
 #   BM_HOSTS_PIN_RE  extra /etc/hosts regex to strip (sandswap names are
 #                       always stripped)
+# ════════════════════════════════════════════════════════════════════
+# bm_kill_leftover_processes — PID-exact leftover kill (no pattern kills)
+# ════════════════════════════════════════════════════════════════════
+# Kills happen BY TARGET PID ONLY; cmdline-text matching (pkill / pgrep -f)
+# is forbidden for killing here. A full-cmdline regex cannot tell a service
+# from an unrelated process that merely MENTIONS a name in its argv —
+# editors, grep/tail invocations, the calling shell of the deploy itself
+# when a release checkout dir (sandswap-<ver>-linux-amd64) plus an
+# etcd-bearing script name land in one command line. PID sources:
+#   1. systemd's unit cgroups — the registry of PIDs this deployment's
+#      units own. Must run AFTER sandswap_stop_services: the sandlot units
+#      use KillMode=process, so systemctl stop deliberately leaves their
+#      sandvmm children alive — exactly the survivors that stay listed in
+#      the stopped unit's cgroup.procs.
+#   2. /proc identity scan for orphans no unit remembers (hand-run
+#      binaries, children of a crashed deploy): a PID qualifies only when
+#      the kernel's own record of its executable (/proc/<pid>/exe) IS one
+#      of the installed sandswap binaries. argv text never SELECTS a kill;
+#      its single use is DISAMBIGUATION: the etcd binary path is shared
+#      with a possible foreign cluster (k3s --cluster-init), so an etcd
+#      PID additionally needs one of OUR instance markers in its argv.
+# Identity is re-verified immediately before each kill — a discovered PID
+# may have exited and been reused between discovery and the kill. Port
+# stragglers are sandswap_kill_port_processes' job (already PID + exe
+# checked). comm names are irrelevant here, so the 15-char comm
+# truncation ("sandswap-sandvmm" → "sandswap-sandvm") that breaks
+# pkill -x never applies.
+bm_kill_leftover_processes() {
+    local pid exe
+    local -A targets=()
+    # Global out-param: number of PIDs actually killed (callers gate
+    # follow-ups like the vhost_vsock reload on it).
+    BM_LEFTOVER_KILLS=0
+
+    # ── 1) unit-cgroup survivors ─────────────────────────────────────
+    # Every PID still inside a sandswap unit cgroup after the stop.
+    while IFS= read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [[ "$pid" == "$$" || "$pid" == "$PPID" || "$pid" == "1" ]] && continue
+        targets[$pid]="unit-cgroup"
+    done < <(find /sys/fs/cgroup/system.slice -maxdepth 3 -type f \
+                 -path '*sandswap*' -name cgroup.procs -exec cat {} + 2>/dev/null)
+
+    # ── 2) orphan scan by kernel-verified executable identity ────────
+    for pid in /proc/[0-9]*; do
+        pid="${pid#/proc/}"
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [[ "$pid" == "$$" || "$pid" == "$PPID" || "$pid" == "1" ]] && continue
+        [[ -n "${targets[$pid]:-}" ]] && continue
+        # Strip the " (deleted)" suffix the kernel appends when the binary
+        # file was replaced after the process started (deploy reinstalls).
+        exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+        exe="${exe% \((deleted)\)}"
+        case "$exe" in
+            /usr/local/bin/sandswap-gateway|/usr/local/bin/sandswap-sandlot|\
+/usr/local/bin/sandswap-sandvmm|/usr/local/bin/sandns|/usr/local/bin/sandswap-boxout)
+                targets[$pid]="$exe"
+                ;;
+            /usr/local/bin/etcd)
+                # Shared binary path: require one of OUR markers so a
+                # foreign etcd cluster on the same host is never touched.
+                local argv
+                argv="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true) "
+                case "$argv" in
+                    *"--name sandswap-etcd "*|\
+*"--data-dir /var/lib/sandswap-etcd "*|\
+*"--initial-cluster-token sandswap-etcd "*)
+                        targets[$pid]="$exe"
+                        ;;
+                esac
+                ;;
+        esac
+    done
+
+    # ── kill the verified PID set (re-verify first) ──────────────────
+    for pid in "${!targets[@]}"; do
+        if [[ "${targets[$pid]}" == "unit-cgroup" ]]; then
+            grep -q sandswap "/proc/$pid/cgroup" 2>/dev/null || continue
+        else
+            exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+            exe="${exe% \((deleted)\)}"
+            [[ "$exe" == "${targets[$pid]}" ]] || continue
+        fi
+        kill -9 "$pid" 2>/dev/null || true
+        echo "  killed leftover pid $pid (${targets[$pid]})"
+        BM_LEFTOVER_KILLS=$((BM_LEFTOVER_KILLS + 1))
+    done
+    return 0
+}
+
 bm_preclean() {
     log "Preclean: stopping existing services + killing leftovers..."
     sandswap_stop_services
-    # Full-cmdline match: comm is truncated to 15 chars
-    # ("sandswap-sandvmm" → "sandswap-sandvm"), so pkill -x by bare name misses.
-    pkill -9 -f 'sandswap-sandvmm' 2>/dev/null || true
-    pkill -9 -f 'sandswap-sandlot' 2>/dev/null || true
-    pkill -9 -f 'sandswap-gateway' 2>/dev/null || true
-    pkill -9 -f 'sandns' 2>/dev/null || true
-    pkill -9 -f 'sandswap-boxout' 2>/dev/null || true
-    # Scoped to OUR etcd instances (data dirs contain "sandswap-") — a bare
-    # -f 'etcd' would kill an unrelated host etcd (k3s --cluster-init child).
-    pkill -9 -f 'sandswap-.*etcd' 2>/dev/null || true
+    bm_kill_leftover_processes
     sandswap_kill_port_processes
 
     # Stale TAP sweep. Pool VM ids are deterministic, so their TAP names are
