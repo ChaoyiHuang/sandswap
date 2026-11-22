@@ -380,6 +380,11 @@ tar -czf "$DIST_DIR/$PKG.tar.gz" --owner=0 --group=0 -C "$STAGE_PARENT" "$PKG"
 cd "$DIST_DIR"
 sha256sum "$PKG.tar.gz" > SHA256SUMS
 
+# NOTE: the "What's new" and "Upgrade notes" sections in the notes below
+# are CURATED per release — review and update both at every cut. The
+# metadata lines and everything else are generated. Do not use shell-
+# active characters (backticks, $) in the curated prose: the heredoc is
+# unquoted, so they would expand at packaging time.
 cat > RELEASE_NOTES.md <<EOF
 # sandswap $VERSION
 
@@ -394,6 +399,34 @@ self-contained).
 - kernel .config sha256: $KERNEL_CONFIG_SHA
 - kernel patch-set sha256: $KERNEL_PATCHSET
 - sha256 ($PKG.tar.gz): see SHA256SUMS
+
+## What's new since v0.1.0
+
+- OCI image import as a template source: template-tool import <src>
+  --name N --version V [--out DIR] [--push REGISTRY/REPO] converts a
+  local OCI image archive (docker save ≥25 / skopeo / buildx / podman
+  oci-archive) or a plain rootfs tar (docker export, minirootfs) into a
+  validated Sandswap template — written as a local tree and/or pushed
+  straight to an OCI registry. No gateway, no running stack required.
+- OverlayFS read-only fix: read-only is now passed as a mount flag only;
+  kernels with older OverlayFS parsers rejected the previous "ro" inside
+  the mount data option (read-only volume mounts failed there).
+- systemd device-policy hardening on the sandlot units: explicit
+  DeviceAllow list for the VM devices under ProtectClock,
+  DevicePolicy=closed, ConditionPathExists guards (/dev/kvm,
+  /dev/vhost-vsock) on the instance template, and tun + vhost_vsock
+  boot persistence in host setup. security/verify-host-security.sh
+  asserts the policy statically and effectively (check 13c).
+- Uninstall/cleanup correctness: drop-ins, guest TCB and slices removed
+  item-wise with operator hooks preserved; self-verification extended to
+  unit files, drop-in dirs, installed-lib artifacts and mounts; bounded
+  umount retry for the volumes self-bind; live harness pidfiles are
+  never deleted (stale-only); /dev/vhost-vsock ownership restored after
+  the k8s vhost_vsock reload; the inet sandswap_baseline nft table is on
+  every teardown path.
+- Docs: isolation-and-swap rewritten around the four isolation layers;
+  templates documentation covers the OCI import path; tinyVM rename
+  across docs and configs (see Upgrade notes).
 
 ## Quick start
 

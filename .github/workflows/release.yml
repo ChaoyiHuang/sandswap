@@ -88,6 +88,24 @@ jobs:
       - name: Package release
         run: sudo bash build/package-release.sh "${{ steps.ver.outputs.version }}"
 
+      # Contributors section: appended AFTER packaging (the package step
+      # rewrites RELEASE_NOTES.md) and BEFORE the publish step consumes
+      # it. continue-on-error: a contributors hiccup must never throw
+      # away a finished 30-40min build. The head ref is the built commit
+      # (the tag does not exist yet on dispatch dry runs). The packaged
+      # notes file is root-owned (packaging runs under sudo), hence
+      # tee -a. pipefail: without it the script's exit code is swallowed
+      # by the tee pipeline.
+      - name: Append contributors to the release notes
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          bash build/release-contributors.sh \
+            "${{ steps.ver.outputs.version }}" "${{ github.sha }}" \
+            | sudo tee -a dist/RELEASE_NOTES.md >/dev/null
+
       # Idempotent publish: a re-run, or a force-moved tag whose old release
       # still exists, must UPDATE the release instead of dying on
       # "a release with the same tag already exists" (which threw away a full
