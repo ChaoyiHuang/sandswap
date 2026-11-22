@@ -233,6 +233,7 @@ func main() {
 	pool.SetHotPathDebug(debugOps)
 	handler.SetDebugLogging(debugOps)
 	handler.SetMetricsBuildInfo(Version, Commit)
+	mcp.SetServerVersion(Version)
 
 	// GC pacing: applied before any server work starts (restart-required).
 	gcSt, err := config.ApplyGCTuning(*gogcFlag, *gomemlimitFlag)
