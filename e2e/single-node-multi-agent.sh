@@ -129,7 +129,16 @@ cleanup() {
     done
     tc_kill_sandswap_procs "trap-cleanup"
     if [[ "$KEEP_ON_EXIT" != "true" ]]; then
-        bash "$ROOT/deploy/baremetal/cleanup.sh"
+        # Must not abort the trap: under set -e a nonzero cleanup.sh would
+        # skip the battery-root teardown below — exactly on the crash path
+        # it exists for.
+        bash "$ROOT/deploy/baremetal/cleanup.sh" || log_warn "cleanup.sh returned non-zero — continuing with the battery-root teardown"
+        # The baremetal cleanup above is BLIND to the battery root (its
+        # VOL_ROOT is hardcoded /var/lib/sandswap); this row deploys into
+        # $SANDSWAP_E2E_ROOT (SANDSWAP_VAR=$DEPLOY_DIR), whose volumes dir
+        # carries a nosuid,nodev self-bind that would otherwise survive the
+        # crash path. No-op outside the battery (guard inside the helper).
+        ss_e2e_root_teardown || true
     else
         log_info "Processes and state preserved (--keep)"
     fi

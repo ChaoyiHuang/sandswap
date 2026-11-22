@@ -64,9 +64,11 @@ cleanup() {
     # Bridge + nftables (best-effort; uninstall.sh is the canonical sweep)
     ip link del br-sandswap 2>/dev/null || true
     nft delete table inet sandswap 2>/dev/null || true
-    # Egress identity enabler tables (baseline anti-spoof, routed-ipv6 stamps)
+    # Egress identity enabler tables (baseline anti-spoof — all THREE families
+    # the sandlot creates: netdev, bridge, inet — plus the routed-ipv6 stamps)
     nft delete table netdev sandswap_baseline 2>/dev/null || true
     nft delete table bridge sandswap_baseline 2>/dev/null || true
+    nft delete table inet sandswap_baseline 2>/dev/null || true
     nft delete table inet sandswap_routed6 2>/dev/null || true
     log "Cleanup done"
 }
@@ -190,6 +192,14 @@ chgrp -R "$SS_SHARED_GROUP" "$SANDSWAP_VAR/flat-templates" 2>/dev/null || true
 
 # ──── [6/10] Exec gateway 1 (3000/9998) ────
 log "[6/10] Exec gateway 1 (3000/9998)..."
+# Install the gateway TEMPLATE through the shared installer FIRST: its side
+# effect is what the sed-derived instance units below need at start — the
+# units' ExecStartPost runs /usr/local/lib/sandswap/apply-prov-ownership,
+# which ONLY sandswap_install_systemd_unit installs. Without this the first
+# gateway start dies 203/EXEC on a host whose prior deployment was properly
+# uninstalled (the helper is deployer-installed and uninstall removes it);
+# the sim used to work only while an older deploy's residue kept it alive.
+sandswap_install_systemd_unit "$DEPLOY_DIR/systemd/sandswap-gateway@.service"
 cat > "$SANDSWAP_ETC/gateway-exec1.yaml" << YAML
 mode: exec
 vol_root: ${SANDSWAP_VAR}/volumes

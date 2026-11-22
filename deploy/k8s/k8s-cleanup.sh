@@ -22,15 +22,28 @@
 #   3. vsockguard BPF pins (so the next deploy re-attaches with the correct UID)
 #   4. Host TAP devices + network bridge (br-sandswap)
 #   5. Seccomp profile installed on the host
-#   6. Sandswap runtime state (/run/sandswap, /var/lib/sandswap — includes binaries)
+#   6. Sandswap runtime state (/run/sandswap*, /var/lib/sandswap — includes
+#      binaries; a harness pidfile is removed only when stale)
 #   7. Overlay mounts under /var/lib/sandswap/volumes (unmount before rm)
 #   8. Stale port-forward PID files
 #   9. Stale udev rules from previous deploys (kvm/vhost-vsock only — the
 #      vsock rule is one-time host-setup material and is deliberately kept)
+#      + the vhost_vsock/tun modules-load persistence (the next deploy's
+#      host-prep phase re-asserts it)
 #  10. The bridge/NAT persistence unit + its installed script + network.env
 # What it does NOT clean (by design):
 #   - k3s installation itself (use k3s-uninstall.sh for that)
 #   - Host sysctls, service account (one-time setup by k8s-host-setup.sh)
+#   - Device node OWNERS/MODES: they stay as the KEPT udev rule pins them
+#     (/dev/vhost-vsock sandvmm 0600, /dev/vsock sandlot 0600, kvm/tun 0660
+#     root:kvm). Restoring distro world-access defaults here would fight the
+#     rule the next pod depends on — the baremetal tree restores them only
+#     because its uninstall removes that rule.
+#   - /etc/sandswap/deploy-mode.env (k8s-host-setup's mode marker; the next
+#     host-setup run rewrites it)
+#   - Container images built by the deploys — rebuilding them is expensive,
+#     so they accumulate by design; prune manually when disk pressure
+#     demands (k3s crictl rmi --prune)
 # Usage:
 #   sudo bash deploy/k8s/k8s-cleanup.sh
 # Called automatically by deploy-k8s-embedded.sh / deploy-k8s-boxout.sh before deploying.
@@ -238,8 +251,9 @@ nft list table inet sandswap &>/dev/null && {
     nft delete table inet sandswap 2>/dev/null || true
     echo "  ✓ nftables table removed"
 }
-# Egress identity enabler tables (baseline anti-spoof, routed-ipv6 stamps)
-for tbl in "netdev sandswap_baseline" "bridge sandswap_baseline" "inet sandswap_routed6"; do
+# Egress identity enabler tables (baseline anti-spoof — all THREE families
+# the sandlot creates: netdev, bridge, inet — plus the routed-ipv6 stamps)
+for tbl in "netdev sandswap_baseline" "bridge sandswap_baseline" "inet sandswap_baseline" "inet sandswap_routed6"; do
     nft list table $tbl &>/dev/null && {
         nft delete table $tbl 2>/dev/null || true
         echo "  ✓ nftables table $tbl removed"
@@ -267,6 +281,11 @@ for rule in /etc/udev/rules.d/99-sandswap-kvm.rules \
         udev_removed=$((udev_removed + 1))
     fi
 done
+# vhost_vsock/tun boot persistence — written by k8s-host-setup step [3/6]
+# AND by the k8s deploy's host-prep phase (k8s_phase_host_prep in
+# deploy/k8s/deploy-lib.sh), either of which re-asserts it on the next
+# deploy. Same inter-round reset the baremetal tree applies.
+rm -f /etc/modules-load.d/sandswap.conf 2>/dev/null || true
 if [[ $udev_removed -gt 0 ]]; then
     udevadm control --reload-rules 2>/dev/null || true
     echo "  ✓ Removed $udev_removed stale udev rule(s)"
@@ -331,9 +350,20 @@ if [[ -d "$VOL_ROOT" ]]; then
     fi
 fi
 
-# Remove runtime state dirs (including binaries — deploy scripts will re-deploy)
-rm -rf /run/sandswap /run/sandswap-state /var/lib/sandswap 2>/dev/null || true
-echo "  ✓ /run/sandswap + /var/lib/sandswap removed"
+# Remove runtime state dirs (including binaries — deploy scripts will re-deploy).
+# Besides the state dir and the boxout socket dir (/run/sandswap-boxout,
+# deploy-lib's hostDir), remove the harness exclusivity pidfile ONLY when it
+# is stale: a live pidfile is the guard's whole point (a missing file admits
+# a second concurrent run), so a live one is left for its owner.
+rm -rf /run/sandswap /run/sandswap-state /run/sandswap-boxout /var/lib/sandswap 2>/dev/null || true
+if [[ -r /run/sandswap-harness.pid ]]; then
+    read -r _hp _hc < /run/sandswap-harness.pid 2>/dev/null || true
+    if [[ -z "${_hp:-}" ]] || ! kill -0 "$_hp" 2>/dev/null; then
+        rm -f /run/sandswap-harness.pid 2>/dev/null || true
+    fi
+fi
+unset _hp _hc
+echo "  ✓ /run/sandswap* + /var/lib/sandswap removed (stale harness pidfile only)"
 
 # ── 8. Kill any remaining sandswap processes ──────────────────────────
 echo "[8/9] Remaining processes"
@@ -352,7 +382,18 @@ if [[ $killed -gt 0 ]]; then
     # Reload vhost_vsock to free stale CIDs
     modprobe -r vhost_vsock 2>/dev/null || true
     modprobe vhost_vsock 2>/dev/null || true
-    echo "  ✓ Killed $killed process type(s), vhost_vsock reloaded"
+    # The reload recreates /dev/vhost-vsock with the DISTRO default
+    # (root:kvm 0660) and a leftover node is never re-processed by udev —
+    # the deliberately-kept lockdown rule (OWNER=sandvmm 0600) would be
+    # broken until the next host-setup run. Re-trigger udev for the node and
+    # assert the pinned ownership explicitly (k8s-host-setup's doctrine:
+    # never gamble on udev timing).
+    udevadm trigger --action=add --sysname-match=vhost-vsock 2>/dev/null || true
+    if [[ -e /dev/vhost-vsock ]]; then
+        chown sandvmm /dev/vhost-vsock 2>/dev/null || true
+        chmod 0600 /dev/vhost-vsock 2>/dev/null || true
+    fi
+    echo "  ✓ Killed $killed process type(s), vhost_vsock reloaded + re-pinned"
 else
     echo "  ✓ No sandswap processes running"
 fi

@@ -219,6 +219,13 @@ matrix_final_cleanup() {
     fi
     rm -rf /run/sandswap /run/sandswap-state /run/sandswap-boxout 2>/dev/null || true
     ip link del br-sandswap 2>/dev/null || true
+    # The battery owns SANDSWAP_E2E_ROOT: sweep its tree and the loopback NFS
+    # export at battery end — nothing else removes them after the LAST round
+    # (tc_clean_environment only runs at the START of the next suite, so the
+    # volumes data survived forever after the final round). The teardown
+    # refuses the production root and never touches $ROOT/output.
+    ss_e2e_root_teardown || true
+    ss_storage_nfs_teardown || true
 }
 
 # The battery's llm/docker tags: return 10 + a reason on stdout to record

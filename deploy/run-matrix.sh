@@ -161,6 +161,13 @@ matrix_final_cleanup() {
     fi
     rm -rf /run/sandswap /run/sandswap-state /run/sandswap-boxout 2>/dev/null || true
     ip link del br-sandswap 2>/dev/null || true
+    # The cluster row's precondition provisions the loopback NFS export
+    # (ss_storage_nfs_setup); nothing else removes it, so a round that ends
+    # here would leave the export file + backing tree behind. The e2e tree
+    # runs FIRST in a full round, so its teardown cannot cover this.
+    if declare -F ss_storage_nfs_teardown >/dev/null 2>&1; then
+        ss_storage_nfs_teardown || true
+    fi
 }
 
 # ── deploy tree hooks ────────────────────────────────────────────────

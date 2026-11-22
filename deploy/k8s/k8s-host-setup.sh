@@ -422,6 +422,13 @@ if [[ "$VERIFY_ONLY" == "false" ]]; then
     if ! grep -qx vhost_vsock /etc/modules-load.d/sandswap.conf 2>/dev/null; then
         echo "vhost_vsock" >> /etc/modules-load.d/sandswap.conf
     fi
+    # tun: boot-time persistence (the pods' device allow-lists resolve at
+    # cgroup apply, so /dev/net/tun must exist before start; harmless when
+    # built into the kernel).
+    if ! grep -qx tun /etc/modules-load.d/sandswap.conf 2>/dev/null; then
+        echo "tun" >> /etc/modules-load.d/sandswap.conf
+    fi
+    modprobe tun 2>/dev/null || true
     udevadm trigger --action=add --sysname-match='vhost-vsock' 2>/dev/null || true
     if [[ -e /dev/vhost-vsock ]]; then
         chown sandvmm /dev/vhost-vsock 2>/dev/null || true

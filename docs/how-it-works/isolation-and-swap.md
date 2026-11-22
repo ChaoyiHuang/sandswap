@@ -1027,6 +1027,13 @@ The host layout closes what filter code alone cannot:
 - **Per-owner device nodes.** `/dev/vhost-vsock` owner `sandvmm` 0600,
   `/dev/vsock` owner `sandlot` 0600 — each vsock device is reachable by
   exactly the identity that needs it.
+- **Closed unit device policy on the exec sandlot.** The exec units ship
+  `DevicePolicy=closed` with exactly `/dev/kvm`, `/dev/vhost-vsock` and
+  `/dev/net/tun` admitted read-write (plus `ProtectClock=`'s implied
+  `char-rtc r`); the sandlot and its sandvmm children share that cgroup,
+  so the list bounds the device surface should either identity be
+  compromised. Ownership isolation stays with the udev rules above, never
+  this list. Asserted by `security/verify-host-security.sh` (check 13c).
 - **The share root's permissions** (§5.2.3) are the kernel-enforced backstop
   for the filter's class gate.
 - **The sandvmm identity** (§5.2.4) is the backstop for everything else:

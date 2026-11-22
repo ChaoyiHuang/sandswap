@@ -18,11 +18,26 @@
 #   4. Removes TAP devices + bridge + nftables
 #   5. Unmounts overlays
 #   6. Removes config files (/etc/sandswap/)
-#   7. Removes binaries (/usr/local/bin/sandswap-*)
+#   7. Removes binaries (/usr/local/bin/sandswap-* + the guest TCB + the
+#      installed runtime helpers under /usr/local/lib/sandswap/)
 #   8. Removes runtime state (/var/lib/sandswap, /run/sandswap, /var/log/sandswap)
-#   9. Removes systemd units
+#   9. Removes systemd units (+ drop-in dirs + legacy empty slices)
 #  10. Removes udev rules + sysctl + tmpfiles.d (restores device nodes)
 #  11. Removes etcd data (if local etcd)
+# Deliberately KEPT (never removed by this script):
+#   - the service users/groups (sandlot, sandprov, sandvmm, sandserv) — the
+#     identity split is uid-pinned and load-bearing; identity drift is always
+#     fatal, so accounts are never userdel'd (a re-deploy must find the same
+#     uids)
+#   - the host etcd binary (/usr/local/bin/etcd) — a shared toolchain
+#     dependency installed by build/install-deps.sh; only the deployment's
+#     data dir is ours to remove (step 11)
+#   - operator hooks under /usr/local/lib/sandswap/ (e.g. seed-fetch.sh, a
+#     credential helper) — not ours to delete; the deployer removes only the
+#     files it installed (runtime.sh, apply-prov-ownership, guest TCB)
+#   - the operator-installed sandswap-seed-fetch.service (docs/integration/
+#     volume-seed.md instructs the operator to enable it; no deploy path
+#     installs it), so the self-verification below excludes it
 # Usage:
 #   sudo bash deploy/baremetal/uninstall.sh
 #   sudo bash deploy/baremetal/uninstall.sh --keep-data  # keep /var/lib/sandswap volumes
@@ -190,9 +205,11 @@ for rulespec in "-s ${subnet} -j ACCEPT" "-d ${subnet} -m conntrack --ctstate ES
     done
 done
 done
-# Egress identity enabler tables (baseline anti-spoof, routed-ipv6 stamps)
+# Egress identity enabler tables (baseline anti-spoof — all THREE families
+# the sandlot creates: netdev, bridge, inet — plus the routed-ipv6 stamps)
 nft delete table netdev sandswap_baseline 2>/dev/null || true
 nft delete table bridge sandswap_baseline 2>/dev/null || true
+nft delete table inet sandswap_baseline 2>/dev/null || true
 nft delete table inet sandswap_routed6 2>/dev/null || true
 # Binding-region carriers (shm file + bpffs pin)
 rm -f /dev/shm/sandswap-bindings 2>/dev/null || true
@@ -235,33 +252,58 @@ for bin in sandswap-gateway sandswap-sandlot sandswap-sandvmm sandns vsockguardc
 done
 # The shared runtime the installed sandswap-setup-network copy resolves
 # (sandswap-network.service runs it at boot, where the repo tree does not
-# exist). ONLY this file: the operator's own hooks in the same directory
-# (seed-fetch.sh, a credential helper) are not ours to delete.
+# exist). The same rule governs everything here: remove the files the
+# DEPLOYER installed, item by item, and never `rm -rf` the directory — the
+# operator's own hooks in /usr/local/lib/sandswap/ (seed-fetch.sh, a
+# credential helper) are not ours to delete.
 rm -f /usr/local/lib/sandswap/runtime.sh 2>/dev/null || true
+# The prov-side ownership re-assert helper (deploy/baremetal/common.sh
+# installs it beside runtime.sh).
+rm -f /usr/local/lib/sandswap/apply-prov-ownership 2>/dev/null || true
+# The guest TCB (sandswap_install_guest_artifacts installs exactly these
+# three files; a re-deploy re-copies them from output/ in seconds — this is
+# NOT a rebuild). Item-wise delete + rmdir so anything an operator added to
+# the directory survives visibly instead of being silently swept.
+for tcb in vmlinux.bin initramfs.cpio.gz SHA256SUMS; do
+    rm -f "/usr/local/lib/sandswap/guest/$tcb" 2>/dev/null || true
+done
+rmdir /usr/local/lib/sandswap/guest 2>/dev/null || true
 echo "  ✓ Binaries removed"
 
 # ── 8. Remove runtime state ─────────────────────────────────────────
 echo "[8/11] Runtime state"
 if [[ $KEEP_DATA -eq 0 ]]; then
-# follow-up: /var/lib/sandswap may be a bind mount (nosuid,nodev) — unmount
-# it BEFORE removing the tree, or the delete leaves a dangling mount point
-# (and the fstab bind entry would resurrect it empty on next boot).
+# /var/lib/sandswap may be a bind mount (nosuid,nodev) — unmount it BEFORE
+# removing the tree, or the delete leaves a dangling mount point (and the
+# fstab bind entry would resurrect it empty on next boot).
 # The volumes subtree carries its own self-bind (ss_harden_volumes_mount) — a
 # bind on a SUBDIRECTORY is invisible to `mountpoint /var/lib/sandswap`. The
 # CHILD comes off first: while a sub-mount exists the parent bind answers
 # EBUSY, so the reverse order leaves the parent mounted and rm -rf can never
-# remove it (the cleanup.sh retry loop uses the same child-first order). The
-# lazy fallback detaches a wedged backing store; the fstab scrub also drops a
+# remove it. RETRY as a unit (mirrors cleanup.sh): a single-shot umount was
+# observed failing silently at row teardown and the self-bind survived a
+# "clean" uninstall — unmount+delete until the tree is really gone. The lazy
+# fallback detaches a wedged backing store; the fstab scrub also drops a
 # volumes bind line so neither entry resurrects an empty tree on next boot.
-if mountpoint -q /var/lib/sandswap/volumes 2>/dev/null; then
-    umount -R /var/lib/sandswap/volumes 2>/dev/null || umount -l /var/lib/sandswap/volumes 2>/dev/null || true
-fi
-if mountpoint -q /var/lib/sandswap 2>/dev/null; then
-    umount /var/lib/sandswap 2>/dev/null || umount -l /var/lib/sandswap 2>/dev/null || true
-fi
 sed -i -E '\|^[^#]*[[:space:]]/var/lib/sandswap(/volumes)?[[:space:]]+.*[[:space:]]bind|d' /etc/fstab 2>/dev/null || true
+for _attempt in 1 2 3 4 5; do
+    if mountpoint -q /var/lib/sandswap/volumes 2>/dev/null; then
+        umount /var/lib/sandswap/volumes 2>/dev/null \
+            || umount -l /var/lib/sandswap/volumes 2>/dev/null || true
+    fi
+    if mountpoint -q /var/lib/sandswap 2>/dev/null; then
+        umount /var/lib/sandswap 2>/dev/null || umount -l /var/lib/sandswap 2>/dev/null || true
+    fi
     rm -rf /var/lib/sandswap 2>/dev/null || true
+    [[ ! -e /var/lib/sandswap ]] && break
+    sleep 1
+done
+unset _attempt
+if [[ -e /var/lib/sandswap ]]; then
+    echo "  ⚠ /var/lib/sandswap survived removal (still mounted?)"
+else
     echo "  ✓ /var/lib/sandswap removed"
+fi
 else
     echo "  ✓ /var/lib/sandswap kept (--keep-data)"
 fi
@@ -276,9 +318,24 @@ for unit in sandswap-gateway.service sandswap-gateway@.service \
             sandswap-sandns.service \
             sandswap-etcd.service \
             sandswap-network.service \
-            sandswap-sandlot-instance@.service; do
+            sandswap-sandlot-instance@.service \
+            sandswap-vsock-retune.service; do
     rm -f "/etc/systemd/system/$unit" 2>/dev/null || true
 done
+# Drop-in dir: deploy-single-node writes sandprov.conf (merged exec,prov
+# shape) and deploy-egress-enabler writes egress-bpf.conf (bpf-carrier
+# syscall allow) into the sandlot unit's .d/ — every drop-in there is ours,
+# so remove the known files and sweep the directory (rm -f each + rmdir: an
+# operator's own drop-in would block the rmdir and stay visible).
+for dropin in sandprov.conf egress-bpf.conf; do
+    rm -f "/etc/systemd/system/sandswap-sandlot.service.d/$dropin" 2>/dev/null || true
+done
+rmdir /etc/systemd/system/sandswap-sandlot.service.d 2>/dev/null || true
+# Legacy empty slices: units from older deploys carried Slice= directives
+# (none of the current units do), and systemd keeps the implicitly-created
+# system-sandswap-*.slice cgroups loaded forever after the units are gone.
+# Stop them so the daemon-reload below can actually retire them.
+systemctl stop system-sandswap-gateway.slice system-sandswap-sandlot-instance.slice 2>/dev/null || true
 # Generated per-instance units (sims/cluster deploys write these): without this
 # the daemon-reload below keeps them loaded, pointing at now-deleted configs.
 rm -f /etc/systemd/system/sandswap-gateway-*.service 2>/dev/null || true
@@ -387,9 +444,35 @@ remaining_procs=$(pgrep -f "sandswap-sandvm[m]|sandswap-sandlo[t]|sandswap-gatew
 echo "    Remaining processes: $remaining_procs"
 remaining_ports=$(ss -tlnp 2>/dev/null | grep -cE ':(3000|3001|3100|9998|9997) ' || true)
 echo "    Port 3000/3001/3100/9998/9997 in use: $remaining_ports"
+# Processes/ports alone printed a false "Environment is clean" while unit
+# files, drop-in dirs, empty slices and the guest TCB survived (observed
+# after a quick-start uninstall). Verify every artifact class this script
+# owns — all baremetal-owned; the e2e battery root is NOT ours to assert.
+# The operator-installed seed-fetch unit is deliberately kept (see the
+# header) and must not count as residue.
+remaining_units=$(ls -d /etc/systemd/system/sandswap-*.service /etc/systemd/system/sandswap-*.service.d 2>/dev/null \
+    | grep -v '/sandswap-seed-fetch\.service$' | wc -l | tr -d ' ' || true)
+echo "    Remaining unit files / drop-in dirs: $remaining_units"
+remaining_slices=$(systemctl list-units 'system-sandswap-*.slice' --all --no-legend --no-pager 2>/dev/null | grep -c . || true)
+echo "    Loaded sandswap slices: $remaining_slices"
+remaining_libart=0
+for _p in /usr/local/lib/sandswap/guest \
+          /usr/local/lib/sandswap/runtime.sh \
+          /usr/local/lib/sandswap/apply-prov-ownership; do
+    [[ -e "$_p" ]] && remaining_libart=$((remaining_libart + 1))
+done
+echo "    Remaining installed-lib artifacts (guest TCB / runtime helpers): $remaining_libart"
+unset _p
+# Mounts: a surviving nosuid,nodev self-bind on the volumes root outlived a
+# "clean" uninstall verdict (the step-8 single-shot umount failed silently),
+# so the check names it instead of laundering it.
+remaining_mounts=$(grep -cE ' /(var/lib/sandswap|mnt/sandswap)' /proc/mounts 2>/dev/null || true)
+echo "    Remaining sandswap mounts: $remaining_mounts"
 echo ""
-if [[ "$remaining_procs" == "0" && "$remaining_ports" == "0" ]]; then
+if [[ "$remaining_procs" == "0" && "$remaining_ports" == "0" \
+      && "$remaining_units" == "0" && "$remaining_slices" == "0" \
+      && "$remaining_libart" == "0" && "$remaining_mounts" == "0" ]]; then
     echo "  ✓ Environment is clean"
 else
-    echo "  ⚠ Some processes/ports remain - manual cleanup may be needed"
+    echo "  ⚠ Some residue remains - manual cleanup may be needed"
 fi

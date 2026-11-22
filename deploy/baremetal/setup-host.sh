@@ -229,6 +229,17 @@ setup_sandlot() {
         log "vhost_vsock module loaded (persistent via /etc/modules-load.d/)"
     fi
 
+    # tun: same persistence doctrine. DeviceAllow= paths in the sandlot units
+    # resolve at cgroup apply (service start), so /dev/net/tun must already
+    # exist on a network-enabled host — never gamble on the module being
+    # auto-loaded by then. Harmless when tun is built into the kernel.
+    grep -qx tun /etc/modules-load.d/sandswap.conf 2>/dev/null \
+        || echo "tun" >> /etc/modules-load.d/sandswap.conf
+    if [[ ! -e /dev/net/tun ]]; then
+        modprobe tun 2>/dev/null || true
+        log "tun module loaded (persistent via /etc/modules-load.d/)"
+    fi
+
     # Egress identity binding region, bpf carrier — bpffs DAC preparation.
     # Embedded sandlot runs as the sandlot account (with ambient CAP_SYS_ADMIN,
     # which is what lets it BPF_MAP_CREATE + BPF_OBJ_PIN), but the bpffs ROOT

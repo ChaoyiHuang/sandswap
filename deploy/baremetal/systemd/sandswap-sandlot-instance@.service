@@ -7,6 +7,12 @@ After=network-online.target sandswap-network.service
 Wants=sandswap-network.service
 Wants=network-online.target
 ConditionPathExists=/etc/sandswap/sandlot-%i.yaml
+# Same device guards as the main unit: every exec instance needs KVM and
+# vhost-vsock, and DeviceAllow= paths resolve at cgroup apply (service
+# start), so the nodes must exist first. /dev/net/tun is deliberately NOT
+# guarded — a no-network instance (no NetSpec) legitimately has no TAP.
+ConditionPathExists=/dev/kvm
+ConditionPathExists=/dev/vhost-vsock
 StartLimitIntervalSec=120
 StartLimitBurst=5
 
@@ -65,8 +71,19 @@ SystemCallErrorNumber=EPERM
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes
-# ProtectClock installs a device filter inherited by the child VMMs. Admit
-# their required devices; file ownership still separates sandlot and sandvmm.
+# Unit-wide device cgroup allow-list: sandlot and its sandvmm children share
+# this cgroup, so it must cover both — /dev/kvm and /dev/vhost-vsock for
+# sandvmm, /dev/net/tun for TAP create/attach. ProtectClock= merges its
+# implied "char-rtc r" into the list; under the default auto policy a
+# non-empty allow-list already selects allow-list mode (these three entries
+# are what admit the VM devices), and the explicit DevicePolicy=closed keeps
+# that guarantee fail-closed if a drop-in ever clears the list (auto + empty
+# list = allow everything) and makes the posture directly assertable. Never
+# "strict" — it drops the implicit /dev/urandom allowance. Per-identity
+# isolation remains the udev OWNER rules + DAC (vhost-vsock 0600 sandvmm,
+# vsock 0600 sandlot), never this list.
+# See docs/how-it-works/isolation-and-swap.md §5.4.1.
+DevicePolicy=closed
 DeviceAllow=/dev/kvm rw
 DeviceAllow=/dev/vhost-vsock rw
 DeviceAllow=/dev/net/tun rw
