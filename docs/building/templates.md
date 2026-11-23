@@ -94,6 +94,27 @@ What the converter guarantees and enforces:
   (`-templates-dir`, registers overlay). No ref files are written;
   discovery owns registration, and an existing version directory is
   refused (refs are immutable — pick a new version).
+- **The published tree's GROUP is settled** to the gid of the `--out`
+  root (a scan root's group is the deployment's shared group — the grant
+  the template contract rides on), so publishing straight into the scan
+  root needs no manual `chgrp`. `--group NUM|NAME` overrides: a numeric
+  gid is used as-is (prepare on one host for a differently-numbered
+  deployment — take the number from the target's
+  `/etc/sandswap/identity.env`; no local group of that number needs to
+  exist), a name resolves on this host. A settle that cannot run (not
+  root, not a member of the group) is a loud error with the manual
+  `chgrp -R` fix, never a silent skip. When the tree carries entries
+  that rely on the group grant (a file without other-read, or a
+  directory missing other-list/traverse — `/root` 0700, `/etc/shadow`
+  0640 and friends in real distro images), the run prints a warning
+  saying so, including the cross-host re-settle rule. A private
+  `--out` root that is not setgid also earns a warning: the tree is
+  then settled to the invoker's group, and a later copy into the
+  shared scan root does not preserve it. Audit any tree offline with
+  `template-tool validate <dir> --expect-group NUM|NAME`, and a whole
+  store (including template trees registered inside it) with
+  `template-tool check-store <store> --expect-group NUM|NAME`
+  ([Template Contract](../operations/template-contract.md)).
 - **Layers are merged into one tree** bottom→top with OCI whiteout
   (`.wh.<name>`) and opaque-directory (`.wh..wh..opq`) semantics applied —
   `docker save`/`skopeo` archives carry them, Sandswap's own template

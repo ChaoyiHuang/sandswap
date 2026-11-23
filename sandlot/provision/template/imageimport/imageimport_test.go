@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -1200,3 +1201,92 @@ func TestPlatformPolicy(t *testing.T) {
 var _ = errors.Is
 var _ = fmt.Sprintf
 var _ = io.Discard
+
+// TestImportSettlesPublishedGroup pins the group side of the import end to
+// end: the published tree's group-grant-reliant entries (and every other
+// entry whose gid differs) end up on the expected gid, the setuid bit
+// survives the settle, and the reliant warning is emitted. As root a
+// foreign gid exercises the real chgrp path; as a normal user the settle is
+// a no-op onto the caller's own gid (which still must hold).
+func TestImportSettlesPublishedGroup(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "rootfs.tar.gz")
+	entries := append(baseLayerEntries(),
+		tarEntry{name: "root/", typeflag: tar.TypeDir, mode: 0o700},
+		tarEntry{name: "etc/shadow", typeflag: tar.TypeReg, mode: 0o640, data: "shadow"},
+		tarEntry{name: "bin/su", typeflag: tar.TypeReg, mode: 0o4755, data: "su"},
+	)
+	if err := os.WriteFile(p, gz(buildTar(t, entries)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	want := os.Getegid()
+	if os.Geteuid() == 0 {
+		want = 4242 // root can settle onto any gid; a foreign one exercises chgrp
+	}
+	out := t.TempDir()
+	res, err := Import(Options{Src: p, Name: "img", Version: "v1", Out: out, Group: fmt.Sprint(want)})
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	for _, rel := range []string{"root", "etc/shadow", "bin/su"} {
+		fi, err := os.Lstat(filepath.Join(res.Path, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := int(fi.Sys().(*syscall.Stat_t).Gid); got != want {
+			t.Fatalf("%s gid = %d, want %d", rel, got, want)
+		}
+	}
+	su, err := os.Lstat(filepath.Join(res.Path, "bin", "su"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if su.Mode()&os.ModeSetuid == 0 {
+		t.Fatalf("setuid bit lost across the settle: mode = %v", su.Mode())
+	}
+	warned := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "rely on the group grant") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("reliant-entry warning missing: %v", res.Warnings)
+	}
+
+	// Default settle (no --group): the output root's own gid, and — because
+	// a plain t.TempDir is NOT setgid — the warning that a later copy into
+	// the shared scan root does not preserve the group.
+	defOut := t.TempDir()
+	res, err = Import(Options{Src: p, Name: "img", Version: "v3", Out: defOut})
+	if err != nil {
+		t.Fatalf("default-settle Import: %v", err)
+	}
+	ofi, err := os.Stat(defOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defGid := int(ofi.Sys().(*syscall.Stat_t).Gid)
+	sfi, err := os.Lstat(filepath.Join(res.Path, "etc", "shadow"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int(sfi.Sys().(*syscall.Stat_t).Gid); got != defGid {
+		t.Fatalf("default settle gid = %d, want the out root's %d", got, defGid)
+	}
+	setgidWarned := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "is not setgid") {
+			setgidWarned = true
+		}
+	}
+	if !setgidWarned {
+		t.Fatalf("non-setgid output root warning missing: %v", res.Warnings)
+	}
+
+	// --group is meaningless without --out: a push-only run materializes no
+	// local tree. The refusal happens before any network contact.
+	if _, err := Import(Options{Src: p, Name: "img", Version: "v2", Push: "localhost:1/nope", Group: "4242"}); err == nil || !strings.Contains(err.Error(), "group requires out") {
+		t.Fatalf("push-only + group: err = %v, want the 'group requires out' refusal", err)
+	}
+}

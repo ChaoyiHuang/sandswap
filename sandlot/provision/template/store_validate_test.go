@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -632,5 +633,312 @@ func TestValidateStore_SharedLayerReachability(t *testing.T) {
 	}
 	if orphans == 0 {
 		t.Fatalf("expected the shared layer to be reported unreachable, got: %+v", fs)
+	}
+}
+
+// TestValidateStore_GroupGrantAudit covers the store-side wiring of the
+// static group audit (groupaudit.go): a group-grant-reliant entry under
+// layers/ whose gid is not the STORE ROOT's group is an error finding, and
+// re-settling the tree clears it. Root-only — it chowns to a foreign gid
+// (non-root runs skip, same as TestSettleTreeGroup).
+func TestValidateStore_GroupGrantAudit(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (chown to a foreign gid)")
+	}
+	f := newStoreFixture(t)
+	// A reliant entry inside a layer: /etc/shadow-style file, no other-read.
+	victim := filepath.Join(f.layersDir, "local-myapp-v1", "etc-shadow")
+	if err := os.WriteFile(victim, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Skip("no stat_t available")
+	}
+	storeGid, foreign := int(st.Gid), int(st.Gid)+1000
+	if err := os.Chown(victim, -1, foreign); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	gg := findingsByRule(fs, "group-grant")
+	if len(gg) != 1 || gg[0].Severity != SeverityError || gg[0].Path != victim {
+		t.Fatalf("expected one error group-grant finding on %s, got: %+v", victim, gg)
+	}
+	// Re-settling the store's layers clears the finding.
+	if _, err := SettleTreeGroup(f.layersDir, storeGid); err != nil {
+		t.Fatal(err)
+	}
+	fs, err = ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	if len(findingsByRule(fs, "group-grant")) != 0 {
+		t.Fatalf("group-grant findings after settle: %+v", fs)
+	}
+}
+
+// TestValidateStore_GroupGrantAuditSkipsStaging pins that writer-internal
+// staging is never judged by the group audit: a pull in flight keeps its
+// layer under .<layer>.staging-* until the writer has settled it, so a
+// foreign gid there is mid-flight state, not a defect. The SAME wrong gid
+// in a published layer IS a finding.
+func TestValidateStore_GroupGrantAuditSkipsStaging(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (chown to a foreign gid)")
+	}
+	f := newStoreFixture(t)
+	fi, err := os.Stat(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeGid := int(fi.Sys().(*syscall.Stat_t).Gid)
+	foreign := storeGid + 1000
+	// Staging twin of the fixture's layer, carrying the wrong gid on a
+	// reliant entry.
+	staging := filepath.Join(f.layersDir, ".local-myapp-v1.staging-123")
+	if err := os.MkdirAll(filepath.Join(staging, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stg := filepath.Join(staging, "etc", "shadow")
+	if err := os.WriteFile(stg, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(stg, -1, foreign); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	for _, finding := range findingsByRule(fs, "group-grant") {
+		if strings.HasPrefix(finding.Path, staging) {
+			t.Fatalf("group audit judged writer-internal staging: %+v", finding)
+		}
+	}
+	// The same defect in the PUBLISHED layer is still caught.
+	pub := filepath.Join(f.layersDir, "local-myapp-v1", "shadow")
+	if err := os.WriteFile(pub, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(pub, -1, foreign); err != nil {
+		t.Fatal(err)
+	}
+	fs, err = ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	gg := findingsByRule(fs, "group-grant")
+	if len(gg) != 1 || gg[0].Path != pub {
+		t.Fatalf("expected exactly the published entry flagged, got: %+v", gg)
+	}
+}
+
+// TestValidateStore_GroupGrantAuditInStoreTree pins the third audit surface:
+// an absolute layer dir a ref registers INSIDE the store outside layers/ —
+// the shape `template-tool import --out <store>` publishes at
+// <store>/<name>/<version> — is served like a layer tree and gets the same
+// group audit. The same defect in a tree OUTSIDE the store (a flat scan root
+// with its own group) must NOT be judged by check-store.
+func TestValidateStore_GroupGrantAuditInStoreTree(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (chown to a foreign gid)")
+	}
+	f := newStoreFixture(t)
+	fi, err := os.Stat(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeGid := int(fi.Sys().(*syscall.Stat_t).Gid)
+	foreign := storeGid + 1000
+
+	// A in-store template tree, registered by a legal flat ref.
+	tree := filepath.Join(f.store, "inplace", "v1")
+	if err := os.MkdirAll(filepath.Join(tree, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reliant := filepath.Join(tree, "etc", "shadow")
+	if err := os.WriteFile(reliant, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(reliant, -1, foreign); err != nil {
+		t.Fatal(err)
+	}
+	writeRefFile(t, f.refsDir, "inplace_v1.flat.json", map[string]any{
+		"name": "inplace", "version": "v1", "mode": "flat",
+		"layers": []string{tree},
+	})
+	// An OUTSIDE flat scan root with the same defect: check-store must not
+	// judge it (its group may legitimately differ per root).
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outReliant := filepath.Join(outside, "etc", "shadow")
+	if err := os.WriteFile(outReliant, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(outReliant, -1, foreign); err != nil {
+		t.Fatal(err)
+	}
+	writeRefFile(t, f.refsDir, "outside_v1.flat.json", map[string]any{
+		"name": "outside", "version": "v1", "mode": "flat",
+		"layers": []string{outside},
+	})
+
+	fs, err := ValidateStore(f.store, []string{outside})
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	var inStoreFlagged, outsideFlagged bool
+	for _, g := range findingsByRule(fs, "group-grant") {
+		if g.Path == reliant {
+			inStoreFlagged = true
+		}
+		if g.Path == outReliant {
+			outsideFlagged = true
+		}
+	}
+	if !inStoreFlagged {
+		t.Fatalf("in-store template tree not audited: %+v", findingsByRule(fs, "group-grant"))
+	}
+	if outsideFlagged {
+		t.Fatalf("check-store judged a flat scan-root tree outside the store: %+v", findingsByRule(fs, "group-grant"))
+	}
+	// Settling the store's own trees clears the in-store finding.
+	if _, err := SettleTreeGroup(tree, storeGid); err != nil {
+		t.Fatal(err)
+	}
+	fs, err = ValidateStore(f.store, []string{outside})
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	for _, g := range findingsByRule(fs, "group-grant") {
+		if g.Path == reliant {
+			t.Fatalf("in-store finding survived the settle: %+v", g)
+		}
+	}
+}
+
+// TestValidateStore_ExpectedGroupCrossHost pins the cross-host form: a store
+// moved with cp -a from a differently-numbered host is internally consistent
+// (every tree carries the store root's group), so the default audit cannot
+// see the defect — every consumer on THIS host EACCESes. An explicit
+// expected gid must flag the store root and the reliant entries.
+func TestValidateStore_ExpectedGroupCrossHost(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (chown to a foreign gid)")
+	}
+	f := newStoreFixture(t)
+	// The store root itself rides the group grant (the deployment shape:
+	// 2750 setgid, no other bits) and a layer carries a reliant entry.
+	if err := os.Chmod(f.store, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeGid := int(fi.Sys().(*syscall.Stat_t).Gid)
+	reliant := filepath.Join(f.layersDir, "local-myapp-v1", "shadow")
+	if err := os.WriteFile(reliant, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(reliant, -1, storeGid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Default: internally consistent, clean.
+	fs, err := ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	if gg := findingsByRule(fs, "group-grant"); len(gg) != 0 {
+		t.Fatalf("default audit flagged an internally consistent store: %+v", gg)
+	}
+
+	// Cross-host: the target's shared gid differs from the store's.
+	want := storeGid + 1000
+	fs, err = ValidateStoreWithExpectedGroup(f.store, nil, want)
+	if err != nil {
+		t.Fatalf("ValidateStoreWithExpectedGroup: %v", err)
+	}
+	var rootFlagged, entryFlagged bool
+	for _, g := range findingsByRule(fs, "group-grant") {
+		if g.Path == f.store {
+			rootFlagged = true
+		}
+		if g.Path == reliant {
+			entryFlagged = true
+		}
+	}
+	if !rootFlagged {
+		t.Fatalf("store root carrying a foreign group not flagged: %+v", findingsByRule(fs, "group-grant"))
+	}
+	if !entryFlagged {
+		t.Fatalf("reliant layer entry not flagged against the expected gid: %+v", findingsByRule(fs, "group-grant"))
+	}
+
+	// An explicit gid that MATCHES is clean (the override is not a pessimism
+	// switch).
+	fs, err = ValidateStoreWithExpectedGroup(f.store, nil, storeGid)
+	if err != nil {
+		t.Fatalf("ValidateStoreWithExpectedGroup: %v", err)
+	}
+	if gg := findingsByRule(fs, "group-grant"); len(gg) != 0 {
+		t.Fatalf("explicit matching gid flagged: %+v", gg)
+	}
+}
+
+// TestValidateStore_InStoreTreesNotDoubleAudited pins the outermost pruning:
+// when a ref names <store>/outer/v1 and another names a subtree inside it,
+// the defect under the subtree is reported ONCE (the outer tree's audit
+// covers it), not once per ref.
+func TestValidateStore_InStoreTreesNotDoubleAudited(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (chown to a foreign gid)")
+	}
+	f := newStoreFixture(t)
+	fi, err := os.Stat(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeGid := int(fi.Sys().(*syscall.Stat_t).Gid)
+	outer := filepath.Join(f.store, "outer", "v1")
+	nested := filepath.Join(outer, "nested")
+	if err := os.MkdirAll(filepath.Join(nested, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reliant := filepath.Join(nested, "etc", "shadow")
+	if err := os.WriteFile(reliant, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(reliant, -1, storeGid+1000); err != nil {
+		t.Fatal(err)
+	}
+	writeRefFile(t, f.refsDir, "outer_v1.flat.json", map[string]any{
+		"name": "outer", "version": "v1", "mode": "flat", "layers": []string{outer},
+	})
+	writeRefFile(t, f.refsDir, "nested_v1.flat.json", map[string]any{
+		"name": "nested", "version": "v1", "mode": "flat", "layers": []string{nested},
+	})
+	fs, err := ValidateStore(f.store, nil)
+	if err != nil {
+		t.Fatalf("ValidateStore: %v", err)
+	}
+	n := 0
+	for _, g := range findingsByRule(fs, "group-grant") {
+		if g.Path == reliant {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("reliant entry reported %d times, want 1 (nested trees pruned)", n)
 	}
 }

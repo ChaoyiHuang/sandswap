@@ -31,6 +31,20 @@
 #   5. Negatives: arm64 archive refused (x86_64-only policy), corrupt blob
 #      refused (digest), legacy docker-save refused, immutable version
 #      directories, and no destination left behind by a failed import.
+#   6. The group side of the contract: import settles the published
+#      tree's group (numeric --group used as-is cross-host, name resolved
+#      on this host, default = the --out root's gid) with the setuid bit
+#      preserved, the reliant-entry warning, validate --expect-group
+#      (match / foreign-gid error carrying the chgrp fix / unresolvable
+#      name), the push-only + --group refusal, check-store's group
+#      audit (layers/ against the store root's group, writer-internal
+#      staging never judged, in-store template trees audited,
+#      --expect-group catching a whole store moved from a
+#      differently-numbered host), validate over a setgid SCAN ROOT
+#      (inheritance makes the settle a no-op; both leaves audited;
+#      unconsumed top-level dot dirs ignored), and the NON-OWNER audit: a
+#      non-member reports an unlistable subtree exactly once and exits 1,
+#      while the owner's audit of the same tree is clean.
 #
 # The executable companion of Building Templates §2
 # (docs/building/templates.md#21-automated-template-tool-import).
@@ -292,6 +306,270 @@ if find "$T" -name '.wh.*' -print -quit | grep -q .; then
 else
     pass "whiteout markers never materialize (metadata applied, not content)"
 fi
+
+# ══════════════════════════════════════════════════════════════════
+log_section "Phase 3b: Group grant — settle + offline audit (host-side)"
+# ══════════════════════════════════════════════════════════════════
+# The main fixture above is deliberately world-readable (zero entries ride
+# the group grant — the tree's gid never participates in its serving), so a
+# dedicated archive carries the reliant shapes real distro images have:
+# /root 0700 and /etc/shadow 0640 (reliant: a file without other-read, a directory without other-list/traverse)
+# plus a setuid file to prove the settle pass preserves the special bits.
+# Everything here is host-side template-tool work; the stack legs below
+# keep serving the world-readable trees.
+rm -rf "$WORK/gtree" && mkdir -p "$WORK/gtree/root" "$WORK/gtree/etc"
+cp -a "$OUTPUT/rootfs-template/." "$WORK/gtree/"
+echo 'root:*:0:0:root:/root:/bin/sh' > "$WORK/gtree/etc/shadow"
+echo su-body > "$WORK/gtree/bin/su"
+chmod 0700 "$WORK/gtree/root"
+chmod 0640 "$WORK/gtree/etc/shadow"
+chmod 4755 "$WORK/gtree/bin/su"
+pack_layer "$WORK/gtree" "$IMG_OUT/group-layer.tar.gz"
+read -r GR_D GR_S <<< "$(blob "$IMG_OUT/group-layer.tar.gz")"
+GRP_DESC=$(printf '{"mediaType":"%s","digest":"sha256:%s","size":%s}' "$LAYER_GZ_MT" "$GR_D" "$GR_S")
+read -r GRP_D GRP_S <<< "$(image_manifest linux amd64 "$GRP_DESC")"
+write_index "$IMG_OUT/group.tar.gz" "$(manifest_entry "$GRP_D" "$GRP_S" linux amd64)"
+log_step "group-fixture archive built (reliant: /root 0700, /etc/shadow 0640; setuid /bin/su 4755)"
+
+# Cross-host numeric form: gid 4242 exists as no local group anywhere —
+# the NUMBER is the contract, and the import must use it as-is.
+GOUT=$(mktemp -d "$WORK/grp-XXXXXX")
+if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gtest --version v1 --out "$GOUT" --group 4242 >"$WORK/grp-import.log" 2>&1; then
+    pass "import --group 4242 (numeric, no local group of that number) published"
+else
+    fail "import --group 4242 failed: $(head -c 300 "$WORK/grp-import.log")"
+fi
+grep -q "rely on the group grant" "$WORK/grp-import.log" && pass "import warns about the group-grant-reliant entries" || fail "reliant-entry warning missing from the import output"
+for p in root etc/shadow bin/su; do
+    [[ "$(stat -c%g "$GOUT/gtest/v1/$p")" == 4242 ]] && pass "group settle reached $p (gid 4242)" || fail "$p gid is $(stat -c%g "$GOUT/gtest/v1/$p" 2>/dev/null), want 4242"
+done
+[[ "$(stat -c%a "$GOUT/gtest/v1/bin/su")" == "4755" ]] && pass "setuid bit survives the group settle" || fail "setuid lost across the settle: $(stat -c%a "$GOUT/gtest/v1/bin/su" 2>/dev/null)"
+
+if "$IMPORT" validate "$GOUT/gtest/v1" --expect-group 4242 >"$WORK/grp-val.log" 2>&1; then
+    pass "validate --expect-group 4242 passes on the settled tree"
+else
+    fail "validate --expect-group 4242 failed: $(head -c 300 "$WORK/grp-val.log")"
+fi
+if "$IMPORT" validate "$GOUT/gtest/v1" --expect-group 0 >"$WORK/grp-valbad.log" 2>&1; then
+    fail "validate --expect-group 0 (foreign gid) SUCCEEDED"
+elif grep -q "chgrp -R" "$WORK/grp-valbad.log"; then
+    pass "foreign expected gid errors with the manual chgrp -R fix"
+else
+    fail "foreign-gid refusal carries no fix hint: $(head -c 200 "$WORK/grp-valbad.log")"
+fi
+if "$IMPORT" validate "$GOUT/gtest/v1" --expect-group no-such-group-xyz >"$WORK/grp-name.log" 2>&1; then
+    fail "unresolvable group name accepted by validate"
+elif grep -q "does not resolve" "$WORK/grp-name.log"; then
+    pass "unresolvable group name refuses with the numeric-gid hint"
+else
+    fail "unresolvable-name refusal text: $(head -c 200 "$WORK/grp-name.log")"
+fi
+
+# Name form and the default (the --out root's gid): two more publishes.
+GNAME_OUT=$(mktemp -d "$WORK/grpname-XXXXXX")
+if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gname --version v1 --out "$GNAME_OUT" --group root >"$WORK/grpn-import.log" 2>&1 \
+    && "$IMPORT" validate "$GNAME_OUT/gname/v1" --expect-group root >"$WORK/grpn-val.log" 2>&1; then
+    pass "name form: --group root settles, --expect-group root passes"
+else
+    fail "name form failed: $(head -c 200 "$WORK/grpn-import.log")$(head -c 200 "$WORK/grpn-val.log")"
+fi
+GDEF_OUT=$(mktemp -d "$WORK/grpdef-XXXXXX")
+GDEF_GID=$(stat -c%g "$GDEF_OUT")
+if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gdef --version v1 --out "$GDEF_OUT" >"$WORK/grpd-import.log" 2>&1; then
+    pass "default-settle import published (no --group)"
+else
+    fail "default-settle import failed: $(head -c 300 "$WORK/grpd-import.log")"
+fi
+[[ "$(stat -c%g "$GDEF_OUT/gdef/v1/etc/shadow")" == "$GDEF_GID" ]] && pass "default settle lands the --out root's gid on reliant entries" || fail "reliant entry gid $(stat -c%g "$GDEF_OUT/gdef/v1/etc/shadow" 2>/dev/null) != out root gid $GDEF_GID"
+# A private, non-setgid --out root is exactly the flow whose group does not
+# survive a later copy into the shared scan root — the import must say so.
+grep -q "is not setgid" "$WORK/grpd-import.log" && pass "non-setgid --out root earns the copy-does-not-preserve-group warning" || fail "non-setgid --out warning missing: $(head -c 300 "$WORK/grpd-import.log")"
+
+# The one registry-mode corner the CLI must refuse: --group with no --out
+# (a push-only run materializes no local tree, so there is nothing to
+# settle). The refusal is validated before any network contact.
+if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gpush --version v1 --push localhost:1/nope --group 4242 >"$WORK/grp-push.log" 2>&1; then
+    fail "push-only import with --group SUCCEEDED"
+elif grep -q "group requires out" "$WORK/grp-push.log"; then
+    pass "push-only + --group refused (nothing local to settle)"
+else
+    fail "push-only + --group refusal text: $(head -c 200 "$WORK/grp-push.log")"
+fi
+
+# check-store audits layers/ against the STORE ROOT's group. A scratch
+# store (refs/ + layers/) mirrors the deployment shape: the shared group
+# when the identities exist, root otherwise.
+GSTORE=$(mktemp -d "$WORK/grpstore-XXXXXX")
+GSTORE_GID=0
+if getent group "$SS_SHARED_GROUP" >/dev/null 2>&1; then
+    GSTORE_GID=$(getent group "$SS_SHARED_GROUP" | cut -d: -f3)
+    chgrp "$GSTORE_GID" "$GSTORE"
+fi
+mkdir -p "$GSTORE/refs" "$GSTORE/layers/local-gaudit-v1/etc"
+echo secret > "$GSTORE/layers/local-gaudit-v1/etc/shadow"
+chmod 0640 "$GSTORE/layers/local-gaudit-v1/etc/shadow"
+chgrp "$((GSTORE_GID + 1))" "$GSTORE/layers/local-gaudit-v1/etc/shadow"
+if "$IMPORT" check-store "$GSTORE" >"$WORK/grpstore-bad.log" 2>&1; then
+    fail "check-store passed a foreign-gid reliant layer entry"
+elif grep -q "relies on the group grant" "$WORK/grpstore-bad.log"; then
+    pass "check-store flags the foreign-gid reliant entry (against the store root's group)"
+else
+    fail "check-store refusal text: $(head -c 300 "$WORK/grpstore-bad.log")"
+fi
+chgrp -R "$GSTORE_GID" "$GSTORE"
+if "$IMPORT" check-store "$GSTORE" >"$WORK/grpstore-ok.log" 2>&1; then
+    pass "check-store clean after the re-settle"
+else
+    fail "check-store still failing after the re-settle: $(head -c 300 "$WORK/grpstore-ok.log")"
+fi
+
+# check-store must never judge writer-internal staging: a pull in flight
+# keeps its layer under .<layer>.staging-* until the writer has settled it,
+# so a foreign gid there is mid-flight state, not a defect. The SAME wrong
+# gid in a published layer IS a finding (asserted above).
+mkdir -p "$GSTORE/layers/.local-gaudit-v1.staging-123/etc"
+echo midflight > "$GSTORE/layers/.local-gaudit-v1.staging-123/etc/shadow"
+chmod 0640 "$GSTORE/layers/.local-gaudit-v1.staging-123/etc/shadow"
+chgrp "$((GSTORE_GID + 1))" "$GSTORE/layers/.local-gaudit-v1.staging-123/etc/shadow"
+if "$IMPORT" check-store "$GSTORE" >"$WORK/grpstore-stg.log" 2>&1; then
+    pass "check-store skips writer-internal staging (foreign gid there is mid-flight)"
+elif grep -q "group-grant" "$WORK/grpstore-stg.log"; then
+    fail "check-store judged writer-internal staging: $(grep -A1 'group-grant' "$WORK/grpstore-stg.log" | head -2)"
+else
+    fail "check-store with staging present failed for another reason: $(head -c 300 "$WORK/grpstore-stg.log")"
+fi
+rm -rf "$GSTORE/layers/.local-gaudit-v1.staging-123"
+
+# A template tree registered INSIDE the store outside layers/ (the
+# `import --out <store>` shape) is served like a layer tree: its group is
+# audited too. An OUTSIDE flat scan-root tree is NOT judged (its group may
+# legitimately differ per root — `validate --expect-group` covers it).
+mkdir -p "$GSTORE/inplace/v1/etc"
+echo secret > "$GSTORE/inplace/v1/etc/shadow"
+chmod 0640 "$GSTORE/inplace/v1/etc/shadow"
+chgrp -R "$GSTORE_GID" "$GSTORE/inplace"
+chgrp "$((GSTORE_GID + 1))" "$GSTORE/inplace/v1/etc/shadow"
+printf '{"name":"inplace","version":"v1","mode":"flat","layers":["%s"]}' "$GSTORE/inplace/v1" \
+    > "$GSTORE/refs/inplace_v1.flat.json"
+if "$IMPORT" check-store "$GSTORE" >"$WORK/grpstore-tree-bad.log" 2>&1; then
+    fail "check-store passed a foreign-gid reliant entry in an in-store template tree"
+elif grep -q "template tree .*inplace/v1.*relies on the group grant" "$WORK/grpstore-tree-bad.log"; then
+    pass "check-store audits in-store template trees (import --out <store> shape)"
+else
+    fail "in-store tree audit text: $(head -c 300 "$WORK/grpstore-tree-bad.log")"
+fi
+chgrp -R "$GSTORE_GID" "$GSTORE/inplace"
+if "$IMPORT" check-store "$GSTORE" >"$WORK/grpstore-tree-ok.log" 2>&1; then
+    pass "in-store tree clean after the re-settle"
+else
+    fail "in-store tree still failing: $(head -c 300 "$WORK/grpstore-tree-ok.log")"
+fi
+
+# Cross-host: --expect-group supplies the TARGET deployment's number. A
+# store internally consistent on its own gid is unreachable for consumers
+# carrying another — only the external number catches it.
+if "$IMPORT" check-store "$GSTORE" --expect-group "$((GSTORE_GID + 7))" >"$WORK/grpstore-xhost.log" 2>&1; then
+    fail "check-store --expect-group (foreign) passed an internally consistent store"
+elif grep -q "store root carries gid" "$WORK/grpstore-xhost.log"; then
+    pass "check-store --expect-group flags the store root carrying a foreign group (cross-host)"
+else
+    fail "cross-host refusal text: $(head -c 300 "$WORK/grpstore-xhost.log")"
+fi
+if "$IMPORT" check-store "$GSTORE" --expect-group "$GSTORE_GID" >"$WORK/grpstore-xhost-ok.log" 2>&1; then
+    pass "check-store --expect-group matching the store's own group is clean"
+else
+    fail "matching --expect-group failed: $(head -c 300 "$WORK/grpstore-xhost-ok.log")"
+fi
+if getent group "$SS_SHARED_GROUP" >/dev/null 2>&1; then
+    if "$IMPORT" check-store "$GSTORE" --expect-group "$SS_SHARED_GROUP" >"$WORK/grpstore-xhost-name.log" 2>&1; then
+        pass "check-store --expect-group accepts a group NAME (resolved on this host)"
+    else
+        fail "check-store --expect-group by name failed: $(head -c 300 "$WORK/grpstore-xhost-name.log")"
+    fi
+fi
+
+# ── validate over a SCAN ROOT (the deployment shape: a setgid shared
+# root holding <name>/<version> trees) ────────────────────────────────
+# Publishing straight into the scan root is the recommended flow; the
+# audit over the root must cover every leaf and the root itself (2750 =
+# reliant, gid = shared) while ignoring the <name>/ containers (2755).
+GSCAN=$(mktemp -d "$WORK/grpscan-XXXXXX")
+chmod 0755 "$GSCAN"
+GSCAN_ROOT="$GSCAN/scan"
+ss_prepare_shared_dir "$GSCAN_ROOT"
+GSCAN_GID=$(stat -c%g "$GSCAN_ROOT")
+for v in v1 v2; do
+    if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gscan --version "$v" --out "$GSCAN_ROOT" >"$WORK/grpscan-$v.log" 2>&1; then
+        pass "scan-root publish gscan:$v (default settle = root gid $GSCAN_GID, no --group)"
+    else
+        fail "scan-root publish gscan:$v failed: $(head -c 300 "$WORK/grpscan-$v.log")"
+    fi
+done
+# The scan root is a setgid shared dir, so the published trees must have
+# inherited the group at creation: the default settle is a no-op (0 changed)
+# and every reliant entry already carries the root's gid.
+if grep -q "settled the tree's group" "$WORK/grpscan-v1.log"; then
+    fail "setgid scan root publish still needed a settle — inheritance is broken"
+else
+    pass "setgid scan root: trees inherit the group, settle is a no-op"
+fi
+[[ "$(stat -c%g "$GSCAN_ROOT/gscan/v1/root")" == "$GSCAN_GID" ]] && pass "reliant entry inherited the scan root's gid" || fail "reliant entry gid $(stat -c%g "$GSCAN_ROOT/gscan/v1/root"), want $GSCAN_GID"
+# A top-level dot directory is not consumed by the registration scan, so its
+# group must not be judged at all (a root-owned 0700 .junk would otherwise
+# fail the audit on a perfectly healthy scan root).
+mkdir -p "$GSCAN_ROOT/.junk" && chmod 0700 "$GSCAN_ROOT/.junk"
+if "$IMPORT" validate "$GSCAN_ROOT" --expect-group "$GSCAN_GID" >"$WORK/grpscan-val.log" 2>&1; then
+    pass "validate --expect-group over the scan root passes (every leaf + the root; unconsumed .junk ignored)"
+else
+    fail "validate --expect-group over the scan root failed: $(head -c 300 "$WORK/grpscan-val.log")"
+fi
+rmdir "$GSCAN_ROOT/.junk" 2>/dev/null || rm -rf "$GSCAN_ROOT/.junk"
+# Numeric form: the same root audited against a gid the publisher is NOT a
+# member of must report the reliant entries — the cross-host audit case.
+if "$IMPORT" validate "$GSCAN_ROOT" --expect-group 4242 >"$WORK/grpscan-bad.log" 2>&1; then
+    fail "validate --expect-group 4242 over the scan root SUCCEEDED (every leaf is $GSCAN_GID)"
+elif [[ "$(grep -c 'relies on the group grant' "$WORK/grpscan-bad.log")" -ge 4 ]]; then
+    pass "validate --expect-group 4242 over the scan root flags both leaves (reliant entries)"
+else
+    fail "scan-root foreign-gid audit under-reported: $(head -c 300 "$WORK/grpscan-bad.log")"
+fi
+
+# ── Non-owner audit: the identity running validate is not the owner ──
+# A real distro tree carries a 0750 root:root /root. A non-member cannot
+# list it. The audit must REPORT that subtree (unreadable — the contract
+# below it is unjudged) and still exit 1, instead of dying with a bare
+# "permission denied" that tells the operator nothing about the tree.
+# Nobody (65534) is on every Linux host; it is not in the root group.
+GOWN=$(mktemp -d "$WORK/grpown-XXXXXX")
+chmod 0755 "$GOWN"
+if "$IMPORT" import "$IMG_OUT/group.tar.gz" --name gown --version v1 --out "$GOWN" --group 0 >"$WORK/grpown-import.log" 2>&1; then
+    pass "root-owned tree published for the non-owner audit leg"
+else
+    fail "root-owned tree publish failed: $(head -c 300 "$WORK/grpown-import.log")"
+fi
+chmod 0755 "$GOWN/gown" "$GOWN/gown/v1"
+# nobody validates root's tree: expect the tree's own gid (0) so the
+# reachable part is fully judged; the /root subtree is the one it cannot see.
+if setpriv --reuid=65534 --regid=65534 --clear-groups -- "$IMPORT" validate "$GOWN/gown/v1" --expect-group 0 >"$WORK/grpown-val.log" 2>&1; then
+    fail "non-owner validate SUCCEEDED on a tree it cannot fully inspect"
+elif grep -q "cannot be inspected by this identity" "$WORK/grpown-val.log" && grep -q "/root$" "$WORK/grpown-val.log"; then
+    if [[ "$(grep -c 'cannot be inspected' "$WORK/grpown-val.log")" -eq 1 ]]; then
+        pass "non-owner validate reports the unreadable /root exactly once and exits 1"
+    else
+        fail "non-owner validate repeated the unreadable finding: $(grep -c 'cannot be inspected' "$WORK/grpown-val.log")"
+    fi
+else
+    fail "non-owner validate did not produce the unreadable finding: $(head -c 300 "$WORK/grpown-val.log")"
+fi
+# The owner (root) sees the whole tree: zero unreadable findings, and the
+# audit is clean because import settled it to gid 0.
+if "$IMPORT" validate "$GOWN/gown/v1" --expect-group 0 >"$WORK/grpown-root.log" 2>&1; then
+    pass "owner validate of the same tree is clean (unreadable finding is identity-specific)"
+else
+    fail "owner validate failed: $(head -c 300 "$WORK/grpown-root.log")"
+fi
+log_step "group grant: numeric/name/default settle, offline audit, store audit (layers + in-store trees + cross-host), scan root, non-owner audit"
+log_step "group grant: numeric/name/default settle, offline audit, store audit"
 
 # ══════════════════════════════════════════════════════════════════
 log_section "Phase 4: Start stack"

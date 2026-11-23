@@ -45,7 +45,9 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"sandlot/hostbin"
@@ -56,10 +58,16 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   template-tool normalize <dir>   apply the Sandswap template contract in place
   template-tool check <dir>       validate the contract (exit 1 on violations)
-  template-tool validate <dir>    full offline conformance of a template tree:
+  template-tool validate <dir> [--expect-group NUM|NAME]
+                                  full offline conformance of a template tree:
                                   the contract + /bin/sh, skeleton dirs,
                                   volume control files, unsupported entry
-                                  types; a scan root validates every leaf
+                                  types; a scan root validates every leaf;
+                                  --expect-group adds the static group audit
+                                  (entries that rely on the group grant must
+                                  carry the expected gid — numeric form is
+                                  the cross-host contract, a name resolves
+                                  on this host)
   template-tool import <src> --name N --version V [--out DIR] [--push REGISTRY/REPO]
                                   offline conversion of a local OCI image
                                   archive (docker save ≥25, skopeo
@@ -74,7 +82,12 @@ func usage() {
                                   the artifact is mode-agnostic — the
                                   consuming side pulls it as flat or
                                   overlay). Flags: --platform (linux/amd64
-                                  only), --description,
+                                  only), --description, --group NUM|NAME
+                                  (settle the published tree's group — the
+                                  grant the contract rides on; default: the
+                                  gid of the --out root; a numeric gid is
+                                  used as-is for cross-host preparation, a
+                                  name resolves on this host),
                                   --registry-username/-password/-token/
                                   -ca/-cert/-key; the credential flags fall
                                   back to the SANDSWAP_REGISTRY_USERNAME,
@@ -83,10 +96,20 @@ func usage() {
                                   secrets out of the process list).
                                   Whiteouts and opaque dirs applied;
                                   linux/amd64 only
-  template-tool check-store <dir> [--flat-root <dir>]...
+  template-tool check-store <dir> [--flat-root <dir>]... [--expect-group NUM|NAME]
                                   integrity of a template store (refs/ +
                                   layers/): ref identity, layer trust
-                                  boundary, layer presence, orphans;
+                                  boundary, layer presence, orphans, and
+                                  the group audit (layers/, the store root
+                                  and in-store template trees). The group
+                                  audit compares against the store root's
+                                  own group by default; --expect-group
+                                  overrides it with the TARGET deployment's
+                                  shared gid (cross-host: a store moved
+                                  with cp -a from a differently-numbered
+                                  host is internally consistent yet
+                                  unreachable — only an external expected
+                                  number can catch it);
                                   --flat-root is the PROV instance's
                                   -flat-templates path as the refs record it
   template-tool volume-name --prov-config <path> --id <sandfs-id> [--generation current|next] [--fingerprint]
@@ -121,6 +144,9 @@ func main() {
 	// BEFORE the <dir> validation below.
 	if cmd == "import" {
 		os.Exit(importCmd(os.Args[2:]))
+	}
+	if cmd == "validate" {
+		os.Exit(validateCmd(os.Args[2:]))
 	}
 	if cmd == "volume-name" || cmd == "seed-generate" || cmd == "seed-scan" ||
 		cmd == "volume-stamp-read" || cmd == "volume-stamp-write" {
@@ -172,30 +198,145 @@ func main() {
 		}
 		fmt.Fprintln(os.Stderr, "fix: template-tool normalize "+dir)
 		os.Exit(1)
-	case "validate":
-		// A store directory is a category error for this subcommand: the
-		// trees under layers/ are layer fragments, never complete rootfs
-		// trees — validating them would only produce false findings.
-		if template.IsStoreShape(dir) {
-			fmt.Fprintf(os.Stderr, "template-tool: %s carries refs/ + layers/ — it is a template store; use: template-tool check-store %s\n", dir, dir)
-			os.Exit(2)
-		}
-		var findings []template.Finding
-		var err error
-		if template.IsScanRootDir(dir) {
-			findings, err = template.ValidateScanRoot(dir)
-		} else {
-			findings, err = template.ValidateRootfsTree(dir)
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "template-tool: validate %s: %v\n", dir, err)
-			os.Exit(1)
-		}
-		os.Exit(reportFindings("validate", dir, findings))
 	default:
 		usage()
 		os.Exit(2)
 	}
+}
+
+// validateCmd implements `validate <dir> [--expect-group NUM|NAME]`: the full
+// offline conformance pass, plus — with --expect-group — the static group
+// audit from template/groupaudit.go, so a wrong group is caught offline
+// instead of as an EACCES at sandfs create. The walk has to list every
+// directory (the contract rules share the pass), so a tree carrying a
+// 0700 directory owned by another identity can only be audited by its
+// owner or root. The numeric form is the contract (cross-host); a name
+// resolves on this host. Parsed by hand like checkStoreCmd so the
+// directory and flags work in either order.
+func validateCmd(args []string) int {
+	var expectGroup string
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--expect-group" || a == "-expect-group":
+			i++
+			if i >= len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
+				fmt.Fprintln(os.Stderr, "template-tool validate: --expect-group requires an argument (numeric gid, or a group name resolved on this host)")
+				return 2
+			}
+			expectGroup = args[i]
+		case strings.HasPrefix(a, "--expect-group=") || strings.HasPrefix(a, "-expect-group="):
+			expectGroup = a[strings.IndexByte(a, '=')+1:]
+			if expectGroup == "" {
+				fmt.Fprintln(os.Stderr, "template-tool validate: --expect-group requires an argument (numeric gid, or a group name resolved on this host)")
+				return 2
+			}
+		case a == "-h" || a == "--help":
+			usage()
+			return 2
+		case strings.HasPrefix(a, "-") && a != "-":
+			fmt.Fprintf(os.Stderr, "template-tool validate: unknown flag %s\n", a)
+			return 2
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) != 1 {
+		fmt.Fprintln(os.Stderr, "template-tool validate: exactly one directory is required")
+		return 2
+	}
+	dir := rest[0]
+	fi, err := os.Stat(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "template-tool: %v\n", err)
+		return 2
+	}
+	if !fi.IsDir() {
+		fmt.Fprintf(os.Stderr, "template-tool: %s is not a directory\n", dir)
+		return 2
+	}
+	// A store directory is a category error for this subcommand: the trees
+	// under layers/ are layer fragments, never complete rootfs trees —
+	// validating them would only produce false findings.
+	if template.IsStoreShape(dir) {
+		fmt.Fprintf(os.Stderr, "template-tool: %s carries refs/ + layers/ — it is a template store; use: template-tool check-store %s (add --expect-group NUM|NAME for the cross-host form)\n", dir, dir)
+		return 2
+	}
+	var findings []template.Finding
+	if template.IsScanRootDir(dir) {
+		findings, err = template.ValidateScanRoot(dir)
+	} else {
+		findings, err = template.ValidateRootfsTree(dir)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "template-tool: validate %s: %v\n", dir, err)
+		return 1
+	}
+
+	if expectGroup != "" {
+		gid, gerr := template.ResolveGroupSpec(expectGroup)
+		if gerr != nil {
+			fmt.Fprintf(os.Stderr, "template-tool validate: --expect-group: %v\n", gerr)
+			return 2
+		}
+		var audit *template.GroupGrantAudit
+		var aerr error
+		if template.IsScanRootDir(dir) {
+			// Mirror the registration scan's classification: top-level dot
+			// entries, layers/ and refs/ are not consumed, so their groups
+			// must not be judged (the discovery skips exactly these).
+			audit, aerr = template.AuditGroupGrantsSkipping(dir, gid, func(path string, d fs.DirEntry) bool {
+				if filepath.Dir(path) != dir || !d.IsDir() {
+					return false
+				}
+				name := d.Name()
+				return strings.HasPrefix(name, ".") || name == "layers" || name == "refs"
+			})
+		} else {
+			audit, aerr = template.AuditGroupGrants(dir, gid)
+		}
+		if aerr != nil {
+			fmt.Fprintf(os.Stderr, "template-tool: validate %s: group audit: %v\n", dir, aerr)
+			return 1
+		}
+		// A subtree the contract pass already reported as unreadable is not
+		// repeated here; the group audit's own unreachable entries carry the
+		// audit's reach, not a wrong gid.
+		reportedUnreadable := map[string]bool{}
+		for _, f := range findings {
+			if f.Rule == "unreadable" {
+				reportedUnreadable[f.Path] = true
+			}
+		}
+		for _, u := range audit.Unreachable {
+			if reportedUnreadable[u.Path] {
+				continue
+			}
+			findings = append(findings, template.Finding{
+				Path: u.Path, Severity: template.SeverityError, Rule: "unreadable",
+				Detail: fmt.Sprintf("the group audit cannot list this subtree as the current identity (%v): run the audit as the tree's owner or root — the grant below it is unjudged", u.Err),
+			})
+		}
+		for _, p := range audit.WrongGroup {
+			findings = append(findings, template.Finding{
+				Path: p, Severity: template.SeverityError, Rule: "group-grant",
+				Detail: fmt.Sprintf("entry relies on the group grant (a file without other-read, or a directory without other-list/traverse) but its gid is not the expected %d — EACCES for every consuming service identity; fix: chgrp -R %d %s", gid, gid, dir),
+			})
+		}
+		if audit.Reliant > 0 && len(audit.WrongGroup) == 0 && len(audit.Unreachable) == 0 {
+			findings = append(findings, template.Finding{
+				Path: dir, Severity: template.SeverityInfo, Rule: "group-grant",
+				Detail: fmt.Sprintf("%d entries rely on the group grant and all carry the expected gid %d", audit.Reliant, gid),
+			})
+		} else if audit.Reliant == 0 && len(audit.Unreachable) == 0 {
+			findings = append(findings, template.Finding{
+				Path: dir, Severity: template.SeverityInfo, Rule: "group-grant",
+				Detail: "every entry is other-readable/traversable — the group grant is not load-bearing for this tree",
+			})
+		}
+	}
+	return reportFindings("validate", dir, findings)
 }
 
 // reportFindings prints a finding list and returns the exit code: 0 when no
@@ -237,10 +378,24 @@ func reportFindings(cmd, subject string, findings []template.Finding) int {
 // package) so the directory and the flags work in either order.
 func checkStoreCmd(args []string) int {
 	var flatRoots []string
+	var expectGroup string
 	var rest []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--expect-group" || a == "-expect-group":
+			i++
+			if i >= len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
+				fmt.Fprintln(os.Stderr, "template-tool check-store: --expect-group requires an argument (numeric gid, or a group name resolved on this host)")
+				return 2
+			}
+			expectGroup = args[i]
+		case strings.HasPrefix(a, "--expect-group=") || strings.HasPrefix(a, "-expect-group="):
+			expectGroup = a[strings.IndexByte(a, '=')+1:]
+			if expectGroup == "" {
+				fmt.Fprintln(os.Stderr, "template-tool check-store: --expect-group requires an argument (numeric gid, or a group name resolved on this host)")
+				return 2
+			}
 		case a == "--flat-root" || a == "-flat-root":
 			i++
 			if i >= len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
@@ -270,7 +425,16 @@ func checkStoreCmd(args []string) int {
 		return 2
 	}
 	dir := rest[0]
-	findings, err := template.ValidateStore(dir, flatRoots)
+	expectGid := -1
+	if expectGroup != "" {
+		gid, gerr := template.ResolveGroupSpec(expectGroup)
+		if gerr != nil {
+			fmt.Fprintf(os.Stderr, "template-tool check-store: --expect-group: %v\n", gerr)
+			return 2
+		}
+		expectGid = gid
+	}
+	findings, err := template.ValidateStoreWithExpectedGroup(dir, flatRoots, expectGid)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "template-tool: check-store %s: %v\n", dir, err)
 		return 2

@@ -2479,11 +2479,33 @@ type TemplateContractViolation struct {
 // ValidateTemplateTree reports every entry of a template tree that violates
 // the contract (NormalizeTemplateTree would have to change it). Used by the
 // template-tool CLI's --check gate, by flat-template registration (warn), and
-// by the tests that pin the contract. Read-only: never mutates.
+// by the tests that pin the contract. Read-only: never mutates. A subtree the
+// walker cannot enter aborts the whole pass: a tree that cannot be walked
+// must not pass as "conforms" on the strength of the part that was seen.
 func ValidateTemplateTree(root string) ([]TemplateContractViolation, error) {
+	return validateTemplateTree(root, false)
+}
+
+// ValidateTemplateTreeReportingUnreadable is ValidateTemplateTree for the
+// OFFLINE audit (`template-tool validate`): a directory the caller cannot
+// list becomes a violation naming it (the contract cannot be judged under
+// it) instead of aborting, so the operator gets the full picture in one run
+// — including the fact that the tree carries content only its owner can see.
+func ValidateTemplateTreeReportingUnreadable(root string) ([]TemplateContractViolation, error) {
+	return validateTemplateTree(root, true)
+}
+
+func validateTemplateTree(root string, reportUnreadable bool) ([]TemplateContractViolation, error) {
 	var out []TemplateContractViolation
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if reportUnreadable && path != root {
+				out = append(out, TemplateContractViolation{
+					Path:   path,
+					Reason: fmt.Sprintf("cannot be inspected by this identity (%v): run the audit as the tree's owner or root, or the contract below it is unjudged", walkErr),
+				})
+				return nil
+			}
 			return walkErr
 		}
 		if d.Type()&fs.ModeSymlink != 0 {

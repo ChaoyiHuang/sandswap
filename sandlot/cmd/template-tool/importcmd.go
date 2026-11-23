@@ -32,7 +32,7 @@ import (
 // Parsed by hand (not the flag package) so the source path and the flags
 // work in either order — `import <src> --name n` is the natural spelling.
 func importCmd(args []string) int {
-	var name, version, out, platform, push, description string
+	var name, version, out, platform, push, description, group string
 	var username, password, token, caFile, certFile, keyFile string
 	platform = "linux/amd64"
 	var rest []string
@@ -44,6 +44,7 @@ func importCmd(args []string) int {
 		"--platform": &platform, "-platform": &platform,
 		"--push": &push, "-push": &push,
 		"--description": &description, "-description": &description,
+		"--group": &group, "-group": &group,
 		"--registry-username": &username, "-registry-username": &username,
 		"--registry-password": &password, "-registry-password": &password,
 		"--registry-token": &token, "-registry-token": &token,
@@ -109,6 +110,7 @@ func importCmd(args []string) int {
 		Out:         out,
 		Push:        push,
 		Description: description,
+		Group:       group,
 		Auth: template.AuthConfig{
 			Username: username,
 			Password: password,
@@ -147,10 +149,6 @@ func importCmd(args []string) int {
 		fmt.Printf("  output/template-tool validate %s\n", res.Path)
 		fmt.Printf("  flat:    place the tree under the prov instance's -flat-templates scan root\n")
 		fmt.Printf("  overlay: place the tree under the template store (-templates-dir)\n")
-		if os.Geteuid() == 0 {
-			fmt.Printf("  note: the output is root-owned; when it is served by the service identities,\n")
-			fmt.Printf("        apply the deployment's shared-group discipline (chgrp -R <shared group>)\n")
-		}
 	}
 	return 0
 }
