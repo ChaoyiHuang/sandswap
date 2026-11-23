@@ -387,7 +387,7 @@ common case and logs (with counts) whenever it actually removes something.
 - Every VM has its own guest network namespace and its own TAP on the host —
   but the TAPs all plug into ONE shared L2 bridge, so the tenant-to-tenant
   network boundary is the host-side filter set, not the bridge
-  (§5.4.2). Agent A's sockets die with A's processes. The exception is
+  (§5.4.4). Agent A's sockets die with A's processes. The exception is
   **dead-state
   TCP sockets** — `TIME_WAIT`, `FIN_WAIT1/2`, `CLOSE_WAIT`, `LAST_ACK`,
   `CLOSING` — which the kernel keeps after the owning process is gone and
@@ -909,7 +909,7 @@ nothing to take:
   not a whole-tree grant: the share root is traverse-only (no listing) and
   derived names are 2^128, so only paths sandvmm has been handed are
   reachable — the filter, the share-root permissions, and the derived
-  names are what hold (§5.2.2–§5.2.3, §5.4.1).
+  names are what hold (§5.2.2–§5.2.3, §5.4.3).
 - The sandlot (985) still reaches the API sockets through the `--api-gid`
   shared-group grant (0660).
 
@@ -1006,17 +1006,28 @@ the volume root of a flat SandFS is the agent's own filesystem.
 ### 5.4 Layer 4: the host
 
 The outermost layer is the host machine itself, and its rule is that
-nobody is trusted — not even the VMM. Every service lands on a dedicated
-identity with nothing left to take: the service-identity split (sandlot,
-sandserv, sandvmm, sandprov, sandtmpl — the uid table is
-[Deployment Prerequisites](../deployment/prerequisites.md)) is
-load-bearing, and identity drift is always fatal, never warned. The
-warden's vsock port admits the sandlot identity only, enforced by
-[vsockguard](vsockguard.md) (§5.1.4, §5.2.3). What follows are the controls no
-component can weaken from inside: the host-side mount and device controls
-behind the filter, and the tenant network baseline.
+nobody is trusted — not even the VMM. The layer opens with two standing
+identity controls — the service-identity split (§5.4.1) and vsockguard
+(§5.4.2) — and follows with the controls no component can weaken from
+inside: the host-side mount and device controls behind the filter, and
+the tenant network baseline.
 
-#### 5.4.1 The host-side controls behind the filter
+#### 5.4.1 The service-identity split
+
+Every service lands on a dedicated identity with nothing left to take:
+the service-identity split (sandlot, sandserv, sandvmm, sandprov,
+sandtmpl — the uid table is
+[Deployment Prerequisites](../deployment/prerequisites.md)) is
+load-bearing, and identity drift is always fatal, never warned (the
+split at work: §5.2.3–§5.2.4).
+
+#### 5.4.2 vsockguard: the warden-port gate
+
+The warden's vsock port admits the sandlot identity only — not the VMM,
+not any other service — enforced by
+[vsockguard](vsockguard.md) (§5.1.4, §5.2.3).
+
+#### 5.4.3 The host-side controls behind the filter
 
 The host layout closes what filter code alone cannot:
 
@@ -1040,7 +1051,7 @@ The host layout closes what filter code alone cannot:
   capabilities, storage access, and warden reachability are all fixed at
   spawn, not by filter behavior.
 
-#### 5.4.2 The tenant network: one shared bridge, filtered
+#### 5.4.4 The tenant network: one shared bridge, filtered
 
 The network is the one boundary that does NOT come from the tinyVM: every
 VM's TAP is enslaved to one shared host bridge, so without a filter set all
@@ -1084,7 +1095,7 @@ suites, not by inspection:
 | `e2e/seccomp.sh` | the exec profiles live: deny-list, `NO_NEW_PRIVS` + `nosuid` suid neutrality, capability bounds |
 | `e2e/share-root-gate.sh` | the filter as a namespace control, on a real stack: the escape-attempt matrix from inside an exec context (`/proc/1/root`, `..`, mount table, a `find` for the sibling volume — the share root must be unreachable), the agent's own tree still fully usable, the share root's entry set unchanged by a whole agent workload, a sibling volume's sentinel untouched, the running VMM's API surface (a second share is not attachable: no `vm.add-fs` route; `vm.set-fs` still applies), and the dispatch-level tests below run against the same binary |
 | `e2e/mount-identity-race.sh` | the generation-bound mount identity on a live stack: a mount naming a superseded generation's alias is refused (`mount_target_not_exported`) and executes nothing, an unmount naming a different identity answers `MISMATCH` and tears down nothing, `set-fs` never reuses a previous generation's alias, and the stale-mount probe leaves the live tenant's warm exec working |
-| `security/verify-host-security.sh` | the host-side invariants the VM boundary leans on: device ownership, mount hardening, and the network isolation baseline of §5.4.2 (check 12) |
+| `security/verify-host-security.sh` | the host-side invariants the VM boundary leans on: device ownership, mount hardening, and the network isolation baseline of §5.4.4 (check 12) |
 
 Unit-level pins live with the code they pin — the filter's fail-closed
 defaults and share-root class gate, the single-component name rule, the
