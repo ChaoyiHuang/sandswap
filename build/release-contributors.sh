@@ -89,11 +89,15 @@ echo "## Contributors"
 echo ""
 echo "Thanks to everyone who contributed to this release:"
 echo ""
-while IFS= read -r login; do
+# All avatars on ONE line, space-separated: GitHub's renderer turns each
+# newline inside an HTML block into a <br> (one avatar per row); inline
+# flow wraps to the next line automatically when the row is full.
+AVATARS="$(while IFS= read -r login; do
 	[ -n "$login" ] || continue
 	printf '<a href="https://github.com/%s"><img src="https://github.com/%s.png" width="40" height="40" alt="%s"/></a>\n' \
 		"$login" "$login" "$login"
-done <<<"$LOGINS"
+done <<<"$LOGINS" | paste -sd' ')"
+[ -n "$AVATARS" ] && echo "$AVATARS"
 if [ -n "$UNLINKED" ]; then
 	NAMES="$(printf '%s\n' "$UNLINKED" | paste -sd ',' - | sed 's/,/, /g')"
 	echo ""
