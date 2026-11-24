@@ -48,6 +48,7 @@ OCI_REGISTRY_PASS="sandswap-e2e"
 OCI_REGISTRY_HTPASSWD='sandswaptest:$2b$10$W5K3nYLnK0llrUdeXOy6x.VZ.UXoian20FAGp5P5qZyri1hLtVk5a'
 FLAT_DIR=""
 OVERLAY_DIR=""
+IMPORT="$OUTPUT/template-tool"
 OCI_REGISTRY_DATA=""
 OCI_FAILS=0
 fail_() { OCI_FAILS=$((OCI_FAILS+1)); log_error "$1"; }
@@ -346,6 +347,44 @@ if [[ "$PULL_STATUS" == "myapp" ]]; then
 else
     log_error "PullTemplate failed: $PULL_RESP"
     exit 1
+fi
+
+# Registry mode never takes a group input anywhere: materialization ignores
+# the tar's uid/gid and the store's setgid chain assigns the group. Assert
+# the CHAIN, not just the number: layers/ must carry the setgid bit (that is
+# what propagates the group to everything the pull extracts below it) and
+# the re-materialized layer must carry the STORE ROOT's group. In this
+# battery the prov identity's primary gid happens to equal the shared
+# group, so the gid check alone could not tell inheritance from the
+# extractor's own gid — the setgid-bit check is what makes this a real
+# assertion. A PULLED layer is named by digest (sha256-<digest>), unlike
+# the save-as-template local-<ref> name the cache delete above removes, so
+# the layer is located by glob. (The push/import-side settle and the
+# offline audits are covered by oci-template-import.sh Phase 3b.)
+STORE_GID=$(stat -c%g "$OVERLAY_DIR")
+LAYERS_MODE=$(stat -c%a "$OVERLAY_DIR/layers" 2>/dev/null || true)
+if [[ "$LAYERS_MODE" == 2* ]]; then
+    log_pass "layers/ carries the setgid bit ($LAYERS_MODE) — the group-propagating chain the pull relies on"
+else
+    fail_ "layers/ mode ${LAYERS_MODE:-missing} lacks the setgid bit — extracted layers would fall back to the extractor's gid"
+fi
+PULLED_LAYER=$(find "$OVERLAY_DIR/layers" -maxdepth 1 -mindepth 1 -type d -name 'sha256-*' 2>/dev/null | head -1)
+if [[ -z "$PULLED_LAYER" ]]; then
+    fail_ "no digest-named (sha256-*) layer under layers/ after the pull — the pull did not materialize"
+else
+    PULLED_LAYER_GID=$(stat -c%g "$PULLED_LAYER" 2>/dev/null || true)
+    if [[ "$PULLED_LAYER_GID" == "$STORE_GID" ]]; then
+        log_pass "Re-materialized layer carries the store root's group (gid $STORE_GID; setgid chain, tar uid/gid ignored)"
+    else
+        fail_ "Re-materialized layer gid ${PULLED_LAYER_GID:-missing} != store root gid $STORE_GID — the setgid chain broke"
+    fi
+    # The pull-side audit: check-store over the live store must be clean on
+    # the group rule (the pulled layer was normalized + inherited the group).
+    if "$IMPORT" check-store "$OVERLAY_DIR" --flat-root "$FLAT_DIR" >"$LOG_DIR/check-store-pull.log" 2>&1; then
+        log_pass "check-store clean over the live store after the pull (group audit included)"
+    else
+        fail_ "check-store over the live store after the pull: $(head -c 300 "$LOG_DIR/check-store-pull.log")"
+    fi
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -710,8 +749,6 @@ log_section "Phase 11: Imported image template → push → pull (the offline-co
 # layers/local-*). Then the STANDALONE form: the same binary pushes the
 # converted template straight to the registry with credentials on the
 # command line — no gateway, no running stack, no local output.
-IMPORT="$OUTPUT/template-tool"
-[[ -x "$IMPORT" ]] || { fail_ "missing $IMPORT (bash build/build.sh go)"; }
 if [[ -x "$IMPORT" ]]; then
     IMPORT_TAR=$(mktemp /tmp/sandswap-oci-import-src-XXXXXX.tar.gz)
     (cd "$OUTPUT/rootfs-template" && tar -C . -czf "$IMPORT_TAR" .)

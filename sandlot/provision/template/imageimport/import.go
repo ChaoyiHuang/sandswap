@@ -80,6 +80,14 @@ type Options struct {
 	// shipped guest kernel and VMM are x86_64-only, and static validation
 	// cannot catch a wrong-architecture userspace at exec time.
 	Platform string
+	// Group settles the published tree's group (the grant the template
+	// contract rides on): a numeric gid is used AS-IS (cross-host
+	// preparation — the target's number, see its identity.env), a name is
+	// resolved on THIS host, and empty settles to the gid of the Out root
+	// (the directory a scan root watches — its group is the deployment's
+	// shared group, so direct publishing needs no flag at all). Requires
+	// Out; a push-only run materializes nothing locally and never needs it.
+	Group string
 	// Log receives progress lines (nil = silent).
 	Log func(format string, args ...any)
 }
@@ -125,6 +133,9 @@ func Import(opts Options) (*Result, error) {
 	}
 	if opts.Out == "" && opts.Push == "" {
 		return nil, errors.New("out is required (or set push to publish straight to a registry)")
+	}
+	if opts.Group != "" && opts.Out == "" {
+		return nil, errors.New("group requires out (a push-only run materializes no local tree to settle)")
 	}
 	ref := opts.Name + ":" + opts.Version
 	if err := template.ValidateTemplateRef(ref); err != nil {
@@ -218,6 +229,14 @@ func Import(opts Options) (*Result, error) {
 		}
 		res.Path = dst
 		tree = dst
+		// The group settlement closes the template contract's grant on the
+		// published tree (see groupsettle.go). A failure keeps the tree —
+		// refs are immutable — and the CLI reports where it landed.
+		settleWarnings, serr := settlePublishedGroup(dst, opts.Out, opts.Group, logf)
+		res.Warnings = append(res.Warnings, settleWarnings...)
+		if serr != nil {
+			return res, serr
+		}
 	}
 
 	if opts.Push != "" {

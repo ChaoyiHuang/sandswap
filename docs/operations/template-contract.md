@@ -22,7 +22,7 @@ is what makes that possible; it is implemented once, in
 | 1 | **Directories: `g+rx`** (group traverse + list) | the virtio-fs server resolves paths through them; without group traverse every guest read EACCESes |
 | 2 | **Regular files: `g+r` where the owner can read; `g+x` where the owner can execute** | the virtio-fs server performs the guest's reads as its own uid; the group bit is the grant |
 | 3 | setuid/setgid/sticky are preserved as authored | inert host-side (`nosuid,nodev` mounts, storage contract row 9); guest-side semantics (`su`, `umount`) stay intact |
-| 4 | Ownership inside the tree is irrelevant | materialization ignores tar uid/gid; the setgid store assigns the shared group |
+| 4 | Ownership inside the tree is irrelevant | materialization ignores tar uid/gid; the setgid store assigns the shared group. The TREE-level group is load-bearing — see §2.1: normalize grants the bits, the tree must carry the deployment's shared group for them to open anything |
 | 5 | Symlinks: tree-internal relative targets (absolute targets are rewritten at extraction) | extraction containment |
 | 6 | Device/FIFO/socket entries are not supported | inert under `nodev`; no template needs them |
 | 7 | Content that must stay private (SSH private keys, credentials) belongs in `home/` or `workspace/`, **never the read-only rootfs** | rootfs content is necessarily group-readable by the service identities |
@@ -49,7 +49,48 @@ output/template-tool validate /path/to/rootfs
   or OCI registry;
   [Building Templates](../building/templates.md#21-automated-template-tool-import))
   normalizes and validates as part of the conversion — its output needs no
-  extra pass.
+  extra pass. It also **settles the published tree's group** (§2.1 below).
+
+## 2.1 The group grant and cross-host moves
+
+Normalize grants the group BITS (rules 1–2); the grant only opens anything
+when the tree's GROUP is the deployment's shared group — the group of the
+scan root / template store — because the consuming identities (prov copy,
+overlay mount, the FUSE daemon's every guest read) hold that group as a
+supplementary group and are never the tree's owner. Two consequences:
+
+- **Publish straight into the scan root when you can**: the setgid root
+  gives the tree the right group at creation, and `template-tool import`
+  settles any residue (`--group NUM|NAME` overrides; a numeric gid is used
+  as-is, a name resolves on the host you run it on). The one flow that
+  still bites is a private `--out` followed by a privilege-preserving copy
+  (`sudo cp -a`): the invoker's group travels with the tree and every
+  group-grant entry EACCESes at sandfs create (`STORAGE_ERROR`). If you
+  must move a tree between hosts, re-settle it on the target:
+  `chgrp -R <shared gid> <tree>` — **numbers, not names**: group names
+  carry per-host variance while the numbers are the contract (take the
+  target's numbers from its `/etc/sandswap/identity.env`; see also
+  `common/sh/runtime.sh` on fleet-wide identity pinning).
+- **Audit offline**: `template-tool validate <dir> --expect-group NUM|NAME`
+  walks the tree and reports every group-grant-reliant entry — a regular
+  file without other-read, or a directory missing either other-traverse
+  or other-list (the daemon's readdir is every guest `ls`) — whose gid
+  differs from the expected one: error severity, with the exact
+  `chgrp -R` fix in the finding. The walk needs to LIST every directory
+  (the contract rules run on the same pass), so a real distro tree with
+  a `0700 /root` can only be audited by its owner or root — run the
+  audit as the identity that built the tree, or as root; an entry the
+  walk cannot list is reported as `unreadable` (error), never silently
+  skipped. `check-store` runs the same audit over `layers/`, over every
+  template tree a ref registers INSIDE the store (the
+  `import --out <store>` shape), and — with `--expect-group` — over the
+  store root itself, all against the store root's own group by default.
+  A store moved with `cp -a`/`rsync -a` from a differently-numbered host
+  is internally consistent yet unreadable on the target, so pass the
+  TARGET's shared gid: `check-store <store> --expect-group <gid>`
+  (numeric form; a name resolves here). Flat scan-root trees outside the
+  store may carry a different group each — audit them with
+  `validate --expect-group`.
 - `save-template` and OCI template *pulls* are normalized by the prov role itself at
   materialization; when it has to repair a non-conformant artifact it logs a warning naming
   the layer — run `template-tool normalize` on the source to fix it upstream.
@@ -73,6 +114,8 @@ runtime check for a STATIC reason:
 | 5 | the soft skeleton entries `bin etc` resolve to a directory (same chroot semantics as `/bin/sh`; a usr-merge `bin -> usr/bin` is legitimate) | missing → warning; dangling symlink, unresolvable or not a directory → error | these degrade instead of refusing (the busybox hot-bind is skipped, resolv.conf injection is best-effort) — but a dangling link is still unrepairable by the import paths |
 | 6 | `sys/` and `tmp/` exist (same chroot-semantic resolution) | warning | the warden mounts the real proc/dev inside the guest and expects them (empty is fine) |
 | 7 | no device/FIFO/socket entries | warning | unsupported (§1 rule 6); skipped when the template is pushed — a saved layer may carry tenant-planted ones, a hand-built tree should not |
+| 8 | `--expect-group`: every group-grant-reliant entry carries the expected gid — a file without other-read, or a directory missing other-traverse or other-list | wrong gid or an unreachable subtree → error; all reliant entries matching → info | §2.1 — the group is the grant; a reliant entry with a foreign gid is EACCES for every consuming service identity |
+| 9 | the walk can LIST every directory (the contract rules share the pass) | a directory this identity cannot list → `unreadable` error naming it; the contract below it is unjudged | §2.1 — run the audit as the tree's owner or root; a partially inspected tree never passes the gate |
 
 Errors fail the gate (exit 1); warnings and info print but exit 0. Given a
 scan root (`<name>/<version>/` nesting, or a bare `<name>/` rootfs) the tool
@@ -86,6 +129,8 @@ fragments, not complete rootfs trees.
 ```bash
 output/template-tool check-store /var/sandswap/templates \
     --flat-root /var/sandswap/flat-templates
+# cross-host store (moved with cp -a from a differently-numbered host):
+output/template-tool check-store /var/sandswap/templates --expect-group 985
 ```
 
 The offline pass over a template store (`refs/` + `layers/`). Every rule
@@ -104,6 +149,7 @@ defects before a template reaches a consumer:
 | 6 | every named layer exists and is a directory | store-owned relative layer → error; absolute scan-root source → warning (durable ref by design: re-creating the source directory restores the template) | read-time existence (a missing layer hides the ref from listings and fails creation fast) |
 | 7 | recorded OCI layer digests parse; an `oci_layers`-only ref is stored as flat; a ref does not mix `layers` with `oci_layers` | unparseable digest or an OCI-only overlay ref → error; mixed provenance → warning | only the flat creation path consumes `oci_layers`; the overlay mount loader refuses a ref with no local layers |
 | 8 | `layers/` naming (`sha256-<digest>` / `local-<name>-<version>`), orphaned layers, writer debris (staging dirs, publish markers, save locks) | warning / info | reachability-GC inverse; the staging reaper |
+| 9 | static group audit (§2.1): every group-grant-reliant entry under `layers/` and in every template tree a ref registers INSIDE the store (the `import --out <store>` shape) carries the expected group; with `--expect-group` the store ROOT is judged too | error | the group-grant failure class — the FUSE daemon's reads and the overlay mounts; the default expected value is the store root's own group, which cannot catch a whole store moved from a differently-numbered host (internally consistent, unreachable) — hence `--expect-group <target gid>`. Flat scan-root trees (outside the store, each possibly with its own group) are audited by `validate <flat-root> --expect-group` instead; writer-internal staging under `layers/` is never judged (mid-flight state) |
 
 ## 5. What the contract does not require
 

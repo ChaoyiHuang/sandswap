@@ -12,9 +12,12 @@
 package template
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -640,4 +643,107 @@ func TestIsScanRootDir(t *testing.T) {
 	if IsScanRootDir(unrelated) {
 		t.Fatal("directory of unrelated subdirs misdetected as a scan root")
 	}
+}
+
+// TestValidateRootfsTree_UnreadableSubtreeIsReportedNotFatal pins the
+// offline-audit semantics for a tree this identity cannot fully list: the
+// pass must REPORT the unreachable directory (the contract below it is
+// unjudged) and still return every finding about the rest of the tree,
+// instead of dying with a bare "permission denied". Root-only: it drops to
+// nobody for the unreadable leg via a child process.
+func TestValidateRootfsTree_UnreadableSubtreeIsReportedNotFatal(t *testing.T) {
+	// The child leg runs as nobody, so it must be dispatched BEFORE the
+	// root-only skip.
+	if v := os.Getenv("SANDSWAP_TEST_UNREADABLE_CHILD"); v != "" {
+		runUnreadableChild(t, v)
+		return
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("root-only (drops to nobody)")
+	}
+	// One dedicated 0755 base under the system temp dir holds BOTH the
+	// fixture and the child binary: nobody can traverse /tmp (1777) and this
+	// base, which is all the walk needs. t.TempDir() cannot be used here —
+	// its 0700 parents are exactly what nobody must not need, and fixing
+	// them by chmod'ing ancestors would reach /tmp itself.
+	base, err := os.MkdirTemp("", "sandswap-unreadable-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	if err := os.Chmod(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, "tree")
+	makeRootfs(t, dir)
+	// A 0750 directory owned by root:root (contract-conformant — g+rx —
+	// but no other bits, so nobody cannot list it) with a contract-violating
+	// file inside that only root can see.
+	locked := filepath.Join(dir, "root")
+	if err := os.Mkdir(locked, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "secret"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Root: the full pass sees the 0600 file as a contract violation and
+	// reports nothing about reachability.
+	fs, err := ValidateRootfsTree(dir)
+	if err != nil {
+		t.Fatalf("root pass: %v", err)
+	}
+	if got := findingsByRule(fs, "contract"); len(got) != 1 || filepath.Base(got[0].Path) != "secret" {
+		t.Fatalf("root pass: expected exactly the hidden file flagged, got: %+v", got)
+	}
+
+	// nobody: the pass completes, reports the unreadable directory, and
+	// never claims the tree conforms. The test binary lives under go's
+	// build cache (not traversable by nobody), so it is copied into the
+	// same traversable base.
+	bin := filepath.Join(base, "child.test")
+	src, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-test.run=^TestValidateRootfsTree_UnreadableSubtreeIsReportedNotFatal$")
+	cmd.Env = append(os.Environ(), "SANDSWAP_TEST_UNREADABLE_CHILD="+dir)
+	uid, gid := 65534, 65534 // nobody
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("nobody pass failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "CHILD_OK") {
+		t.Fatalf("nobody pass did not report the expected shape:\n%s", out)
+	}
+}
+
+func runUnreadableChild(t *testing.T, dir string) {
+	fs, err := ValidateRootfsTree(dir)
+	if err != nil {
+		t.Fatalf("CHILD_FAIL validate: %v", err)
+	}
+	var reportedLocked, claimsSecret bool
+	for _, f := range fs {
+		if strings.Contains(f.Detail, "cannot be inspected") && filepath.Base(f.Path) == "root" {
+			reportedLocked = true
+		}
+		if filepath.Base(f.Path) == "secret" {
+			claimsSecret = true
+		}
+	}
+	if !reportedLocked {
+		t.Fatalf("CHILD_FAIL unreadable dir not reported: %+v", fs)
+	}
+	if claimsSecret {
+		t.Fatalf("CHILD_FAIL claimed to judge content it cannot see: %+v", fs)
+	}
+	if !hasSeverity(fs, SeverityError) {
+		t.Fatalf("CHILD_FAIL a partially-inspected tree must not exit clean: %+v", fs)
+	}
+	fmt.Println("CHILD_OK")
+	os.Exit(0)
 }

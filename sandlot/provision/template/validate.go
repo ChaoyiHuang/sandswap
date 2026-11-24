@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -81,12 +82,23 @@ func ValidateRootfsTree(root string) ([]Finding, error) {
 	var out []Finding
 
 	// Permission contract (the `check` rules): an off-contract template
-	// reads as EACCES inside every guest.
-	violations, err := ValidateTemplateTree(root)
+	// reads as EACCES inside every guest. The reporting variant: a subtree
+	// this identity cannot list surfaces as a violation naming it, so the
+	// audit never dies on the first 0700 directory owned by someone else.
+	violations, err := ValidateTemplateTreeReportingUnreadable(root)
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range violations {
+		// An unreadable subtree is not a contract violation normalize could
+		// fix — it is a finding about the audit's own reach.
+		if strings.Contains(v.Reason, "cannot be inspected") {
+			out = append(out, Finding{
+				Path: v.Path, Severity: SeverityError, Rule: "unreadable",
+				Detail: v.Reason,
+			})
+			continue
+		}
 		out = append(out, Finding{
 			Path: v.Path, Severity: SeverityError, Rule: "contract",
 			Detail: v.Reason + " (fix: template-tool normalize)",
@@ -114,7 +126,9 @@ func ValidateRootfsTree(root string) ([]Finding, error) {
 	// a hand-built tree should not.
 	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// A subtree this identity cannot list: the contract pass above
+			// already reported it; this pass just skips it.
+			return nil
 		}
 		t := d.Type()
 		if !d.IsDir() && t&fs.ModeSymlink == 0 && !t.IsRegular() {
@@ -484,6 +498,19 @@ func IsScanRootDir(dir string) bool {
 // a peer node or a tampered store can rewrite them. This offline pass finds
 // the same defects before a template ever reaches a consumer.
 func ValidateStore(storeDir string, flatRoots []string) ([]Finding, error) {
+	return ValidateStoreWithExpectedGroup(storeDir, flatRoots, -1)
+}
+
+// ValidateStoreWithExpectedGroup is ValidateStore with an explicit expected
+// gid for the group audit. expectGid < 0 means "the store root's own group"
+// (internal consistency: every served tree must carry the group the store
+// root carries). A non-negative value is the CROSS-HOST form — the target
+// deployment's shared gid — and is the only way to catch a store whose ROOT
+// also carries the wrong group (a store moved with `cp -a`/`rsync -a` from a
+// differently-numbered host: internally consistent, unreadable for every
+// consumer on the target). The numeric form is the contract; a name is
+// resolved by the caller (ResolveGroupSpec).
+func ValidateStoreWithExpectedGroup(storeDir string, flatRoots []string, expectGid int) ([]Finding, error) {
 	// Every layer-boundary comparison pairs layer IDs (which are ABSOLUTE for
 	// the local-template format) with the store root; a relative invocation
 	// ("check-store store2" from its parent) would make filepath.Rel report
@@ -524,6 +551,14 @@ func ValidateStore(storeDir string, flatRoots []string) ([]Finding, error) {
 	// every ref names. Only relative ids count — absolute-path Layers are
 	// local-template source dirs the GC never touches.
 	reachable := map[string]bool{}
+	// inStoreTrees collects the absolute layer dirs that live INSIDE the
+	// store (the local-template shape `import --out <store>` publishes at
+	// <store>/<name>/<version>), mapped to the ref file that names them for
+	// attribution. They are served like layer trees and get the same group
+	// audit; absolute dirs OUTSIDE the store are flat scan-root sources,
+	// whose group may legitimately differ per root (audited with
+	// `validate <dir> --expect-group`).
+	inStoreTrees := map[string]string{}
 
 	if refsErr == nil {
 		if !refsStat.IsDir() {
@@ -549,7 +584,7 @@ func ValidateStore(storeDir string, flatRoots []string) ([]Finding, error) {
 					out = append(out, Finding{Path: path, Severity: SeverityWarning, Rule: "ref-file", Detail: "unexpected entry in refs/ (ref files are <name>_<version>.<mode>.json)"})
 					continue
 				}
-				out = append(out, validateRefFile(storeDir, path, name, flatRoots, reachable)...)
+				out = append(out, validateRefFile(storeDir, path, name, flatRoots, reachable, inStoreTrees)...)
 			}
 		}
 	}
@@ -562,7 +597,139 @@ func ValidateStore(storeDir string, flatRoots []string) ([]Finding, error) {
 		}
 	}
 
+	// Static group audit (groupaudit.go): every tree this store SERVES must
+	// carry the deployment's shared group — normalize guarantees the group
+	// bits, and the grant those bits carry is the shared group, so a
+	// group-grant-reliant entry with a foreign gid is EACCES for the prov
+	// copy, the overlay mount and the FUSE daemon alike. Three surfaces:
+	//
+	//   - layers/ (every overlay layer and pushed flat layer);
+	//   - the store root itself, when an EXPLICIT expected gid is given (the
+	//     cross-host case: a store moved with cp -a from a differently
+	//     numbered host is internally consistent yet unreachable here). Its
+	//     group must not be inferred from itself, which is exactly why the
+	//     expected value has to come from outside;
+	//   - the absolute layer dirs registered by refs that live INSIDE the
+	//     store outside layers/ (the `import --out <store>` tree shape).
+	//
+	// Absolute sources OUTSIDE the store are flat scan-root trees, whose
+	// group may legitimately differ per root: audit those with
+	// `template-tool validate <flat-root> --expect-group NUM|NAME`.
+	gid := expectGid
+	if gid < 0 {
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			gid = int(st.Gid)
+		}
+	}
+	if gid >= 0 {
+		if expectGid >= 0 {
+			// The store root: reliant on the group unless it carries both
+			// other bits (traversal for every consumer, list for the
+			// prov's registration scan).
+			if st, ok := fi.Sys().(*syscall.Stat_t); ok && fi.Mode().Perm()&0o005 != 0o005 && int(st.Gid) != expectGid {
+				out = append(out, Finding{Path: storeDir, Severity: SeverityError, Rule: "group-grant",
+					Detail: fmt.Sprintf("store root carries gid %d, not the expected %d — every consuming identity resolves paths through it; fix: chgrp %d %s", int(st.Gid), expectGid, expectGid, storeDir)})
+			}
+		}
+		if layersErr == nil && layersStat.IsDir() {
+			// Writer-internal staging (.<layer>.staging-*, .<layer>.publishing)
+			// is mid-flight by definition — its modes/groups are settled by
+			// the writer before the rename into place — so the audit must
+			// not judge it (validateLayersDir classifies the same names as
+			// store-debris info for the same reason).
+			audit, aerr := AuditGroupGrantsSkipping(layersDir, gid, func(path string, d fs.DirEntry) bool {
+				name := d.Name()
+				return strings.HasPrefix(name, ".") &&
+					(strings.Contains(name, ".staging-") || strings.HasSuffix(name, ".publishing"))
+			})
+			if aerr != nil {
+				return out, aerr
+			}
+			for _, u := range audit.Unreachable {
+				out = append(out, Finding{Path: u.Path, Severity: SeverityError, Rule: "unreadable",
+					Detail: fmt.Sprintf("the group audit cannot list this layer subtree as the current identity (%v): run check-store as the store's owner or root — the grant below it is unjudged", u.Err)})
+			}
+			for _, p := range audit.WrongGroup {
+				out = append(out, Finding{Path: p, Severity: SeverityError, Rule: "group-grant",
+					Detail: fmt.Sprintf("layer entry relies on the group grant but its gid is not the expected %d — EACCES for every consuming service identity; fix: chgrp -R %d %s", gid, gid, layersDir)})
+			}
+		}
+		for _, tree := range outermostTrees(inStoreTrees) {
+			audit, aerr := AuditGroupGrants(tree, gid)
+			if aerr != nil {
+				return out, aerr
+			}
+			for _, u := range audit.Unreachable {
+				out = append(out, Finding{Path: u.Path, Severity: SeverityError, Rule: "unreadable",
+					Detail: fmt.Sprintf("the group audit cannot list this subtree as the current identity (%v): run check-store as the store's owner or root — the grant below it is unjudged", u.Err)})
+			}
+			for _, p := range audit.WrongGroup {
+				out = append(out, Finding{Path: p, Severity: SeverityError, Rule: "group-grant",
+					Detail: fmt.Sprintf("template tree %s (named by %s) relies on the group grant but its gid is not the expected %d — EACCES for every consuming service identity; fix: chgrp -R %d %s", tree, filepath.Base(inStoreTrees[tree]), gid, gid, tree)})
+			}
+		}
+	}
+
 	return out, nil
+}
+
+// inStoreTreeDir reports whether an absolute layer id names a directory that
+// lives INSIDE the store outside layers/ and the store's structural dirs —
+// the local-template tree shape `import --out <store>` publishes at
+// <store>/<name>/<version>. The store root itself and any ancestor of
+// refs//layers/ are refused: walking them would judge the store's metadata
+// files, which intentionally carry the metadata group (sandtmpl), not the
+// shared group. Missing, symlinked or non-directory paths are left to
+// validateStoreLayerID (which owns the boundary verdict).
+func inStoreTreeDir(storeDir, layerID string) (string, bool) {
+	if !filepath.IsAbs(layerID) {
+		return "", false
+	}
+	p := filepath.Clean(layerID)
+	if !withinRoot(p, storeDir) {
+		return "", false
+	}
+	layersDir := filepath.Join(storeDir, "layers")
+	refsDir := filepath.Join(storeDir, "refs")
+	if p == layersDir || withinRoot(p, layersDir) {
+		return "", false // the layers walk covers it
+	}
+	if withinRoot(refsDir, p) || withinRoot(layersDir, p) || p == refsDir {
+		return "", false // an ancestor of the store's structural dirs
+	}
+	if fi, err := os.Lstat(p); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return "", false
+	}
+	return p, true
+}
+
+// outermostTrees drops nested entries (an outer tree audit covers its
+// subtrees) and returns the kept paths sorted for deterministic findings.
+func outermostTrees(m map[string]string) []string {
+	paths := make([]string, 0, len(m))
+	for p := range m {
+		paths = append(paths, p)
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		if len(paths[i]) != len(paths[j]) {
+			return len(paths[i]) < len(paths[j])
+		}
+		return paths[i] < paths[j]
+	})
+	var out []string
+	for _, p := range paths {
+		nested := false
+		for _, kept := range out {
+			if withinRoot(p, kept) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // maxRefFileBytes bounds how large a ref file may be to be read at all. A
@@ -574,7 +741,7 @@ const maxRefFileBytes = 1 << 20
 // runtime ref loaders enforce: the manager's loadRefFile and the exec
 // sandlot's core.getCachedRefEntry (which keeps its own mirror of the format
 // precisely because it loads ref files without importing this package).
-func validateRefFile(storeDir, path, filename string, flatRoots []string, reachable map[string]bool) []Finding {
+func validateRefFile(storeDir, path, filename string, flatRoots []string, reachable map[string]bool, inStoreTrees map[string]string) []Finding {
 	var out []Finding
 	fail := func(rule, format string, args ...any) {
 		out = append(out, Finding{Path: path, Severity: SeverityError, Rule: rule, Detail: fmt.Sprintf(format, args...)})
@@ -720,6 +887,8 @@ func validateRefFile(storeDir, path, filename string, flatRoots []string, reacha
 		ld := fmt.Sprintf("layer %d (%q)", i, layerID)
 		if !filepath.IsAbs(layerID) {
 			reachable[layerID] = true
+		} else if tree, ok := inStoreTreeDir(storeDir, layerID); ok {
+			inStoreTrees[tree] = path
 		}
 		out = append(out, validateStoreLayerID(storeDir, path, ld, mode, layerID, flatRoots)...)
 	}
