@@ -384,8 +384,18 @@ connections. Business ops use a per-VM pool (up to `exec_slots` resident
 connections, one in-flight request each); each connection's receive timeout
 is re-set per request to the op's duration + 30 s margin (capped at the
 warden countdown), so a wedged connection fails fast instead of
-blocking forever. Heartbeat probes use separate short-lived connections
-(fresh every 3 s) so they never queue behind a long sync exec.
+blocking forever. Heartbeat probes (every 3 s) ride the pool's idle
+connections — one round trip per idle slot, each capped at 2 s — so they
+never queue behind a long sync exec and every idle slot stays inside the
+warden's per-connection idle window (300 s); a slot found dead is
+discarded. The probe dials a fresh short-lived connection when the pool has
+no idle slot, and also when every idle slot failed on the transport (a
+reachability check before the VM is counted as unhealthy). Probing stops
+on entering CLEANING; because the CLEANING + isolation window exceeds the
+warden's 300 s bound, the reconnect path closes the leftover idle pooled
+connections before announcing the node, so the first post-reconnect
+request dials fresh. Wire details:
+[Protocols](../reference/protocols.md).
 
 **Security hardening: vsockguard.** The warden performs **zero
 authentication** on this port — whatever process manages to `connect()` to

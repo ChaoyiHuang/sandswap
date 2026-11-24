@@ -14,6 +14,7 @@ package core
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"sandlot/warden"
 )
@@ -41,6 +42,14 @@ type wardenPool struct {
 	created int                 // connections currently allocated (idle + in use)
 	limit   int
 	closed  bool // VM dying/destroyed: no new dials, releases discard
+
+	// waiters counts goroutines parked in acquire. It is atomic because
+	// keepaliveIdle reads it without p.mu (it must not hold the lock across a
+	// warden round trip). The heartbeat checks it to avoid taking an idle
+	// connection a queued business request is waiting for; the check is
+	// best-effort (a waiter that appears just after it is bounded by the
+	// heartbeat's read timeout), but it removes the common case.
+	waiters atomic.Int32
 
 	// notify is the broadcast channel for capacity changes: closed and
 	// REPLACED under mu whenever any state a parked acquirer waits on changes
@@ -112,16 +121,107 @@ func (p *wardenPool) acquire(ctx context.Context, dial func() (*warden.Client, e
 		// All slots allocated and busy: capture the broadcast channel in the
 		// SAME critical section that observed "no capacity" — any later
 		// capacity change closes it and wakes us to re-evaluate (re-dial,
-		// fail fast on a closed pool, or park again).
+		// fail fast on a closed pool, or park again). Publish the waiter under
+		// the same lock so keepaliveIdle sees it before it can take an idle
+		// connection out from under this request.
 		changed := p.notify
+		p.waiters.Add(1)
 		p.mu.Unlock()
 		select {
 		case c := <-p.idle:
+			p.waiters.Add(-1)
 			return c, func(broken bool) { p.release(c, broken) }, true, nil
 		case <-changed:
+			p.waiters.Add(-1)
 			continue
 		case <-ctx.Done():
+			p.waiters.Add(-1)
 			return nil, nil, false, ctx.Err()
+		}
+	}
+}
+
+// keepaliveIdle runs fn on every idle pooled connection it can take, one at a
+// time, and returns each to the pool (discarding it when fn reports it broken).
+// It never dials, never waits, and never touches a connection a business request
+// holds. Returns how many idle connections fn ran on.
+//
+// Why: the warden closes an authenticated connection that stays silent for
+// POST_DELIVERY_IDLE_TIMEOUT (300s) — any frame resets that timer. The pool's
+// idle connections ARE silent between requests, so after a quiet stretch every
+// pooled slot was closed by the peer without the pool knowing; the next
+// acquire handed a dead connection to the first request, its write failed with
+// EPIPE, and the mount path treats ANY MountAndExec error as "guest mount
+// state unproven" and destroys the VM (commands.go) — a 1–3s rebuild + 503 on
+// the first request after every idle period, per pool VM. Feeding the idle
+// slots the probe loop's existing OP_MEM_STATS heartbeat keeps them inside the
+// warden's window; a slot that is found already dead is discarded here (broken)
+// and the next acquire dials fresh, so the business path never sees it.
+//
+// EVERY idle slot, not one: a pool holds exec_slots connections and the warden
+// closes each one on its own timer, so keeping one alive leaves the others to
+// die — the first multi-slot burst after a quiet stretch would still hit a
+// dead connection. Each slot is taken out of the idle queue, used, and put
+// back BEFORE the next is taken: at most one slot is out of the queue PER CALL,
+// the queue order rotates, and every slot is covered across sweeps. A business
+// acquire that lands mid-sweep sees one slot fewer (with limit=1 that is the
+// whole pool, so acquire parks until this call releases it — the caller bounds
+// that hold with its own read timeout).
+//
+// A parked acquirer is business latency, so keepalive yields to it: when any
+// waiter exists this call stops immediately and leaves the slots to business.
+// The probe caller then sees visited==0 and falls back to a fresh short-lived
+// dial, so the VM heartbeat still goes out. The check is best-effort (waiters
+// is read without p.mu); a waiter that appears just after it is bounded by the
+// heartbeat read timeout.
+//
+// fn runs WITHOUT p.mu held and with its connection out of the idle queue, so
+// it is mutually exclusive with acquire/release by construction (the slot is
+// the correlation — one in-flight request per connection).
+func (p *wardenPool) keepaliveIdle(fn func(c *warden.Client) bool) (visited int) {
+	n := len(p.idle)
+	for i := 0; i < n; i++ {
+		if p.waiters.Load() > 0 {
+			return visited
+		}
+		var c *warden.Client
+		select {
+		case c = <-p.idle:
+		default:
+			return visited
+		}
+		p.release(c, !fn(c))
+		visited++
+	}
+	return visited
+}
+
+// drainIdle closes every idle connection while keeping the pool OPEN. It is the
+// reconnect-path counterpart of reset(): the probe loop stops on entering
+// CLEANING and the warden closes authenticated connections after
+// POST_DELIVERY_IDLE_TIMEOUT (300s), so after the CLEANING + isolation window
+// every surviving idle slot is already peer-closed. Handing one to the first
+// business request would fail the mount RPC and dirty-destroy a healthy VM, so
+// the reconnect path drains the pools before announcing the node; the first
+// acquire then dials fresh.
+//
+// Connections held by an in-flight request are not touched (they are not in the
+// idle queue); their release returns them normally because the pool stays open.
+// Caller must run this while no new business traffic can arrive (before hello).
+func (p *wardenPool) drainIdle() (closed int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for {
+		select {
+		case c := <-p.idle:
+			_ = c.Close()
+			p.created--
+			closed++
+		default:
+			if closed > 0 {
+				p.broadcastLocked() // capacity freed: parked acquirers re-check
+			}
+			return closed
 		}
 	}
 }

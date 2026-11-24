@@ -70,14 +70,15 @@ const (
 	// error and the caller discards the connection.
 	writeTimeout = 30 * time.Second
 
-	// Per-request read-liveness scheme: the SO_RCVTIMEO on the cached warden
+	// Per-request read-liveness scheme: the SO_RCVTIMEO on a pooled warden
 	// connection is re-set before every request to the op's own duration +
-	// margin, so a wedged cached connection (response never arrives while the
-	// transport stays open — heartbeats on separate short-lived connections keep
-	// succeeding, which previously masked it) is detected at ~op_timeout+30s
-	// instead of a fixed 360s. The cap is the warden_countdown (T_warden): a
-	// read longer than that is moot anyway, the warden has already POWER_OFF'd
-	// the VM. At-most-once is preserved: the read is never cut before the op's
+	// margin, so a wedged pooled connection (response never arrives while the
+	// transport stays open — the heartbeat rides the OTHER idle slots or a
+	// fresh fallback connection, so it does not detect a wedge held by an
+	// in-flight request) is detected at ~op_timeout+30s instead of a fixed
+	// 360s. The cap is the warden_countdown (T_warden): a read longer than that
+	// is moot anyway, the warden has already POWER_OFF'd the VM. At-most-once
+	// is preserved: the read is never cut before the op's
 	// own declared timeout, so a legit slow command's response (up to
 	// max_exec_timeout) always fits.
 
@@ -102,7 +103,9 @@ const (
 	//     drop_caches (~8s) → 30s
 	//   - file / async-exec: mount-independent, sub-second → 30s
 	//   - status/kill: registry lookup + log tail → 15s
-	//   - mem_stats: /proc/meminfo read → 5s
+	//   - mem_stats: /proc/meminfo read → 5s (the heartbeat probe overrides
+	//     this with its 2s heartbeatReadTimeout so one pooled round trip stays
+	//     inside the sweep budget; other callers, e.g. pre-warm, use 5s)
 	// Exported so package core (readopt's ResetSurvivorsToClean) can dial a
 	// fresh cleanup connection sized for an unmount.
 	UnmountReadTimeout   = 30 * time.Second
@@ -616,9 +619,9 @@ func DialWithCap(cid uint32, cap time.Duration, key []byte) (*Client, error) {
 	return dial(cid, cap, key)
 }
 
-// DialWithTimeout connects with a custom SO_RCVTIMEO. Used by the heartbeat
-// probe (short timeout, e.g. 2s) so a stuck warden is detected promptly without
-// blocking on the cached connection's wmu lock. The probe sends only MemStats.
+// DialWithTimeout connects with a custom SO_RCVTIMEO. Used by the heartbeat's
+// fresh-dial fallback (heartbeatReadTimeout) so a stuck warden is detected
+// promptly without touching the pool. The probe sends only MemStats.
 func DialWithTimeout(cid uint32, rcvto time.Duration, key []byte) (*Client, error) {
 	return dial(cid, rcvto, key)
 }
@@ -1083,10 +1086,18 @@ func bodyMACFieldValues(op uint8, fields [][]byte) [][]byte {
 	}
 }
 
-// wall time. A CODE_TRANSPORT_ERROR is returned as a TransportError (caller
-// invalidates the connection); other codes are returned for the caller to
-// interpret.
+// roundTripRaw is roundTripRawTimeout with the standard write bound. Thin
+// wrapper so every existing op keeps its write timeout unchanged.
 func (c *Client) roundTripRaw(op uint8, readTimeout time.Duration, fields ...[]byte) (code uint8, exitCode uint8, stdout []byte, stderr string, mounted string, execDurationNs uint64, err error) {
+	return c.roundTripRawTimeout(op, readTimeout, writeTimeout, fields...)
+}
+
+// roundTripRawTimeout sends one request frame and reads one response frame.
+// readTimeout bounds the response read (clamped to the connection's cap);
+// writeTO bounds the request write. A CODE_TRANSPORT_ERROR is returned as a
+// TransportError (caller invalidates the connection); other codes are returned
+// for the caller to interpret.
+func (c *Client) roundTripRawTimeout(op uint8, readTimeout, writeTO time.Duration, fields ...[]byte) (code uint8, exitCode uint8, stdout []byte, stderr string, mounted string, execDurationNs uint64, err error) {
 	if !c.hasSessionKey {
 		return 0, 0, nil, "", "", 0, &TransportError{Op: "auth", Err: errors.New("warden session key not configured")}
 	}
@@ -1110,7 +1121,7 @@ func (c *Client) roundTripRaw(op uint8, readTimeout time.Duration, fields ...[]b
 	copy(frame[10+nonceLen+bodyMACLen:reqHeaderLen], tag[:])
 	copy(frame[reqHeaderLen:], body)
 
-	if err := c.setConnWriteTimeout(writeTimeout); err != nil {
+	if err := c.setConnWriteTimeout(writeTO); err != nil {
 		return 0, 0, nil, "", "", 0, &TransportError{Op: "write", Err: fmt.Errorf("set SO_SNDTIMEO: %w", err)}
 	}
 	if _, err := c.conn.Write(frame); err != nil {
@@ -1299,7 +1310,20 @@ func installPkgs(enabled bool) string {
 // (returned as "avail total" ASCII in the stdout field). Used by sandlot's
 // heartbeat loop to feed the gateway's OOM-B VM reclaim threshold.
 func (c *Client) MemStats() (avail, total uint64, err error) {
-	code, _, stdout, _, _, e := c.roundTrip(opMemStats, memStatsReadTimeout)
+	return c.memStats(memStatsReadTimeout, writeTimeout)
+}
+
+// MemStatsTimeout is MemStats with an explicit timeout for both the request
+// write and the response read. The heartbeat uses it to keep one pooled round
+// trip inside the 2s probe budget instead of inheriting memStatsReadTimeout or
+// the standard 30s write bound; the dial-time read-timeout cap still clamps the
+// read value.
+func (c *Client) MemStatsTimeout(timeout time.Duration) (avail, total uint64, err error) {
+	return c.memStats(timeout, timeout)
+}
+
+func (c *Client) memStats(readTimeout, writeTO time.Duration) (avail, total uint64, err error) {
+	code, _, stdout, _, _, e := c.roundTripTimeout(opMemStats, readTimeout, writeTO)
 	if e != nil {
 		return 0, 0, e
 	}
@@ -1345,6 +1369,18 @@ func encodeBody(fields [][]byte) []byte {
 func (c *Client) roundTrip(op uint8, readTimeout time.Duration, fields ...[]byte) (code uint8, exitCode uint8, stdout, stderr string, execDurationNs uint64, err error) {
 	var stdoutB []byte
 	code, exitCode, stdoutB, stderr, _, execDurationNs, err = c.roundTripRaw(op, readTimeout, fields...)
+	if err != nil {
+		return 0, 0, "", "", 0, err
+	}
+	return code, exitCode, string(stdoutB), stderr, execDurationNs, nil
+}
+
+// roundTripTimeout is roundTrip with an explicit write timeout. The heartbeat
+// uses it so a warden that stops reading cannot pin a pooled slot for the full
+// standard write bound. The read timeout is clamped at the dial cap as usual.
+func (c *Client) roundTripTimeout(op uint8, readTimeout, writeTO time.Duration, fields ...[]byte) (code uint8, exitCode uint8, stdout, stderr string, execDurationNs uint64, err error) {
+	var stdoutB []byte
+	code, exitCode, stdoutB, stderr, _, execDurationNs, err = c.roundTripRawTimeout(op, readTimeout, writeTO, fields...)
 	if err != nil {
 		return 0, 0, "", "", 0, err
 	}

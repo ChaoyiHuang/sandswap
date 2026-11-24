@@ -50,6 +50,32 @@ func (h *Handler) acquireWarden(ctx context.Context, state *VMState) (*warden.Cl
 	}, nil
 }
 
+// DrainIdleWardenConns closes every VM's idle pooled warden connections while
+// leaving the pools open. The reconnect path calls it after a probe stop
+// (CLEANING) and before the NodeHello: the probe loop is the only heartbeat,
+// the warden closes authenticated connections after POST_DELIVERY_IDLE_TIMEOUT
+// (300s), and the CLEANING + isolation window is longer than that. Every idle
+// slot is therefore already peer-closed by reconnect, and handing one to the
+// first request would fail the mount RPC and dirty-destroy a healthy VM. After
+// the drain the first acquire dials fresh.
+//
+// Must run while no new business traffic can arrive (BeforeHello); connections
+// held by an in-flight request are not in the idle queue and are returned
+// normally on release because the pool stays open. Returns the number of
+// connections closed.
+func (h *Handler) DrainIdleWardenConns() (closed int) {
+	h.mu.RLock()
+	states := make([]*VMState, 0, len(h.vms))
+	for _, st := range h.vms {
+		states = append(states, st)
+	}
+	h.mu.RUnlock()
+	for _, st := range states {
+		closed += st.wardenPoolFor().drainIdle()
+	}
+	return closed
+}
+
 // isWardenTransportErr reports whether err is a vsock transport error (the
 // connection is unusable — the borrowed slot must be released broken=true so
 // the pool discards it instead of handing a wedged socket to the next op).
@@ -111,7 +137,9 @@ func (h *Handler) waitWardenReady(ctx context.Context, cid uint32, sessionKey st
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
-		if _, _, err := h.probeVM(cid, sessionKey); err == nil {
+		// Boot path: the slot pool does not exist yet, and readiness means a
+		// fresh dial + version-checked round trip — never a pooled slot.
+		if _, _, err := h.probeDialed(cid, sessionKey); err == nil {
 			return nil
 		} else {
 			lastErr = err

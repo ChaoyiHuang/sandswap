@@ -1938,8 +1938,10 @@ func (h *Handler) registerReadyVM(vm *vmm.RunningVM, cfg vmm.Config, specID stri
 	// connection that stays silent for FIRST_FRAME_TIMEOUT (30s), and a
 	// pre-warmed slot can sit idle past that before its first business request
 	// (e.g. a pool VM created long before its first exec). After this one
-	// round trip the connection is established and may idle indefinitely
-	// between ops, like every other pooled slot.
+	// round trip the connection is established and stays alive between ops
+	// while the probe loop heartbeats the idle slots; the reconnect path
+	// drains it if the probe was stopped through CLEANING/isolation, which is
+	// longer than the warden's 300s per-connection idle bound.
 	state.wardenPoolFor().warmup(func() (*warden.Client, error) {
 		c, err := h.dialWardenRetry(vm.GuestCID, cfg.WardenSessionKey, 5*time.Second)
 		if err != nil {

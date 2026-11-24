@@ -157,11 +157,22 @@ func RunNode(ctx context.Context, opts RunOptions) {
 		saveCleanupState(handler.SandboxRoot, cleanupState, provOnly)
 		logger.Printf("restarted with possibly-held mounts and no persisted outage; anchoring TOLERATING now (tolerance %ds)", res.ToleranceSec)
 	}
+	// probeStopped records that the probe loop was stopped for a resilience
+	// phase (CLEANING/DONE). The warden closes authenticated connections after
+	// POST_DELIVERY_IDLE_TIMEOUT (300s) and the CLEANING + isolation window is
+	// longer than that, so every idle pool slot is already peer-closed by the
+	// time this node reconnects. BeforeHello drains the pools before the
+	// NodeHello so the first business acquire dials fresh instead of failing
+	// the mount RPC on a dead slot and dirty-destroying a healthy VM. Only the
+	// stop paths set it: a short TOLERATING blip never stops the probe and
+	// keeps its live slots.
+	probeStopped := false
 	if cleanupState.Phase != "" {
 		logger.Printf("resuming resilience phase %q (disconnected %s ago)",
 			cleanupState.Phase, time.Since(cleanupState.DisconnectTime).Round(time.Second))
 		if cleanupState.Phase == CleanupPhaseCleaning || cleanupState.Phase == CleanupPhaseDone {
 			handler.StopProbeLoop()
+			probeStopped = true
 		}
 	}
 
@@ -188,6 +199,7 @@ func RunNode(ctx context.Context, opts RunOptions) {
 				cleanupState = CleanupState{Phase: CleanupPhaseCleaning, DisconnectTime: cleanupState.DisconnectTime}
 				saveCleanupState(handler.SandboxRoot, cleanupState, provOnly)
 				handler.StopProbeLoop()
+				probeStopped = true
 				logger.Printf("stream tolerance expired; entering CLEANING (budget %ds)", res.CleanupSec)
 				continue
 			}
@@ -305,6 +317,20 @@ func RunNode(ctx context.Context, opts RunOptions) {
 				wcancel()
 				if !provOnly {
 					handler.ResetSurvivorsToClean(ctx, time.Now().Add(time.Duration(res.CleanupSec)*time.Second))
+					if probeStopped {
+						// The probe was stopped through CLEANING/isolation, which
+						// is longer than the warden's 300s per-connection idle
+						// bound: every idle pool slot is already peer-closed.
+						// Close them before the NodeHello so the first business
+						// acquire dials fresh instead of failing the mount RPC
+						// on a dead slot and dirty-destroying a healthy VM.
+						// Runs after ResetSurvivorsToClean so a connection
+						// returned by the re-adopt redial is included too.
+						if n := handler.DrainIdleWardenConns(); n > 0 {
+							logger.Printf("reconnect: closed %d idle warden connection(s) left over from the probe stop before announcing the node", n)
+						}
+						probeStopped = false
+					}
 				}
 				// Overlay sweep at reconnect: tracked overlays whose volume no
 				// longer needs one (.template gone — sandfs deleted, or
