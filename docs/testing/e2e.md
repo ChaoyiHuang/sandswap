@@ -121,9 +121,16 @@ ownership-reclamation gate), 200 on `/human/*`+`/stats`+`/metrics` with
 the right scopes, `/health` stays open, an OIDC token never authorizes
 the exec plane, the write path provisions an agent through the admin
 scope, and a live signing-key rotation verifies the JWKS force-refresh
-(unknown kid) and the old-key grace merge — no restart. Docker (or the
-image pull) absent → loud SKIP, exit 0 — the same external-dependency
-treatment the runner gives LLM-key scripts. No KVM, no root.
+(unknown kid) and the old-key grace merge — no restart. A seeded identity
+snapshot also pins the namespaced **tenant response projection** over real
+HTTP: tenant get/list must omit `rootfs_path`/`volume_epoch` (and agent
+credential material), while the unscoped fleet surface keeps the storage
+fields, and the operator-only `rootfs-path`/`save-template` routes refuse a
+human-only token. The namespaced CREATE response is pinned by the handler
+unit suite (a live create needs a prov instance, which this suite does not
+run). Docker (or the image pull) absent → loud SKIP,
+exit 0 — the same external-dependency treatment the runner gives LLM-key
+scripts. No KVM, no root.
 
 ## 3. Unit suites and static gates inside the runner
 

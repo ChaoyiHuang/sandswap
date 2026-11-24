@@ -159,8 +159,12 @@ curl -sS -X POST "$GW/human/ns/acme/sandfs" \
 Rule 1 (path grant): a namespace not in the caller's `sandswap_ns` claim is
 `403 NAMESPACE_FORBIDDEN`. Rule 2 (record match): a cross-namespace id is a
 uniform `404` — no enumeration oracle. The unscoped fleet-wide routes
-require the `*` grant (`403 FLEET_SCOPE_REQUIRED` otherwise). The full
-model: [Namespaces](../how-it-works/namespaces.md).
+require the `*` grant (`403 FLEET_SCOPE_REQUIRED` otherwise). Tenant
+SandFS responses omit the storage-side fields (`rootfs_path`,
+`volume_epoch`) and agent list/discovery responses never carry credential
+material (the plaintext `api_key` appears once, on create); the fleet
+surface keeps the storage fields. The full model:
+[Namespaces](../how-it-works/namespaces.md).
 
 ## 8. Day-2 operations from the control plane
 

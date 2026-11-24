@@ -71,8 +71,9 @@ namespace-addressable; their own scope rules (`sandswap:human` /
 /human/{agent,sandfs}…          the unscoped surface = fleet (admin) shape
 ```
 
-Everything on the namespaced surface behaves byte-identically to its
-unscoped twin **except** for the two rules and create-time stamping:
+Everything on the namespaced surface behaves like its unscoped twin
+**except** for the two rules, create-time stamping, and the tenant response
+projection:
 
 - `POST /human/ns/{ns}/agent` stamps `namespace = {ns}` on the new agent.
 - `POST /human/ns/{ns}/sandfs` requires the named agent to sit in `{ns}`
@@ -80,6 +81,22 @@ unscoped twin **except** for the two rules and create-time stamping:
   namespace, frozen for its lifetime. A SandFS can never sit in a different
   namespace than its agent — the pair is immutable, and the request body
   carries no namespace field to disagree with.
+- SandFS **responses carry no storage-side fields**: `rootfs_path` (the host
+  volume directory — the operator's storage layout) and `volume_epoch` (the
+  mount-identity secret that rides the cold-mount stamp) are omitted from
+  the namespaced create, get, list and lifecycle responses. The unscoped
+  fleet surface still returns them (it is the documented admin contract).
+  The tenant view is a strict **allow-list projection** of the same record:
+  a field added to the record does not reach a tenant until it is classified
+  and projected, and the projection test fails on drift.
+- Agent responses are likewise tenant-metadata only (`agent_id`, `name`,
+  `description`, `created_at`, `namespace`); the create response additionally
+  returns the new credential's plaintext `api_key` exactly once, and
+  `api_key_hash` is never serialized on any surface.
+- The storage-plane maintenance and template-capture routes stay
+  operator-only even inside a namespace: `rootfs-path` and `save-template`
+  answer a human-only tenant token with `403` (`TEMPLATE_OPS_REQUIRED` for
+  the capture route).
 
 Namespace names follow a DNS-label grammar — lowercase first letter,
 letters/digits/hyphens inside, no leading/trailing hyphen, ≤ 63 chars
@@ -151,5 +168,7 @@ in the picture — execution auth remains key-scoped.
   [Human API — Namespaces](../reference/human-api.md#namespaces)
 - Gateway authn configuration: [Gateway configuration](../operations/configuration/gateway.md)
 - Live IdP provisioning + enforcement matrix: `e2e/oidc-keycloak.sh`
-- Enforcement unit pins: `gateway/handler/namespace_test.go`,
+- Enforcement + projection unit pins: `gateway/handler/namespace_test.go`,
+  `gateway/handler/namespace_internal_test.go`,
   `gateway/authn/namespace_test.go`, `gateway/identity/namespace_test.go`
+- Tenant-projection e2e: `e2e/oidc-keycloak.sh` (Phase 3c, seeded records)

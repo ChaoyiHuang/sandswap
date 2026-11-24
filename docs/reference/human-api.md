@@ -75,7 +75,7 @@ Scopes are bucketed by blast radius (`-authn-scope-human` /
 | `sandswap:admin` | The unscoped credential-minting surface: `/human/agent` and `/human/agent/{agent_id}`. |
 | `sandswap:admin` | `/human/agent*` (credential minting) and the same template-creation surface as ops. |
 | `sandswap:ops` | `/stats`, `/metrics`, `/human/ownership/*`, `/human/maintenance`, `/human/rotation`, `/human/agent*`, `POST /human/sandfs/{id}/rootfs-path` (and its `/human/ns/{ns}/…` twin), and template CREATION/mutation: `POST /human/templates/{ref}` (pull), `.../push`, `DELETE /human/templates/{ref}`, plus `POST /human/sandfs/{id}/save-template`. |
-| `sandswap:human` | SandFS CRUD, the whole `/human/ns/{ns}/…` subtree (including namespaced agent creation), and `GET /human/templates` (list only). Namespace users enumerate and USE the ops-provided templates to create sandfs/agents; they do not create templates. The volume repoint `/rootfs-path` is NOT human scope — it is ops/admin on both surfaces. |
+| `sandswap:human` | SandFS CRUD, the whole `/human/ns/{ns}/…` subtree (including namespaced agent creation), and `GET /human/templates` (list only). Namespace users enumerate and USE the ops-provided templates to create sandfs/agents; they do not create templates. The volume repoint `/rootfs-path` and template capture `save-template` are NOT human scope — they are ops/admin on both surfaces. Namespaced SandFS create/get/list/lifecycle responses omit `rootfs_path` and `volume_epoch` (the fleet surface keeps them; see [Tenant response projection](#namespaces)). |
 
 **Scope hierarchy (production).** A human-only (`sandswap:human`) token is a
 namespace user: it cannot reach any ops/admin endpoint — the route gate and
@@ -136,7 +136,11 @@ respect four rules:
    owner with "no owner = invisible".
 3. **Response shapes are append-only.** Consumers parse
    `{agent_id, api_key}` and `{sandfs_id, rootfs_path}` — field renames or
-   removals break the suite's assertions; additive fields are fine.
+   removals break the suite's assertions; additive fields are fine. The
+   namespaced tenant surface is the documented exception: it is an
+   allow-listed projection that deliberately omits storage-side fields
+   ([Tenant response projection](#namespaces)), and the unscoped fleet
+   surface keeps the historical shape.
 4. **Auth stays opt-in, but its absence is now ACKNOWLEDGED.** Deploy-generated
    configs keep authn off — carried by an explicit `allow_anonymous` /
    `-allow-anonymous-human` (the shipped systemd units and k8s manifests pass
@@ -536,8 +540,23 @@ routes one level deeper. Full model and rules:
 | `GET` | `/human/ns/{ns}/sandfs` | Paginated listing of `{ns}`'s SandFS only. |
 | `GET` | `/human/ns/{ns}/sandfs/{sandfs_id}` | 404 unless the record sits in `{ns}` (uniform `{"error": "sandfs not found"}`). |
 | `DELETE` | `/human/ns/{ns}/sandfs/{sandfs_id}` | Same gate; then the normal delete (drain → volume+record). |
-| `POST` | `/human/ns/{ns}/sandfs/{sandfs_id}/detach-template` · `/attach-template` · `/swap-template` · `/save-template` | Same gate, then the unscoped twin's behavior verbatim. |
+| `POST` | `/human/ns/{ns}/sandfs/{sandfs_id}/detach-template` · `/attach-template` · `/swap-template` | Same gate, then the unscoped twin's behavior verbatim. |
+| `POST` | `/human/ns/{ns}/sandfs/{sandfs_id}/save-template` | Namespace gate **plus `sandswap:ops`/`sandswap:admin`** — capturing a sandfs as a cluster template is an operator workflow. A human-only token gets `403 TEMPLATE_OPS_REQUIRED`. |
 | `POST` | `/human/ns/{ns}/sandfs/{sandfs_id}/rootfs-path` | Namespace gate **plus `sandswap:ops`/`sandswap:admin`** — the repoint is a storage-plane maintenance operation. A human-only token gets `403`. |
+
+**Tenant response projection.** Namespaced SandFS create, get, list and
+lifecycle (`detach`/`attach`/`swap`) responses carry tenant metadata only:
+`sandfs_id`, `agent_id`, `name`, `description`, `template`, `mode`,
+`min_vcpus`, `min_memory_mb`, `created_at`, `status`, `namespace` (plus
+`pull_status` on create). The storage-side fields **`rootfs_path`** (the host
+volume directory — the operator's storage layout) and **`volume_epoch`** (the
+mount-identity secret that rides the cold-mount stamp) are omitted. The
+unscoped fleet surface keeps both — they are its documented admin contract.
+The projection is an allow-list enforced by
+`gateway/handler/namespace_internal_test.go`: a field added to the record
+must be classified as tenant-visible or admin-only before it reaches a
+tenant. Agent list responses never carry `api_key`/`api_key_hash`; the
+create response returns the new plaintext `api_key` exactly once by design.
 
 Namespace names: DNS-label shape (`ValidNamespace` in `gateway/identity` —
 lowercase first letter, letters/digits/hyphens, no leading/trailing hyphen,
