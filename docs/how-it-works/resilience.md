@@ -993,16 +993,21 @@ Further points:
 **The stuck-connection blind spot (per-request read timeouts)**: business
 uses a **per-VM connection pool** (at most `exec_slots` resident
 connections per VM, one in-flight request each — raw vsock frames carry no
-correlation ID, the slot itself is the correlation key), while heartbeat
-probes use **independent short-lived connections** (fresh every 3s, 2s
-timeout). One blind spot remained: if a pooled connection wedges (written
-to, never answered) while the warden still accepts new connections,
-heartbeats keep succeeding and keep resetting the countdown → a stuck
-request takes very long to surface. Fix: each pooled connection's
-`SO_RCVTIMEO` is set **before every request, sized to that op's duration** —
-execs use the request's timeout + 30s margin (default 180s exec → 210s),
-clamped overall at T_warden (300s); non-exec ops use fixed defaults
-(unmount/file 30s, status/kill 15s, mem_stats 5s). A wedge surfaces at
+correlation ID, the slot itself is the correlation key). Heartbeat probes
+ride the pool's **idle** slots (one `OP_MEM_STATS` round trip per idle
+slot, each capped at 2s) and fall back to a fresh short-lived connection
+when the pool has none or every idle slot failed on the transport; the
+heartbeat yields to a parked acquirer. The
+remaining blind spot: a pooled connection held by an in-flight request is
+not idle, so the heartbeat cannot probe it; if it wedges (written to, never
+answered) while the warden still accepts connections, heartbeats on the
+other slots (or the fresh fallback) keep succeeding and keep resetting the
+countdown → a stuck request takes very long to surface. Fix: each pooled
+connection's `SO_RCVTIMEO` is set **before every request, sized to that
+op's duration** — execs use the request's timeout + 30s margin (default
+180s exec → 210s), clamped overall at T_warden (300s); non-exec ops use
+fixed defaults (unmount/file 30s, status/kill 15s; the heartbeat's
+`mem_stats` probe is capped at 2s). A wedge surfaces at
 `~op_timeout + 30s` (TransportError → **that slot** is discarded; the next
 acquire dials a fresh connection) instead of waiting a fixed six minutes;
 at-most-once semantics are preserved (the read timeout always trails the

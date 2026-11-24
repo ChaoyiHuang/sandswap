@@ -21,7 +21,9 @@
 // (the nonce is a per-connection prefix plus a counter). Connections are
 // served concurrently (task per connection): sandlot
 // keeps a POOL of per-VM connections (one in-flight request each, sized by the
-// spec's exec_slots) plus short-lived probe connections. Per-VM mutual
+// spec's exec_slots) plus the heartbeat's fresh fallback connections (dialed
+// only when the pool has no idle slot or every idle slot died on the
+// transport). Per-VM mutual
 // exclusion that used to come from the sandlot's execMu now lives here:
 //   - mount/unmount take the sandbox::MOUNT_GATE write guard (serialize with
 //     each other and wait out in-flight execs);
@@ -188,7 +190,7 @@ const BG_LOG_TOTAL_BUDGET_MULT: u64 = 4;
 //
 //   1. CONNECTIONS: every accepted connection spawned a serving task. Bounded
 //      by CONN_COUNT vs MAX_CONNS (16: exec_slots ≤ 5 +
-//      short-lived heartbeat probes + reconnect burst headroom). Excess
+//      heartbeat fallback probes + reconnect burst headroom). Excess
 //      connections are accepted-then-closed — the sandlot slot pool dials
 //      lazily and discards broken connections by design, so this only ever
 //      affects a peer far beyond legitimate patterns.
@@ -203,8 +205,9 @@ const BG_LOG_TOTAL_BUDGET_MULT: u64 = 4;
 //   3. FIRST-FRAME STALL: a connected peer that sends nothing parks its task
 //      until the first frame. The sandlot dials lazily (acquire → dial →
 //      request), so a legitimate first frame follows the dial immediately;
-//      pooled connections idle BETWEEN requests by design and are never
-//      timed out after their first frame.
+//      pooled connections idle BETWEEN requests by design, are past this gate
+//      once they have delivered the session key, and are bounded by the
+//      post-delivery idle timeout below.
 //
 // Latency: all three sit on cold paths (accept, first frame) or cost two
 // atomic ops per request (~ns against a µs-ms op) — the per-op hot path is
@@ -213,7 +216,7 @@ const BG_LOG_TOTAL_BUDGET_MULT: u64 = 4;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 /// Concurrent-connection cap: covers the largest per-VM slot pool
-/// (exec_slots = 5 on the large spec) plus short-lived heartbeat probes and
+/// (exec_slots = 5 on the large spec) plus heartbeat fallback probes and
 /// reconnect bursts with headroom. A constant, not a knob: the value is
 /// derived from system facts (slot-pool size), participates in no
 /// cross-component deployment invariant, and a settable bound is one
@@ -512,11 +515,11 @@ pub async fn serve(sandbox: Arc<Mutex<Sandbox>>, port: u32) -> Result<()> {
         }
         // Serve each connection concurrently. The sandlot's per-VM slot pool
         // (one in-flight request per connection, parallel sync execs across
-        // slots) and the heartbeat probe connections (a fresh short-lived
-        // connection per sandlot probe) can all be accepted and served in
-        // parallel — a long sync exec on one slot never blocks the probe's
-        // MemStats or another slot's exec. Concurrent ops on one VM are
-        // guarded in-warden by the sandbox::MOUNT_GATE gate.
+        // slots) and the heartbeat's fresh fallback connections (dialed only
+        // when the pool has no idle slot or every idle slot died on the
+        // transport) can all be accepted and served in parallel — a long sync
+        // exec on one slot never blocks another slot's heartbeat. Concurrent
+        // ops on one VM are guarded in-warden by the sandbox::MOUNT_GATE gate.
         let sb = sandbox.clone();
         tokio::spawn(async move {
             let _conn_guard = ConnGuard::assumed();
@@ -622,9 +625,9 @@ fn delivery_connection_done(seen_before: bool, code: u8) -> bool {
 
 /// Dispatch rule: only the heartbeat op (OP_MEM_STATS) resets the countdown
 /// anchor. Business RPCs (mount/exec/unmount/file) deliberately do NOT — they
-/// must not mask a silent sandlot (the cached connection can be wedged while
-/// heartbeats, sent on separate probe connections, keep flowing). Extracted as
-/// a pure function for unit testing.
+/// must not mask a silent sandlot (a wedged in-flight connection cannot block
+/// heartbeats riding the pool's idle slots or the fresh fallback connection).
+/// Extracted as a pure function for unit testing.
 fn heartbeat_op(op: u8) -> bool {
     op == OP_MEM_STATS
 }
@@ -2914,8 +2917,8 @@ mod tests {
     #[test]
     fn test_business_ops_do_not_reset_countdown() {
         // Mount/exec/unmount/file deliberately do NOT reset: they must not mask
-        // a silent sandlot (the cached connection can be wedged while probes on
-        // separate connections keep flowing).
+        // a silent sandlot (a wedged in-flight connection cannot block
+        // heartbeats riding the pool's idle slots or the fresh fallback).
         assert!(!heartbeat_op(OP_MOUNT_AND_EXEC));
         assert!(!heartbeat_op(OP_UNMOUNT));
         assert!(!heartbeat_op(OP_EXEC));

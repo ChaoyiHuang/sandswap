@@ -199,7 +199,10 @@ tc_log_info "Freezing sandvmm pid $HANG_VICTIM (SIGSTOP — warden goes silent, 
 T_STOP=$(date +%s)
 kill -STOP "$HANG_VICTIM"
 
-# Probe cadence: 3s interval × 3 failures ≈ 9-12s to declare hung, plus the
+# Probe cadence: 3s interval × 3 failures. Each heartbeat round trip is capped
+# at 2s: a fully-hung VM's pool slots are probed sequentially (up to
+# exec_slots×2s, small=3) and every-idle-slot transport failures trigger a
+# fresh-dial reachability check, so expect ~10-30s to declare hung, plus the
 # kill/replace cycle (nested-virt boot ~20-40s). Budget 90s.
 HANG_HEALED=0
 for i in $(seq 1 60); do

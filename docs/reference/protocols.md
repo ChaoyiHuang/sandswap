@@ -519,14 +519,29 @@ resident connections, one in-flight request each — the slot index is the
 correlation key); each slot's receive timeout is re-armed per request to
 the op's duration + 30 s margin (capped at the warden countdown), so a
 wedged slot is discarded and redialed rather than blocking the VM.
-Heartbeats (`OP_MEM_STATS`) ride separate short-lived connections so they
-never queue behind a long sync exec. A **pre-warmed** pool slot (dialed
-eagerly at VM registration) sends one `OP_MEM_STATS` immediately after the
-dial: the warden closes a fresh connection that sends no first frame within
-30 s, and a pre-warmed slot can legitimately idle past that before its first
-business request. The **single countdown** semantics (only host-peer
-heartbeats reset it; expiry with a live mount powers the VM off) are part of
-the resilience model — see
+Heartbeats (`OP_MEM_STATS`) ride the pool's **idle** slots — every one of
+them, one round trip per slot per sweep, each round trip capped at 2 s — so
+they never queue behind a long sync exec (a held slot is never taken; the
+heartbeat also yields to a parked acquirer) and, more importantly, keep
+every idle slot inside the warden's per-connection idle window (the warden
+closes an authenticated connection that sends nothing for 300 s; an idle
+slot is silent by design, and a slot the heartbeat never touched would be
+peer-closed by the time the next request acquired it). A slot found dead on
+its heartbeat is discarded and the next acquire dials fresh. If a sweep
+finds every idle slot already dead on the transport, the probe verifies
+reachability with a fresh short-lived dial before reporting a failed probe;
+the same fresh dial is the path when the pool has no idle slot at all. A
+business failure (`APP_ERROR`, e.g. meminfo unreadable) is not retried on a
+dial. Probing stops on entering CLEANING; when the node is later
+re-announced, the sandlot closes any remaining idle pooled connections
+before the hello (the stop window exceeds the warden's 300 s bound), so the
+first post-reconnect request dials fresh. A **pre-warmed**
+pool slot (dialed eagerly at VM registration) sends one `OP_MEM_STATS`
+immediately after the dial: the warden closes a fresh connection that
+sends no first frame within 30 s, and a pre-warmed slot can legitimately
+idle past that before its first business request. The **single countdown**
+semantics (only host-peer heartbeats reset it; expiry with a live mount
+powers the VM off) are part of the resilience model — see
 [Resilience](../how-it-works/resilience.md) §8.2.
 
 ## Additive-field compatibility rule (both internal protocols)

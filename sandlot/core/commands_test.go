@@ -41,6 +41,7 @@ const (
 	fakeOpMountAndExec      = 1
 	fakeOpUnmount           = 2
 	fakeOpExec              = 3
+	fakeOpMemStats          = 4
 	fakeOpAsyncExec         = 5
 	fakeOpMountAndAsyncExec = 6
 	fakeOpStatusExec        = 7
@@ -105,6 +106,27 @@ type fakeWarden struct {
 	// real fd-level TransportError (code 2 replies are warden RPC errors and are
 	// NOT retried) — the replay decision under test.
 	fileDropConn bool
+
+	// conns records every accepted connection in arrival order so a test can
+	// assert WHICH connection carried an op (the heartbeat-on-pooled-slot
+	// regression: the MemStats must arrive on the slot a later exec uses).
+	conns []net.Conn
+	// memStatsReply is the stdout for an OP_MEM_STATS reply ("avail total").
+	memStatsReply string
+	// memStatsAppError makes an OP_MEM_STATS reply an APP_ERROR (code 1) — a
+	// healthy transport reporting a sick guest; the slot must be KEPT.
+	memStatsAppError bool
+	// deadMemStatsConns lists connections to close on OP_MEM_STATS before
+	// replying: from the client's side the write succeeded and the read hits
+	// EOF — the warden closed this connection at its idle bound (a
+	// TransportError). Keyed by the net.Conn the fake accepted, so a test can
+	// kill exactly the slots it wants and leave the others alive.
+	deadMemStatsConns map[net.Conn]struct{}
+	// appErrorMemStatsConns lists connections whose OP_MEM_STATS reply is an
+	// APP_ERROR (code 1) — a healthy transport reporting a sick guest. Keyed
+	// by the accepted net.Conn so a test can mix business and transport
+	// failures across the slots of one pool.
+	appErrorMemStatsConns map[net.Conn]struct{}
 }
 
 // fieldAt decodes the idx-th [u32 len][bytes] field of a request body ("" when
@@ -130,7 +152,7 @@ func fieldAt(body []byte, idx int) string {
 
 // reply returns (code, exitCode, stdout, stderr, execDurationNs) for a given op.
 // It encodes the mock's configured outcomes into the wire code/exitCode fields.
-func (f *fakeWarden) reply(op uint8) (code uint8, exitCode uint8, stdout string, stderr string, durNs uint64) {
+func (f *fakeWarden) reply(op uint8, appErrConn bool) (code uint8, exitCode uint8, stdout string, stderr string, durNs uint64) {
 	switch op {
 	case fakeOpExec:
 		if f.execErrCode != 0 {
@@ -170,11 +192,19 @@ func (f *fakeWarden) reply(op uint8) (code uint8, exitCode uint8, stdout string,
 			return f.unmountCode, 0, "", "", 0
 		}
 		return 0, 0, "", "", 750_000 // 0.75ms warden unmount wall time
+	case fakeOpMemStats:
+		if f.memStatsAppError || appErrConn {
+			return 1, 0, "meminfo unreadable", "", 0 // APP_ERROR: transport healthy
+		}
+		return 0, 0, f.memStatsReply, "", 0
 	}
 	return 0, 0, "", "", 0
 }
 
 func (f *fakeWarden) serve(conn net.Conn) {
+	f.mu.Lock()
+	f.conns = append(f.conns, conn)
+	f.mu.Unlock()
 	hdr := make([]byte, 10) // magic(4) + version(1) + op(1) + body_len(4)
 	for {
 		if _, err := io.ReadFull(conn, hdr); err != nil {
@@ -205,7 +235,9 @@ func (f *fakeWarden) serve(conn net.Conn) {
 		case fakeOpUnmount:
 			f.lastUnmountIdentity = fieldAt(body, 1) // mount_point, identity, forced
 		}
-		code, exitCode, out, errMsg, durNs := f.reply(op)
+		_, deadConn := f.deadMemStatsConns[conn]
+		_, appErrConn := f.appErrorMemStatsConns[conn]
+		code, exitCode, out, errMsg, durNs := f.reply(op, appErrConn)
 		var barrier chan struct{}
 		barrierOp := f.barrierOp
 		if barrierOp == 0 {
@@ -219,6 +251,13 @@ func (f *fakeWarden) serve(conn net.Conn) {
 			barrier = f.execBarrier
 		}
 		f.mu.Unlock()
+		if op == fakeOpMemStats && deadConn {
+			// The warden closed this connection at its idle bound: from the
+			// client's side the write succeeded and the read hits EOF — a
+			// TransportError.
+			conn.Close()
+			return
+		}
 		if op == fakeOpFile && f.fileDropConn {
 			// True transport failure: close the socket instead of replying.
 			conn.Close()

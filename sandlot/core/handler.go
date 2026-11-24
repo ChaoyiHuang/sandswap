@@ -40,11 +40,13 @@ type vmMonitorState struct {
 	waitDone   chan struct{} // fresh VMs only: closed when the cmd.Wait goroutine returns
 	mu         sync.Mutex
 	destroying bool
-	// Health-probe failure count. The heartbeat probe (VMMemStats) dials a
-	// FRESH short-lived warden connection per VM per heartbeat (independent of
-	// the exec slot pool, so a long sync exec doesn't block the probe). N
-	// consecutive failures ⇒ the VM's warden/guest is hung ⇒ handleVMDied.
-	// Reset to 0 on a successful probe. Guarded by mu.
+	// Health-probe failure count. The heartbeat probe (VMMemStats) rides the
+	// pool's idle warden connections when any exist (every one, one round trip
+	// each); when none exist, or every idle slot failed on the transport, it
+	// dials a FRESH short-lived one — never a slot a sync exec holds, so a long
+	// exec doesn't block the probe. N consecutive failures ⇒ the VM's
+	// warden/guest is hung ⇒ handleVMDied. Reset to 0 on a successful probe.
+	// Guarded by mu.
 	//
 	// Every VM in h.vms answered at least one probe before registration
 	// (CreateVerifiedVM checks synchronously), so this verdict only ever fires
@@ -364,6 +366,12 @@ type Handler struct {
 	// the flag BEFORE fmt.Sprintf so a disabled gate costs one atomic load.
 	// Enabled by `sandlot -debug`. Error/warning lines are unconditional.
 	opDebug atomic.Bool
+
+	// lastPoolDiscardLog rate-limits the heartbeat's "discarded a dead pooled
+	// connection" event log to one line per minute per process. The event is
+	// rare (the probe missed a VM for the warden's 300s idle bound), and a
+	// per-VM line would storm on a large node after a reconnect. Unix nanos.
+	lastPoolDiscardLog atomic.Int64
 
 	// testDialFn, when set (handler tests), overrides the pool's vsock dial so
 	// extra slots come from in-process fakes. Nil in production.

@@ -232,29 +232,45 @@ func (h *Handler) confirmDead(ctx context.Context, vm *vmm.RunningVM, timeout ti
 // real cleanup overrun, NOT on gateway-loss. See docs/how-it-works/resilience.md.
 const probeInterval = 3 * time.Second
 
-// probeWorkers bounds concurrency for the per-VM probe sweep. At ~0.3-1ms/probe
-// (fresh vsock dial + MemStats) this turns 5000 VMs from ~5s sequential into
-// ~50-100ms, keeping the sweep well inside probeInterval (10K scalability).
+// probeWorkers bounds concurrency for the per-VM probe sweep. A pooled probe is
+// one MemStats RTT per idle slot (~0.3-1ms); a VM can have up to exec_slots
+// idle slots, and a busy/absent pool falls back to one fresh dial. At 5000 VMs
+// this keeps the sweep well inside probeInterval (10K scalability).
 const probeWorkers = 64
 
+// heartbeatReadTimeout bounds ONE heartbeat round trip. Pooled connections are
+// dialed with the warden-countdown cap (default 300s) and MemStats's own
+// default is 5s, but the sweep budget assumes a 2s probe, so the heartbeat must
+// not inherit either. probeDialed dials its fresh connection with the same
+// value, so both heartbeat paths are bounded identically.
+const heartbeatReadTimeout = 2 * time.Second
+
 // probeSweepTimeout bounds a single sweep's wall time. A mass-hang (many
-// wardens hitting probeVM's 2s timeout) would otherwise let one sweep block
+// wardens hitting heartbeatReadTimeout) would otherwise let one sweep block
 // the probeInterval tick for ~2000/64*2s≈62s (5000 VMs ≈156s), so the ticker
 // can't start the next sweep and heartbeats on HEALTHY VMs are delayed by
 // tens of seconds. Capping the sweep keeps healthy VMs' memStats fresh on
 // cadence; un-probed VMs simply retry the next sweep.
 //
-// The warden countdown (T_warden) remains the authoritative mount-release
-// backstop, so a capped sweep never risks a stale mount: mount release still
-// completes by T_tolerance + T_warden < T_safe regardless of probe timing.
-// Must be < probeInterval so a sweep never overlaps the next tick.
+// Dispatch stops at the budget, but an in-flight probeVM is not cancelled: it
+// is bounded by heartbeatReadTimeout per idle slot (up to exec_slots slots),
+// so its goroutine can outlive the budget. That is safe: each probe holds at
+// most one slot, keepalive yields to parked acquirers, and the warden countdown
+// (T_warden) remains the authoritative mount-release backstop, so mount release
+// still completes by T_tolerance + T_warden < T_safe regardless of probe timing.
+// Must be < probeInterval so a new sweep never starts while the previous one is
+// still dispatching.
 const probeSweepTimeout = 2 * time.Second
 
 // probeFailureThreshold is the number of consecutive probe failures (warden
-// MemStats over a fresh short-lived connection) after which a VM is declared hung
-// (warden/guest dead or stuck) and torn down via handleVMDied. At a 3s probe this
-// is a ~9s window - long enough to ride out a transient vsock blip, short enough
-// that a truly hung VM is reclaimed quickly.
+// MemStats: pooled idle slots with a fresh-dial reachability check when every
+// idle slot failed on the transport) after which a VM is declared hung
+// (warden/guest dead or stuck) and torn down via handleVMDied. At the 3s probe
+// cadence this is nominally a ~9s window — long enough to ride out a transient
+// vsock blip, short enough that a truly hung VM is reclaimed quickly. A hung
+// warden makes one probeVM take up to exec_slots×heartbeatReadTimeout, so the
+// wall-clock figure can be longer; the count itself is still consecutive
+// sweeps.
 const probeFailureThreshold = 3
 
 // StartProbeLoop launches the independent warden-probe loop. It runs during
@@ -409,12 +425,14 @@ func (h *Handler) capGuestLogs() {
 // the memStats snapshot. Success updates the cache + resets the failure count;
 // failure records the failure (tearing down on reaching probeFailureThreshold)
 // and drops the VM from the snapshot (a stale/zero entry would falsely trip the
-// gateway's OOM reclaim). The probe dials a FRESH short-lived connection per VM
-// (independent of the exec slot pool), so it runs concurrently with an
-// in-flight sync exec.
+// gateway's OOM reclaim). The probe rides the pool's idle connections when any
+// exist — every one, one round trip each, capped at heartbeatReadTimeout (this
+// is what keeps idle slots inside the warden's per-connection idle window) —
+// and otherwise dials a fresh short-lived one, so it always runs concurrently
+// with an in-flight sync exec.
 //
 // The sweep is bounded by probeSweepTimeout: a mass-hang (many wardens hitting
-// probeVM's 2s timeout) would otherwise block the probeInterval tick for tens
+// heartbeatReadTimeout) would otherwise block the probeInterval tick for tens
 // of seconds, delaying heartbeats on healthy VMs. Once the budget elapses,
 // dispatch stops and the sweep returns without waiting for in-flight probes;
 // un-probed VMs retry the next sweep. The warden countdown (T_warden) is the
@@ -444,8 +462,9 @@ func (h *Handler) probeAllVMsCtx(loopCtx context.Context) {
 dispatch:
 	for _, state := range states {
 		// Stop dispatching once the sweep budget elapsed: in-flight probes
-		// finish on their own (bounded by probeVM's 2s timeout); un-probed
-		// VMs retry the next sweep.
+		// finish on their own (each idle-slot round trip is bounded by
+		// heartbeatReadTimeout; one probe can take up to exec_slots of them);
+		// un-probed VMs retry the next sweep.
 		if sweepCtx.Err() != nil {
 			break
 		}
@@ -466,7 +485,7 @@ dispatch:
 		go func(st *VMState) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			avail, total, err := h.probeVM(st.VM.GuestCID, st.Cfg.WardenSessionKey)
+			avail, total, err := h.probeVM(st)
 			if err != nil {
 				h.recordProbeFailure(st, err)
 				h.memStatsMu.Lock()
@@ -489,10 +508,11 @@ dispatch:
 			h.memStatsMu.Unlock()
 		}(state)
 	}
-	// Wait for in-flight probes, but no longer than the sweep budget: each probe
-	// is bounded by its own 2s timeout, so this returns within probeSweepTimeout.
-	// Returning without draining only abandons probe results to the next sweep —
-	// it never leaks goroutines (each probe's warden connection is defer-Closed).
+	// Wait for in-flight probes, but no longer than the sweep budget. A probe can
+	// outlive the budget (it is bounded by heartbeatReadTimeout per idle slot);
+	// returning without draining only abandons its result to the next sweep. No
+	// goroutine or connection leaks: pooled connections are returned (or
+	// discarded) by keepaliveIdle, and fallback dials are defer-Closed.
 	waitDone := make(chan struct{})
 	go func() { wg.Wait(); close(waitDone) }()
 	select {
@@ -517,23 +537,170 @@ func (h *Handler) VMMemStats() []*pb.VmMemInfo {
 	return out
 }
 
-// probeVM dials a fresh short-lived warden connection and calls MemStats. It
-// is independent of the exec slot pool, so it runs concurrently with in-flight
-// sync execs. 2s timeout bounds a stuck warden.
-func (h *Handler) probeVM(cid uint32, sessionKey string) (avail, total uint64, err error) {
+// probeVM answers one heartbeat (OP_MEM_STATS) for the VM.
+//
+// The heartbeat rides the pool's IDLE connections when there are any — ALL of
+// them, one per slot, since the warden closes each connection on its own
+// POST_DELIVERY_IDLE_TIMEOUT (300s) timer and idle slots are silent by
+// design. If the pool has no idle slot (every slot is held by an in-flight
+// request, or keepalive yielded to a parked acquirer), the probe dials a fresh
+// short-lived connection so a long sync exec never blocks its own VM's
+// heartbeat.
+//
+// The old probe always dialed its own connection, so it never touched the
+// pool: after a quiet stretch every pooled slot had been peer-closed while the
+// heartbeat (on its separate connections) stayed green, and the first business
+// request after it failed on the dead slot with EPIPE, which the mount path
+// must treat as "guest mount state unproven" and destroy the VM (commands.go)
+// — a 1–3s rebuild + 503 after every idle period, per VM. Riding the heartbeat
+// on the idle slots keeps every one of them inside the window; a slot found
+// already dead is discarded by the sweep and the next acquire dials fresh, so
+// the business path never sees a dead slot.
+//
+// A dead slot is a connection fact, not a VM fact. If at least one idle slot
+// answered, the probe succeeds with its readings. If EVERY visited idle slot
+// failed on the transport, the probe verifies reachability over a fresh
+// short-lived dial before counting a probe failure — the idle slots may simply
+// have been peer-closed at the warden's idle bound while the VM is healthy. A
+// business failure (APP_ERROR: meminfo unreadable) means the transport is
+// healthy and is returned without a dial.
+//
+// The warden's countdown anchors on the OP_MEM_STATS op regardless of which
+// connection carried it, so the last-resort mount-release semantics are
+// unchanged: this loop is still the only heartbeat source and is still stopped
+// on entering CLEANING. Because the stop window (CLEANING + isolation) is
+// longer than the warden's 300s idle bound, the reconnect path drains the idle
+// pools before announcing the node (DrainIdleWardenConns).
+func (h *Handler) probeVM(state *VMState) (uint64, uint64, error) {
+	cid := state.VM.GuestCID
 	if h.testProbeFn != nil {
 		return h.testProbeFn(cid)
+	}
+	avail, total, sent, err := h.probePooled(state)
+	if !sent {
+		// No idle slot existed (busy or absent pool): keep the heartbeat
+		// independent of in-flight execs.
+		return h.probeDialed(cid, state.Cfg.WardenSessionKey)
+	}
+	if err != nil && isWardenTransportErr(err) {
+		// Every idle slot failed on the transport. Verify the VM is still
+		// reachable before counting a probe failure: the slots may have been
+		// peer-closed at the warden's idle bound while the VM is healthy.
+		dAvail, dTotal, derr := h.probeDialed(cid, state.Cfg.WardenSessionKey)
+		if derr != nil {
+			return 0, 0, derr
+		}
+		return dAvail, dTotal, nil
+	}
+	return avail, total, err
+}
+
+// probePooled sends the heartbeat over every idle pooled connection it can
+// take — the warden closes each connection on its own idle timer, so keeping
+// one slot alive would leave the rest to die (see wardenPool.keepaliveIdle).
+// It never dials: sent=false means no idle slot was available (empty pool, or
+// keepalive yielded to a parked acquirer) and the caller falls back to a fresh
+// short-lived dial.
+//
+// sent=true carries the sweep's verdict on the VM, not on any one slot: a slot
+// that failed with a transport error is discarded (it was peer-closed at the
+// idle bound — a connection fact, not a VM fact), but as long as ANY slot
+// answered, the VM is healthy and the probe succeeds with that slot's readings.
+// Only a sweep in which every visited idle slot failed reports an error — the
+// first transport error if any, else the business error. The caller uses the
+// transport verdict to decide whether a fresh-dial reachability check is
+// warranted; a business error (APP_ERROR) is a healthy transport reporting a
+// sick guest and is not retried.
+func (h *Handler) probePooled(state *VMState) (avail, total uint64, sent bool, err error) {
+	var transportErr, bizErr error
+	answered, discarded := 0, 0
+	visited := state.wardenPoolFor().keepaliveIdle(func(c *warden.Client) bool {
+		a, t, e := c.MemStatsTimeout(heartbeatReadTimeout)
+		if e == nil {
+			avail, total = a, t
+			answered++
+			return true
+		}
+		if isWardenTransportErr(e) {
+			if transportErr == nil {
+				transportErr = e
+			}
+			discarded++
+			return false // discard the dead slot
+		}
+		// A MemStats business failure (APP_ERROR: /proc/meminfo unreadable;
+		// malformed reply) is a HEALTHY connection reporting a sick guest —
+		// keep the slot; it is not evidence the VM is unreachable, so it does
+		// not count toward answered.
+		if bizErr == nil {
+			bizErr = e
+		}
+		return true
+	})
+	if visited == 0 {
+		return 0, 0, false, nil
+	}
+	if discarded > 0 {
+		h.logPoolSlotDiscards(state.VM.ID, discarded, visited, answered)
+	}
+	if answered > 0 {
+		return avail, total, true, nil
+	}
+	if transportErr != nil {
+		return 0, 0, true, transportErr
+	}
+	if bizErr != nil {
+		return 0, 0, true, bizErr
+	}
+	// Unreachable unless the callback stops setting a verdict; never report a
+	// zero-reading success (the gateway's OOM reclaim would treat it as real).
+	return 0, 0, true, fmt.Errorf("warden heartbeat: %d idle connection(s) visited without a verdict", visited)
+}
+
+// logPoolSlotDiscards emits at most one line per minute per process when a
+// heartbeat discards peer-closed idle slots. The event is rare — it means the
+// probe missed this VM for the warden's 300s idle bound — and a per-VM line
+// would storm on a large node after a reconnect. The dead slot is a connection
+// fact, so this is diagnostic, not a VM failure; answered==0 means the probe
+// went on to verify reachability with a fresh dial.
+func (h *Handler) logPoolSlotDiscards(vmID string, dead, visited, answered int) {
+	const every = time.Minute
+	now := time.Now().UnixNano()
+	last := h.lastPoolDiscardLog.Load()
+	if last != 0 && now-last < int64(every) {
+		return
+	}
+	if !h.lastPoolDiscardLog.CompareAndSwap(last, now) {
+		return
+	}
+	h.logger.Printf("VM %s heartbeat discarded %d of %d idle pooled warden connection(s) (%d answered); the next acquire dials fresh",
+		vmID, dead, visited, answered)
+}
+
+// probeDialed is the pool-independent heartbeat: a fresh short-lived
+// connection, closed after one round trip. The dial and the MemStats read are
+// both capped at heartbeatReadTimeout, so a stuck warden is detected promptly.
+func (h *Handler) probeDialed(cid uint32, sessionKey string) (uint64, uint64, error) {
+	if h.testDialFn != nil {
+		// Test seam (same one the pool's dial path consults): serve the
+		// probe's fresh dial from an in-process fake.
+		agt, derr := h.testDialFn(cid, heartbeatReadTimeout)
+		if derr != nil {
+			return 0, 0, derr
+		}
+		defer agt.Close()
+		return agt.MemStatsTimeout(heartbeatReadTimeout)
 	}
 	key, kerr := warden.DecodeSessionKey(sessionKey)
 	if kerr != nil {
 		return 0, 0, kerr
 	}
-	agt, derr := warden.DialWithTimeout(cid, 2*time.Second, key)
+	agt, derr := warden.DialWithTimeout(cid, heartbeatReadTimeout, key)
 	if derr != nil {
 		return 0, 0, derr
 	}
 	defer agt.Close()
-	return agt.MemStats()
+	return agt.MemStatsTimeout(heartbeatReadTimeout)
 }
 
 // recordProbeFailure increments the failure count and, on reaching the threshold,
