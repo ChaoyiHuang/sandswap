@@ -773,9 +773,12 @@ func (h *HumanHandler) deleteAgent(w http.ResponseWriter, r *http.Request, agent
 		}
 	}
 
-	// Then delete the agent itself.
+	// Then delete the agent itself. The store's raw error text can embed
+	// etcd keys/endpoints: log it, answer a stable class (the namespaced
+	// delete reaches this same path).
 	if err := h.identityStore.DeleteAgent(agentID); err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		h.logger.Error("delete agent failed", "agentID", agentID, "error", err)
+		writeJSONError(w, "failed to delete agent", http.StatusInternalServerError)
 		return
 	}
 	if len(orphans) > 0 {
@@ -1572,7 +1575,9 @@ func (h *HumanHandler) attachFlow(w http.ResponseWriter, r *http.Request, sandfs
 		// recoverable by re-issuing the attach (idempotent same-ref no-op).
 		h.logger.Error("attach: record completion failed (re-issue the attach to recover)",
 			"sandfsID", sandfsID, "template", req.TemplateRef, "error", err)
-		writeJSONError(w, fmt.Sprintf("template swapped but record update failed: %v (re-issue attach-template to recover)", err), http.StatusInternalServerError)
+		// The store error text can embed internal detail (etcd keys/endpoints):
+		// the caller gets the recovery action, the log keeps the cause.
+		writeJSONError(w, "template swapped but record update failed (re-issue attach-template to recover)", http.StatusInternalServerError)
 		return nil, false
 	}
 	h.logger.Info("sandfs template attached", "sandfsID", sandfsID, "template", req.TemplateRef, "home", req.Home)

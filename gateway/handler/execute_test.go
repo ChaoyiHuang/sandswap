@@ -425,6 +425,18 @@ func TestAgentListSandFS(t *testing.T) {
 	if !found {
 		t.Errorf("sandfs %s not found in list", sandfsID)
 	}
+
+	// Discovery is the agent's view: metadata only, never the operator's
+	// storage layout (rootfs_path) or the mount-identity secret (volume_epoch).
+	rec, err := gw.reg.Store().GetSandFS(sandfsID)
+	if err != nil || rec == nil {
+		t.Fatalf("get record: %v", err)
+	}
+	for _, hidden := range []string{"rootfs_path", "volume_epoch", rec.RootFSPath, rec.VolumeEpoch} {
+		if hidden != "" && strings.Contains(w.Body.String(), hidden) {
+			t.Errorf("agent discovery leaks storage-side value %q: %s", hidden, w.Body.String())
+		}
+	}
 }
 
 // A cold-mount path that fails after the MountLock is acquired must release

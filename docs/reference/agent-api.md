@@ -298,7 +298,8 @@ curl -sS -X POST "$GW/agent/file" \
 ## `GET /agent/sandfs`
 
 List the authenticated agent's SandFS instances (metadata only — never reads
-sandbox files).
+sandbox files, and never carries the storage-side fields `rootfs_path` /
+`volume_epoch`).
 
 **Addressing**: this call carries no `sandfs_id`, so it cannot use the
 per-sandfs domain — reach it via the shared agent domain

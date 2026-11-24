@@ -890,6 +890,20 @@ func TestHandleListSandfs(t *testing.T) {
 	if _, ok := sf["created_at"]; !ok {
 		t.Error("missing created_at field")
 	}
+	// The tool result is the agent's view: never the host volume path or the
+	// mount-identity secret.
+	for _, hidden := range []string{"rootfs_path", "volume_epoch"} {
+		if _, ok := sf[hidden]; ok {
+			t.Errorf("list_sandfs leaks storage-side field %q: %v", hidden, sf)
+		}
+	}
+	for key := range sf {
+		switch key {
+		case "sandfs_id", "name", "description", "template", "created_at", "status":
+		default:
+			t.Errorf("unexpected list_sandfs field %q: %v", key, sf)
+		}
+	}
 }
 
 // TestHandleListSandfs_Empty verifies an agent with no sandfs returns an empty list.

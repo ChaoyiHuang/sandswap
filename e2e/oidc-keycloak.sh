@@ -32,6 +32,11 @@
 #     and sees a uniform 404 for cross-namespace records (no oracle); a token
 #     with NO sandswap_ns claim is denied on both surfaces; the * grant keeps
 #     the fleet-wide behavior
+#   - namespaced response projection: a seeded tenant SandFS (with
+#     rootfs_path/volume_epoch set) is served to the tenant WITHOUT the
+#     storage-side fields, while the fleet surface keeps them; agent lists
+#     carry no credential material; the operator-only rootfs-path and
+#     save-template routes refuse a human-only token
 #   - key rotation: new signing key → unknown kid → gateway force-refreshes
 #     JWKS without restart; old-kid tokens keep verifying (merge grace)
 # Docker is REQUIRED and is the only external dependency — when docker (or the
@@ -75,6 +80,19 @@ GW_STREAM="127.0.0.1:13988"
 GW_URL="http://${GW_HUMAN}"
 ISSUER="${KC}/realms/${REALM}"
 VOL_ROOT="/tmp/sandswap-oidckc-volroot"
+GW_STATE_DIR="/tmp/sandswap-oidckc-state"
+GW_STATE_FILE="$GW_STATE_DIR/identity-store.json"
+
+# Seeded identity records for the tenant-projection phase. The gateway loads
+# these at startup, so the namespaced response shapes can be driven over real
+# HTTP without a storage plane (create itself needs prov; get/list do not).
+SEED_AGENT_ID="agent-oidckc-tenant"
+SEED_AGENT_KEY="sk-sandswap-agent-oidckc-tenant"
+SEED_SANDFS_ID="sandfs-oidckc-tenant"
+SEED_SANDFS_NAME="tenant-work"
+SEED_ROOTFS_NAME="vol-oidckc-tenant"
+SEED_ROOTFS_PATH="$VOL_ROOT/$SEED_ROOTFS_NAME"
+SEED_VOLUME_EPOCH="epoch-oidckc-tenant"
 
 GW_PID=""
 KC_ADMIN_TOKEN=""
@@ -82,7 +100,7 @@ KC_ADMIN_TOKEN=""
 cleanup() {
     [ -n "${GW_PID:-}" ] && kill "$GW_PID" 2>/dev/null || true
     docker rm -f "$KC_NAME" >/dev/null 2>&1 || true
-    rm -rf "$VOL_ROOT"
+    rm -rf "$VOL_ROOT" "$GW_STATE_DIR"
 }
 trap cleanup EXIT INT TERM
 
@@ -135,6 +153,59 @@ kc_token_nons() { # $1=space-separated scopes, WITHOUT the sandswap_ns scope
         -d grant_type=password -d client_id="$CLIENT_ID" \
         -d username="$DEMO_USER" -d password="$DEMO_PASS" \
         -d "scope=openid $1" | jget access_token
+}
+
+# seed_identity_store — write a valid single-node identity snapshot BEFORE the
+# gateway starts: one acme agent (with a known plaintext key) and one acme
+# SandFS carrying the storage-side fields under test (rootfs_path,
+# volume_epoch). GET/list on the namespaced surface then has a real record to
+# project, with no prov instance / KVM needed.
+seed_identity_store() {
+    # A leftover lock/snapshot from a crashed run must not make the fresh
+    # gateway refuse to start (flock is per-file; nobody should hold this one).
+    rm -rf "$GW_STATE_DIR"
+    install -d -m 0700 "$GW_STATE_DIR"
+    python3 - "$GW_STATE_FILE" "$VOL_ROOT" "$SEED_AGENT_ID" "$SEED_AGENT_KEY" \
+        "$SEED_SANDFS_ID" "$SEED_SANDFS_NAME" "$SEED_ROOTFS_NAME" "$SEED_VOLUME_EPOCH" <<'PY'
+import datetime
+import hashlib
+import json
+import os
+import sys
+
+(path, vol_root, agent_id, agent_key, sandfs_id, sandfs_name,
+ rootfs_name, epoch) = sys.argv[1:9]
+now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+snap = {
+    "version": 1,
+    "saved_at": now,
+    "agents": [{
+        "agent_id": agent_id,
+        "name": "tenant-agent",
+        "description": "seeded tenant agent",
+        "api_key_hash": hashlib.sha256(agent_key.encode()).hexdigest(),
+        "created_at": now,
+        "namespace": "acme",
+    }],
+    "sandfs": [{
+        "sandfs_id": sandfs_id,
+        "agent_id": agent_id,
+        "name": sandfs_name,
+        "description": "seeded tenant sandbox",
+        "rootfs_path": os.path.join(vol_root, rootfs_name),
+        "template": "test:v1",
+        "mode": "overlay",
+        "min_vcpus": 2,
+        "min_memory_mb": 512,
+        "created_at": now,
+        "volume_epoch": epoch,
+        "namespace": "acme",
+    }],
+}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(snap, f, indent=2)
+PY
+    chmod 600 "$GW_STATE_FILE"
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -279,11 +350,16 @@ tc_pass "users provisioned (demo=*, $TENANT_USER=$TENANT_NS)"
 tc_log_section "Phase 2: gateway with -authn-* (discovery + JWKS)"
 # ══════════════════════════════════════════════════════════════════
 mkdir -p "$VOL_ROOT"
+# Seed the two acme records the tenant-projection phase reads. The snapshot is
+# validated by the gateway at startup (version, namespaced owner, a rootfs path
+# inside -vol-root); a malformed seed fails the boot loudly below.
+seed_identity_store
+tc_pass "seeded identity store (tenant agent + SandFS with storage fields)"
 # NB: single-node mode is the DEFAULT (empty -mode) — "single-node" is not a
 # valid flag value.
 "$GW_BIN" \
     -agent-addr "$GW_AGENT" -human-addr "$GW_HUMAN" -stream-addr "$GW_STREAM" \
-    -vol-root "$VOL_ROOT" \
+    -vol-root "$VOL_ROOT" -identity-store "$GW_STATE_FILE" \
     -authn-issuer "$ISSUER" -authn-client-id "$CLIENT_ID" \
     > "$GW_LOG" 2>&1 &
 GW_PID=$!
@@ -303,6 +379,9 @@ grep -q "OIDC discovery successful" "$GW_LOG" && grep -q "$ISSUER" "$GW_LOG" \
 grep -q "JWKS cached" "$GW_LOG" \
     && tc_pass "startup log: JWKS cached" \
     || tc_fail "startup log missing JWKS cached line"
+grep -q "loaded identity store snapshot" "$GW_LOG" \
+    && tc_pass "startup log: seeded identity snapshot loaded" \
+    || tc_fail "startup log missing identity snapshot load (seeded records unusable)"
 
 # ══════════════════════════════════════════════════════════════════
 tc_log_section "Phase 3: enforcement matrix"
@@ -401,6 +480,116 @@ check "tenant GET     /human/ns/acme/agent/<missing>" 404 "$GW_URL/human/ns/$TEN
 # one in the default namespace)
 check "fleet token    /human/ns/beta/agent"      200 "$GW_URL/human/ns/beta/agent" -H "Authorization: Bearer $T_HUMAN"
 check "fleet token    /human/sandfs"             200 "$GW_URL/human/sandfs"        -H "Authorization: Bearer $T_HUMAN"
+
+# ══════════════════════════════════════════════════════════════════
+tc_log_section "Phase 3c: namespaced response projection (seeded records)"
+# ══════════════════════════════════════════════════════════════════
+# The namespaced surface is a strict TENANT projection. Storage-side fields —
+# rootfs_path (the host volume directory = operator storage layout) and
+# volume_epoch (the mount-identity secret) — must not appear in any tenant
+# response, while the unscoped fleet surface keeps them (documented admin
+# contract). Create is pinned by the handler suite; this phase drives the
+# read surfaces over real HTTP against a real seeded record.
+assert_no_storage_leak() { # $1=desc $2=body
+    local desc=$1 body=$2 bad=""
+    for needle in rootfs_path volume_epoch "$SEED_ROOTFS_PATH" "$SEED_VOLUME_EPOCH" "$SEED_ROOTFS_NAME" "$SEED_AGENT_KEY"; do
+        if printf '%s' "$body" | grep -qF "$needle"; then
+            bad="$bad $needle"
+        fi
+    done
+    if [ -z "$bad" ]; then
+        tc_pass "$desc"
+    else
+        tc_fail "$desc leaks:$bad"
+    fi
+}
+
+# Tenant single-sandfs GET: tenant metadata present, storage fields absent.
+check "tenant GET     /human/ns/acme/sandfs/<seeded>" 200 "$GW_URL/human/ns/$TENANT_NS/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_TENANT"
+TENANT_GET=$(curl -s "$GW_URL/human/ns/$TENANT_NS/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_TENANT")
+printf '%s' "$TENANT_GET" | grep -qF "\"$SEED_SANDFS_ID\"" \
+    && tc_pass "tenant GET carries sandfs_id" \
+    || tc_fail "tenant GET missing sandfs_id: $TENANT_GET"
+printf '%s' "$TENANT_GET" | grep -qF '"template":"test:v1"' \
+    && tc_pass "tenant GET carries the tenant-usable template ref" \
+    || tc_fail "tenant GET missing template: $TENANT_GET"
+assert_no_storage_leak "tenant GET carries no storage-side fields" "$TENANT_GET"
+
+# Tenant list: same projection inside the paged envelope.
+TENANT_LIST=$(curl -s "$GW_URL/human/ns/$TENANT_NS/sandfs" -H "Authorization: Bearer $T_TENANT")
+printf '%s' "$TENANT_LIST" | grep -qF "\"$SEED_SANDFS_ID\"" \
+    && tc_pass "tenant list carries the namespace's sandfs" \
+    || tc_fail "tenant list missing sandfs: $TENANT_LIST"
+assert_no_storage_leak "tenant list carries no storage-side fields" "$TENANT_LIST"
+
+# Tenant agent list: identity metadata only — never credential material.
+TENANT_AGENTS=$(curl -s "$GW_URL/human/ns/$TENANT_NS/agent" -H "Authorization: Bearer $T_TENANT")
+printf '%s' "$TENANT_AGENTS" | grep -qF "\"$SEED_AGENT_ID\"" \
+    && tc_pass "tenant agent list carries the seeded agent id" \
+    || tc_fail "tenant agent list missing seeded agent: $TENANT_AGENTS"
+AGENT_LEAKS=""
+for secret in api_key api_key_hash sk-sandswap-agent-; do
+    if printf '%s' "$TENANT_AGENTS" | grep -qF "$secret"; then
+        AGENT_LEAKS="$AGENT_LEAKS $secret"
+    fi
+done
+if [ -z "$AGENT_LEAKS" ]; then
+    tc_pass "tenant agent list carries no credential material"
+else
+    tc_fail "tenant agent list leaks credential material:$AGENT_LEAKS ($TENANT_AGENTS)"
+fi
+
+# Agent API discovery: the same no-storage rule for the exec-plane view.
+check "seeded key      /agent/sandfs" 200 "http://$GW_AGENT/agent/sandfs" -H "Authorization: Bearer $SEED_AGENT_KEY"
+AGENT_DISCOVERY=$(curl -s "http://$GW_AGENT/agent/sandfs" -H "Authorization: Bearer $SEED_AGENT_KEY")
+printf '%s' "$AGENT_DISCOVERY" | grep -qF "\"$SEED_SANDFS_ID\"" \
+    && tc_pass "agent discovery carries the seeded sandfs" \
+    || tc_fail "agent discovery missing sandfs: $AGENT_DISCOVERY"
+assert_no_storage_leak "agent discovery carries no storage-side fields" "$AGENT_DISCOVERY"
+
+# Fleet admin surface: rootfs_path + volume_epoch are the documented contract.
+check "fleet GET      /human/sandfs/<seeded>" 200 "$GW_URL/human/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_HUMAN"
+FLEET_GET=$(curl -s "$GW_URL/human/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_HUMAN")
+printf '%s' "$FLEET_GET" | grep -qF "\"rootfs_path\":\"$SEED_ROOTFS_PATH\"" \
+    && tc_pass "fleet GET keeps rootfs_path (admin contract)" \
+    || tc_fail "fleet GET lost rootfs_path: $FLEET_GET"
+printf '%s' "$FLEET_GET" | grep -qF "\"volume_epoch\":\"$SEED_VOLUME_EPOCH\"" \
+    && tc_pass "fleet GET keeps volume_epoch (admin contract)" \
+    || tc_fail "fleet GET lost volume_epoch: $FLEET_GET"
+FLEET_LIST=$(curl -s "$GW_URL/human/sandfs" -H "Authorization: Bearer $T_HUMAN")
+printf '%s' "$FLEET_LIST" | grep -qF '"rootfs_path"' \
+    && tc_pass "fleet list keeps rootfs_path (admin contract)" \
+    || tc_fail "fleet list lost rootfs_path: $FLEET_LIST"
+
+# Rule 2 on SandFS: another namespace's id is the SAME uniform 404 as a
+# missing id (the fleet token passes Rule 1 with its wildcard).
+CROSS_BODY=$(curl -s "$GW_URL/human/ns/beta/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_HUMAN")
+MISSING_BODY=$(curl -s "$GW_URL/human/ns/beta/sandfs/sandfs-doesnotexist" -H "Authorization: Bearer $T_HUMAN")
+[ "$CROSS_BODY" = "$MISSING_BODY" ] \
+    && tc_pass "cross-ns sandfs GET is the uniform missing-id 404" \
+    || tc_fail "cross-ns sandfs 404 differs from missing-id: cross=$CROSS_BODY missing=$MISSING_BODY"
+
+# Tenant cannot reach the storage-plane maintenance or capture routes.
+check "tenant POST    /human/ns/acme/sandfs/<seeded>/rootfs-path" 403 \
+    "$GW_URL/human/ns/$TENANT_NS/sandfs/$SEED_SANDFS_ID/rootfs-path" -X POST \
+    -H "Authorization: Bearer $T_TENANT" -H 'Content-Type: application/json' \
+    -d "{\"rootfs_path\":\"$VOL_ROOT/vol-hijack\"}"
+AFTER_REPOINT=$(curl -s "$GW_URL/human/sandfs/$SEED_SANDFS_ID" -H "Authorization: Bearer $T_HUMAN")
+printf '%s' "$AFTER_REPOINT" | grep -qF "\"rootfs_path\":\"$SEED_ROOTFS_PATH\"" \
+    && tc_pass "refused tenant rootfs-path left the stored path untouched" \
+    || tc_fail "tenant rootfs-path refusal changed the record: $AFTER_REPOINT"
+
+SAVE_BODY=$(curl -s -X POST "$GW_URL/human/ns/$TENANT_NS/sandfs/$SEED_SANDFS_ID/save-template" \
+    -H "Authorization: Bearer $T_TENANT" -H 'Content-Type: application/json' \
+    -d '{"template_ref":"capture:v1"}')
+printf '%s' "$SAVE_BODY" | grep -qF 'TEMPLATE_OPS_REQUIRED' \
+    && tc_pass "tenant save-template refused with TEMPLATE_OPS_REQUIRED" \
+    || tc_fail "tenant save-template body: $SAVE_BODY"
+if printf '%s' "$SAVE_BODY" | grep -qE '"path"|size_kb'; then
+    tc_fail "tenant save-template refusal leaks the template-store path: $SAVE_BODY"
+else
+    tc_pass "tenant save-template refusal carries no path/size"
+fi
 
 # ══════════════════════════════════════════════════════════════════
 tc_log_section "Phase 4: write path — admin-scoped token provisions an agent"
