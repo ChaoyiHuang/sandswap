@@ -236,12 +236,19 @@ pin_uninstall_residue_sweep() {
     grep -qE '^[[:space:]]*rmdir /etc/systemd/system/sandswap-sandlot\.service\.d' "$u" \
         && pass "uninstall sweeps the sandlot drop-in dir" \
         || fail "uninstall does not sweep /etc/systemd/system/sandswap-sandlot.service.d/"
-    if grep -qE '^[[:space:]]*for tcb in vmlinux\.bin initramfs\.cpio\.gz SHA256SUMS' "$u" \
-       && grep -qE '^[[:space:]]*rm -f "/usr/local/lib/sandswap/guest/\$tcb"' "$u" \
-       && grep -qE '^[[:space:]]*rmdir /usr/local/lib/sandswap/guest' "$u"; then
-        pass "uninstall removes the guest TCB item-wise and rmdirs the dir"
+    # The sweep goes through common.sh's $SANDSWAP_GUEST_DIR, so a TCB the
+    # deployer RELOCATED (SANDSWAP_GUEST_DIR=<dir>) is removed from there and
+    # not only from the default location. That is sound only while uninstall.sh
+    # sources common.sh (where the variable is defined) — pinned with the
+    # commands, because an undefined variable would turn the sweep into
+    # `rm -f "/vmlinux.bin"` and silently leave every TCB in place.
+    if grep -qE '^[[:space:]]*source .*/deploy/baremetal/common\.sh' "$u" \
+       && grep -qE '^[[:space:]]*for tcb in vmlinux\.bin initramfs\.cpio\.gz SHA256SUMS' "$u" \
+       && grep -qE '^[[:space:]]*rm -f "\$SANDSWAP_GUEST_DIR/\$tcb"' "$u" \
+       && grep -qE '^[[:space:]]*rmdir "\$SANDSWAP_GUEST_DIR"' "$u"; then
+        pass "uninstall removes the guest TCB item-wise (via \$SANDSWAP_GUEST_DIR) and rmdirs the dir"
     else
-        fail "uninstall does not sweep the guest TCB item-wise (rm -rf would take operator files)"
+        fail "uninstall does not sweep the guest TCB item-wise through \$SANDSWAP_GUEST_DIR (rm -rf would take operator files; a literal path misses a relocated TCB)"
     fi
     grep -qE '^[[:space:]]*rm -f /usr/local/lib/sandswap/apply-prov-ownership' "$u" \
         && pass "uninstall removes apply-prov-ownership" \
@@ -1111,6 +1118,22 @@ pin_deploy_paths() {
     done
 }
 
+# ── k8s guest TCB pin ─────────────────────────────────────────────────────
+pin_k8s_guest_tcb() {
+    section "k8s pods verify the guest TCB like a bare-metal node"
+    local cm="$ROOT/deploy/k8s/configmaps.yaml" dl="$ROOT/deploy/k8s/deploy-lib.sh"
+    expect_grep "$cm" '^      guest_tcb_dir: /sandswap-host$' \
+        "the shared sandlot config pins tinyvm.guest_tcb_dir=/sandswap-host (without it the k8s TCB hash check is skipped)"
+    expect_grep "$cm" '^      kernel: /sandswap-host/vmlinux\.bin$' \
+        "the k8s kernel resolves directly under the pinned directory"
+    expect_grep "$cm" '^      initramfs: /sandswap-host/initramfs\.cpio\.gz$' \
+        "the k8s initramfs resolves directly under the pinned directory"
+    expect_grep "$dl" 'sha256sum vmlinux\.bin initramfs\.cpio\.gz > SHA256SUMS' \
+        "deploy-lib writes the SHA256SUMS pin beside the hostPath pair it deploys"
+    expect_grep "$dl" 'chmod 0644 .*SHA256SUMS' \
+        "the pin is world-readable (0644) for the boxout-mode sandlot uid"
+}
+
 pin_k8s_identity() {
     section "k8s manifests bind node_id to spec.nodeName with a per-node cert"
     local y="$ROOT/deploy/k8s"
@@ -1621,6 +1644,7 @@ pin_seed_config_parse
 pin_runtime_dir_sticky
 pin_generator_cn
 pin_deploy_paths
+pin_k8s_guest_tcb
 pin_k8s_identity
 pin_prov_identity
 pin_reserved_sandbox_uid

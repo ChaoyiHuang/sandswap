@@ -33,8 +33,15 @@ import (
 
 // TinyVMConfig holds the tinyVM hardware parameters.
 type TinyVMConfig struct {
-	Kernel             string `yaml:"kernel"`
-	Initramfs          string `yaml:"initramfs"`
+	Kernel    string `yaml:"kernel"`
+	Initramfs string `yaml:"initramfs"`
+	// GuestTcbDir is the pinned guest TCB directory: every kernel/initramfs
+	// living under it is verified against the SHA256SUMS pin beside it at
+	// exec-role start (fatal on a missing/mismatched pin, a non-root-owned or
+	// group/world-writable directory or artifact). Artifacts outside it are
+	// dev/e2e paths and are not verified. It must point at a directory no
+	// service identity can write. Restart-required.
+	GuestTcbDir        string `yaml:"guest_tcb_dir"`
 	DefaultVCPUs       uint32 `yaml:"default_vcpus"`
 	DefaultMemoryMB    uint64 `yaml:"default_memory_mb"`
 	VolumesDir         string `yaml:"volumes_dir"`
@@ -222,6 +229,12 @@ const MaxExecSlots = 12
 //   - instance CID range: start >= 3 (0/1/2 are reserved AF_VSOCK CIDs; the
 //     handler silently ignored lower values) and end > start when set (an
 //     inverted range exhausts the allocation immediately).
+//   - host-location path knobs (tinyvm.kernel/initramfs/guest_tcb_dir,
+//     vsockguard_attestation, instance.base_dir) must be absolute and not the
+//     filesystem root when set: a relative value resolves against the
+//     service's working directory and silently never matches the location the
+//     deployment installed. instance.id (which names a directory under
+//     base_dir) must be a single path component.
 func (c SandlotConfig) Validate() error {
 	if err := c.Recycle.Validate(); err != nil {
 		return err
@@ -311,7 +324,71 @@ func (c SandlotConfig) Validate() error {
 	if c.Provision.QuotaStampCmd != "" && !filepath.IsAbs(c.Provision.QuotaStampCmd) {
 		return fmt.Errorf("provision.quota_stamp_cmd must be an absolute path (got %q)", c.Provision.QuotaStampCmd)
 	}
+	// Host-location paths: every one must be absolute (a relative value
+	// resolves against the service's working directory and silently never
+	// matches where the deployment installed), and none may name the
+	// filesystem root (base_dir "/" would place VMs at /vm; a "/" TCB dir or
+	// artifact is never a legitimate pin).
+	for _, loc := range []struct{ key, path string }{
+		{"tinyvm.kernel", c.TinyVM.Kernel},
+		{"tinyvm.initramfs", c.TinyVM.Initramfs},
+		{"tinyvm.guest_tcb_dir", c.TinyVM.GuestTcbDir},
+		{"vsockguard_attestation", c.VsockguardAttestation},
+		{"instance.base_dir", c.Instance.BaseDir},
+	} {
+		if loc.path == "" {
+			continue
+		}
+		if !filepath.IsAbs(loc.path) {
+			return fmt.Errorf("%s must be an absolute path (got %q)", loc.key, loc.path)
+		}
+		if filepath.Clean(loc.path) == "/" {
+			return fmt.Errorf("%s must not be the filesystem root", loc.key)
+		}
+	}
+	if err := ValidateInstanceID(c.Instance.ID); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ValidateInstanceID rejects an instance.id that is not a single plain path
+// component. The id becomes a directory name under instance.base_dir (the
+// sandbox root is <base_dir>/<id>/vm), a suffix of the effective node id, and
+// a pool VM-id prefix, so a separator or a dot segment would escape the
+// configured base — or produce a node id no router can address. Empty is
+// valid (single-instance shapes). "vm" is reserved: it and the trailing "vm"
+// component of the sandbox root are indistinguishable from the single-instance
+// shape <base_dir>/vm, so boxout's sandbox_dir grammar would derive the wrong
+// containment root (boxout/server.validateSandboxDir) and refuse every create.
+func ValidateInstanceID(id string) error {
+	if id == "" {
+		return nil
+	}
+	if id == "." || id == ".." || strings.ContainsRune(id, '/') {
+		return fmt.Errorf("instance.id %q must be a single path component (no '/', not '.' or '..')", id)
+	}
+	if id == "vm" {
+		return fmt.Errorf("instance.id %q is reserved: <instance.base_dir>/vm is the single-instance sandbox root, so the multi-instance shape <instance.base_dir>/%s/vm cannot be told apart", id, id)
+	}
+	return nil
+}
+
+// InstanceSandboxRoot returns the per-instance sandbox root,
+// <instance.base_dir>/<instance.id>/vm, falling back to the built-in default
+// base when base_dir is empty (an explicitly emptied key means "the default",
+// exactly like tinyvm.guest_tcb_dir). This is the ONE expression both sides
+// must use: the sandlot installs per-VM directories under it, and boxout
+// derives its trusted root and caller-supplied sandbox_dir binding from it.
+func InstanceSandboxRoot(c *SandlotConfig) string {
+	if c == nil {
+		return filepath.Join(DefaultInstanceBaseDir, "vm")
+	}
+	base := c.Instance.BaseDir
+	if base == "" {
+		base = DefaultInstanceBaseDir
+	}
+	return filepath.Join(base, c.Instance.ID, "vm")
 }
 
 // HasRegistryCredential reports whether any registry credential is configured.
@@ -772,7 +849,7 @@ type SandlotConfig struct {
 	GatewayAddr  string               `yaml:"gateway_addr"`
 	NodeID       string               `yaml:"node_id"`
 	VMMBinary    string               `yaml:"vmm_binary"`
-	TinyVM      TinyVMConfig        `yaml:"tinyvm"`
+	TinyVM       TinyVMConfig         `yaml:"tinyvm"`
 	Specs        map[string]SpecEntry `yaml:"specs"`
 	Pool         string               `yaml:"pool"`
 	Recycle      RecycleConfig        `yaml:"recycle"`
@@ -785,6 +862,12 @@ type SandlotConfig struct {
 	// BoxoutTokenFile is the per-pod admission token shared with boxout
 	// (written by boxout at startup). Empty = UID-only admission (tests/dev).
 	BoxoutTokenFile string `yaml:"boxout_token_file"`
+	// VsockguardAttestation is the path of the root-written vsockguard
+	// attestation an embedded exec-role start verifies (default under the
+	// shared runtime directory; the attach tooling writes it). The directory
+	// must be root-controlled: the file's owner and mode are checked, so a
+	// service-writable location proves nothing. Restart-required.
+	VsockguardAttestation string `yaml:"vsockguard_attestation"`
 	// SetFsTransport selects the sandvmm transport for the per-request hot
 	// ops (vm.set-fs, sandvmm.ping): "raw" (default — the binary control
 	// frame protocol on the same API socket) or "http" (legacy REST).
@@ -836,11 +919,26 @@ const (
 	// artifacts: they execute every in-VM clear and are part of the trust
 	// boundary, so they live in a root-owned directory no service identity can
 	// write (host prep installs them; the sandlot only reads).
-	DefaultKernelPath    = "/usr/local/lib/sandswap/guest/vmlinux.bin"
-	DefaultInitramfsPath = "/usr/local/lib/sandswap/guest/initramfs.cpio.gz"
+	//
+	// DefaultGuestTcbDir is the PINNED TCB directory: an exec-role start
+	// verifies the SHA256SUMS pin for every kernel/initramfs that lives under
+	// it. A deployment that installs the TCB elsewhere sets tinyvm.guest_tcb_dir
+	// to that directory so the pin follows the artifacts (the deployer's
+	// SANDSWAP_GUEST_DIR is written here). Restart-required.
+	DefaultGuestTcbDir   = "/usr/local/lib/sandswap/guest"
+	DefaultKernelPath    = DefaultGuestTcbDir + "/vmlinux.bin"
+	DefaultInitramfsPath = DefaultGuestTcbDir + "/initramfs.cpio.gz"
 
 	DefaultVMMBinary  = "sandvmm"
 	DefaultVolumesDir = "/var/sandswap/volumes"
+
+	// DefaultVsockguardAttestation is the root-written statement that the
+	// warden-port BPF guard is attached and which uid it allows (the attach
+	// tooling writes it; see docs/how-it-works/vsockguard.md). An embedded
+	// exec-role start requires it unless -allow-missing-vsockguard is set. A
+	// deployment that writes it elsewhere sets vsockguard_attestation.
+	// Restart-required.
+	DefaultVsockguardAttestation = "/run/sandswap/vsockguard.allowed_uid"
 
 	DefaultVCPUs    = 2
 	DefaultMemoryMB = 512
@@ -861,10 +959,11 @@ const (
 	DefaultVMCreateConcurrency  = 5
 	DefaultVMDestroyConcurrency = 10
 
-	DefaultVMMode         = "embedded"
-	DefaultBoxoutSocket   = "/run/sandswap-boxout/boxout.sock"
-	DefaultSetFsTransport = "raw"
-	DefaultVMMAPIAuth     = true
+	DefaultVMMode          = "embedded"
+	DefaultBoxoutSocket    = "/run/sandswap-boxout/boxout.sock"
+	DefaultInstanceBaseDir = "/run/sandswap"
+	DefaultSetFsTransport  = "raw"
+	DefaultVMMAPIAuth      = true
 	// DefaultInitOnFree is the guest free-wipe posture default (false = boot
 	// with init_on_free=0; see TinyVMConfig.InitOnFree for the rationale).
 	DefaultInitOnFree = false
@@ -1003,6 +1102,7 @@ func Defaults() SandlotConfig {
 		TinyVM: TinyVMConfig{
 			Kernel:          DefaultKernelPath,
 			Initramfs:       DefaultInitramfsPath,
+			GuestTcbDir:     DefaultGuestTcbDir,
 			DefaultVCPUs:    DefaultVCPUs,
 			DefaultMemoryMB: DefaultMemoryMB,
 			VolumesDir:      DefaultVolumesDir,
@@ -1085,14 +1185,15 @@ func Defaults() SandlotConfig {
 			VMToVM:         DefaultVMToVM,
 		},
 		Instance: InstanceConfig{
-			BaseDir:       "/run/sandswap",
+			BaseDir:       DefaultInstanceBaseDir,
 			CIDRangeStart: 3,
 			CIDRangeEnd:   0,
 		},
-		VMMode:          DefaultVMMode,
-		BoxoutSocket:    DefaultBoxoutSocket,
-		BoxoutTokenFile: "",
-		SetFsTransport:  DefaultSetFsTransport,
+		VMMode:                DefaultVMMode,
+		BoxoutSocket:          DefaultBoxoutSocket,
+		BoxoutTokenFile:       "",
+		VsockguardAttestation: DefaultVsockguardAttestation,
+		SetFsTransport:        DefaultSetFsTransport,
 		Stream: StreamConfig{
 			SendBufferSize:        config.DefaultStreamSendBuffer,
 			RecvBufferSize:        config.DefaultStreamRecvBuffer,
@@ -1174,42 +1275,44 @@ func LoadFromFile(path string) (SandlotConfig, error) {
 type SandlotFlags struct {
 	ConfigPath string
 
-	GatewayAddr          string
-	NodeID               string
-	Kernel               string
-	Initramfs            string
-	DefaultVCPUs         int
-	DefaultMemMB         int
-	VMMBinary            string
-	VolumesDir           string
-	TemplatesDir         string
-	PoolSpec             string
-	TLSCert              string
-	TLSKey               string
-	TLSCA                string
-	NetworkBackend       string
-	NetworkBridge        string
-	NetworkSubnet        string
-	NetworkGateway       string
-	NetworkDNS           string
-	NetworkBindBackend   string // -binding-backend
-	NetworkBindPath      string // -binding-path
-	EgressBaseline       string // -egress-baseline
-	VMToVM               string // -vm-to-vm-policy
-	V6Prefix             string // -network-v6-prefix
-	IIDTemplate          string // -iid-template
-	RequireEgressBinding bool   // -require-egress-binding
-	MaxUses              int
-	RecycleMemPct        int
-	RecycleMemAbs        int
-	MinIdleFloorFrac     float64 // -min-idle-floor-frac
-	VMCreateConcurrency  int     // -vm-create-concurrency
-	VMDestroyConcurrency int     // -vm-destroy-concurrency
-	VMMode               string
-	BoxoutSocket         string
-	BoxoutTokenFile      string // -boxout-token-file
-	SetFsTransport       string // -setfs-transport
-	VMMAPIAuth           bool   // -vmm-api-auth (optional canonical-VMM token handshake; default off)
+	GatewayAddr           string
+	NodeID                string
+	Kernel                string
+	Initramfs             string
+	GuestTcbDir           string // -guest-tcb-dir
+	DefaultVCPUs          int
+	DefaultMemMB          int
+	VMMBinary             string
+	VolumesDir            string
+	TemplatesDir          string
+	PoolSpec              string
+	TLSCert               string
+	TLSKey                string
+	TLSCA                 string
+	NetworkBackend        string
+	NetworkBridge         string
+	NetworkSubnet         string
+	NetworkGateway        string
+	NetworkDNS            string
+	NetworkBindBackend    string // -binding-backend
+	NetworkBindPath       string // -binding-path
+	EgressBaseline        string // -egress-baseline
+	VMToVM                string // -vm-to-vm-policy
+	V6Prefix              string // -network-v6-prefix
+	IIDTemplate           string // -iid-template
+	RequireEgressBinding  bool   // -require-egress-binding
+	MaxUses               int
+	RecycleMemPct         int
+	RecycleMemAbs         int
+	MinIdleFloorFrac      float64 // -min-idle-floor-frac
+	VMCreateConcurrency   int     // -vm-create-concurrency
+	VMDestroyConcurrency  int     // -vm-destroy-concurrency
+	VMMode                string
+	BoxoutSocket          string
+	BoxoutTokenFile       string // -boxout-token-file
+	VsockguardAttestation string // -vsockguard-attestation
+	SetFsTransport        string // -setfs-transport
+	VMMAPIAuth            bool   // -vmm-api-auth (optional canonical-VMM token handshake; default off)
 
 	// Roles + provision role (restart-required)
 	Roles                     string // -roles ("exec", "prov", "exec,prov")
@@ -1294,6 +1397,9 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 	}
 	if explicitSet["initramfs"] {
 		cfg.TinyVM.Initramfs = flags.Initramfs
+	}
+	if explicitSet["guest-tcb-dir"] {
+		cfg.TinyVM.GuestTcbDir = flags.GuestTcbDir
 	}
 	if explicitSet["default-vcpus"] {
 		// Refuse the negative BEFORE the int→uint cast: the wrap is silent and
@@ -1425,6 +1531,9 @@ func (cfg *SandlotConfig) ApplyFlagOverrides(flags *SandlotFlags, explicitSet ma
 	}
 	if explicitSet["boxout-token-file"] {
 		cfg.BoxoutTokenFile = flags.BoxoutTokenFile
+	}
+	if explicitSet["vsockguard-attestation"] {
+		cfg.VsockguardAttestation = flags.VsockguardAttestation
 	}
 	if explicitSet["roles"] {
 		cfg.Roles = parseRolesFlag(flags.Roles)

@@ -81,8 +81,11 @@ esac
 
 # The guest TCB directory: root-owned 0755, never a service identity's. The
 # deployer installs the kernel/initramfs here (sandswap_install_guest_artifacts)
-# so they are not replaceable by the gateway/sandlot identities.
-install -d -m 0755 -o root -g root /usr/local/lib/sandswap/guest
+# so they are not replaceable by the gateway/sandswap identities.
+# "$SANDSWAP_GUEST_DIR" (not a literal): the deployer, uninstall.sh and the
+# generated sandlot config all follow the same variable, so a relocated TCB
+# is installed, verified and removed in one place.
+install -d -m 0755 -o root -g root "$SANDSWAP_GUEST_DIR"
 
 # Exec-only hosts do NOT mint a volume seed: the seed must be minted once and
 # distributed fleet-wide (a local mint derives a different volume-name

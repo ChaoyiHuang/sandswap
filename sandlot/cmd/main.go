@@ -46,6 +46,7 @@ var (
 	nodeID        = flag.String("node-id", "", "Unique node identifier (defaults to hostname)")
 	kernelPath    = flag.String("kernel", sandlotconfig.DefaultKernelPath, "Path to kernel image")
 	initramfsPath = flag.String("initramfs", sandlotconfig.DefaultInitramfsPath, "Path to initramfs")
+	guestTcbDir   = flag.String("guest-tcb-dir", sandlotconfig.DefaultGuestTcbDir, "Pinned guest TCB directory: when BOTH the kernel and initramfs live under it, the pair is verified against the SHA256SUMS pin beside it at exec-role start (fatal on a missing or mismatched pin); a pair with BOTH artifacts outside it is a dev/e2e path and is not verified; a mixed pair (one inside, one outside) is refused. Must be a root-owned directory no service identity can write. Restart-required.")
 	defaultVCPUs  = flag.Int("default-vcpus", sandlotconfig.DefaultVCPUs, "Default VM vCPUs")
 	defaultMemMB  = flag.Int("default-memory", sandlotconfig.DefaultMemoryMB, "Default VM memory in MB")
 	vmmBinary     = flag.String("vmm-binary", sandlotconfig.DefaultVMMBinary, "Path to sandvmm binary")
@@ -147,7 +148,8 @@ var (
 	provisionReconnectSec  = flag.Int("provision-reconnect-sec", sandlotconfig.DefaultProvisionReconnectSec, "Prov-only connection recycle interval (seconds, ±20% jitter): a healthy stream is closed and re-dialed so a multi-address gateway list re-spreads and a revived gateway recovers its share. Exec connections are sticky and never recycled.")
 	allowColocated         = flag.Bool("allow-colocated-instances", false, "SIMULATION ONLY: permit multiple sandlot instances on one host (the simulation scripts run N nodes per machine). Production hosts run exactly one instance; a duplicate node_id is refused even with this flag.")
 	allowInsecureVolumes   = flag.Bool("allow-insecure-volumes", false, "DEV/TEST ONLY: start even when -volumes-dir is NOT on a nosuid,nodev mount. The virtio-fs passthrough stores guest-planted setuid bits and mknod verbatim, and only those mount flags make them inert (invariant 8, docs/operations/storage.md row 9) — production fixes the mount (self-bind + remount,bind,nosuid,nodev; the baremetal deployer does this), never passes this flag.")
-	allowMissingVsockguard = flag.Bool("allow-missing-vsockguard", false, "DEV/TEST ONLY: start an embedded exec node without a valid root-written vsockguard attestation (/run/sandswap/vsockguard.allowed_uid). Production nodes attach the warden-port BPF guard (security/vsockguard-attach.sh / the k8s host-setup unit), which writes the attestation; without it the per-frame warden HMAC is the only transport control.")
+	allowMissingVsockguard = flag.Bool("allow-missing-vsockguard", false, "DEV/TEST ONLY: start an embedded exec node without a valid root-written vsockguard attestation (the -vsockguard-attestation file). Production nodes attach the warden-port BPF guard (security/vsockguard-attach.sh / the k8s host-setup unit), which writes the attestation; without it the per-frame warden HMAC is the only transport control.")
+	vsockguardAttestation  = flag.String("vsockguard-attestation", sandlotconfig.DefaultVsockguardAttestation, "Path of the root-written vsockguard attestation an embedded exec-role start verifies. Must be the file the attach tooling writes (SANDSWAP_RUN_DIR/vsockguard.allowed_uid) and live in a root-controlled directory: only the file's owner and mode vouch for it. Restart-required.")
 	showVersion            = flag.Bool("version", false, "Print version and exit")
 )
 
@@ -190,6 +192,7 @@ func main() {
 		NodeID:                      *nodeID,
 		Kernel:                      *kernelPath,
 		Initramfs:                   *initramfsPath,
+		GuestTcbDir:                 *guestTcbDir,
 		DefaultVCPUs:                *defaultVCPUs,
 		DefaultMemMB:                *defaultMemMB,
 		VMMBinary:                   *vmmBinary,
@@ -219,6 +222,7 @@ func main() {
 		VMMode:                      *vmMode,
 		BoxoutSocket:                *boxoutSocket,
 		BoxoutTokenFile:             *boxoutTokenFile,
+		VsockguardAttestation:       *vsockguardAttestation,
 		SetFsTransport:              *setfsTransport,
 		VMMAPIAuth:                  *vmmAPIAuth,
 		InitOnFree:                  *initOnFree,
@@ -296,7 +300,7 @@ func main() {
 	if slices.Contains(cfg.NormalizedRoles(), "exec") {
 		if cfg.VMMode == "boxout" {
 			log.Printf("vsockguard: pin verification skipped in boxout mode (unprivileged sandlot; the host-setup unit owns the guard)")
-		} else if err := preflight.VerifyVsockguardPin(uint32(os.Geteuid()), *allowMissingVsockguard, log.Default()); err != nil {
+		} else if err := preflight.VerifyVsockguardPin(uint32(os.Geteuid()), preflight.VsockguardAttestation(&cfg), *allowMissingVsockguard, log.Default()); err != nil {
 			log.Fatalf("%v", err)
 		}
 	}
@@ -461,11 +465,14 @@ func main() {
 		}
 	}
 
-	// Guest TCB integrity: production installs the kernel/initramfs in the
-	// root-owned guest directory with a SHA256SUMS pin. Verify before the
-	// first VM; dev/e2e paths outside that directory are deliberately exempt.
+	// Guest TCB integrity: production installs the kernel/initramfs under the
+	// pinned guest TCB directory (tinyvm.guest_tcb_dir) with a SHA256SUMS
+	// pin. Verify before the first VM; dev/e2e paths outside that directory
+	// are deliberately exempt.
 	if cfg.HasRole("exec") {
-		preflight.VerifyGuestArtifacts(&cfg, logger)
+		if err := preflight.VerifyGuestArtifacts(&cfg, logger); err != nil {
+			logger.Fatalf("%v", err)
+		}
 	}
 
 	// Default VMM config
@@ -761,9 +768,15 @@ func main() {
 		}
 	}
 
-	// Configure multi-instance paths and CID range.
+	// Per-instance sandbox root: <instance.base_dir>/<instance.id>/vm. The
+	// SAME helper boxout uses (sandlotconfig.InstanceSandboxRoot) so the two
+	// sides can never derive different roots — an explicitly empty base_dir
+	// falls back to the default base (a bare `if BaseDir != ""` here used to
+	// leave /run/sandswap/vm while boxout derived <default>/<id>/vm).
+	handler.SandboxRoot = sandlotconfig.InstanceSandboxRoot(&cfg)
+
+	// Multi-instance CID range and VM id prefix.
 	if cfg.Instance.ID != "" {
-		handler.SandboxRoot = filepath.Join(cfg.Instance.BaseDir, cfg.Instance.ID, "vm")
 		handler.SetNextCID(cfg.Instance.CIDRangeStart)
 		if cfg.Instance.CIDRangeEnd > 0 {
 			handler.SetCIDMax(cfg.Instance.CIDRangeEnd)

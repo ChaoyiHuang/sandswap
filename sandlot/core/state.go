@@ -26,12 +26,15 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	sandlotconfig "sandlot/config"
 	"sandlot/vmm"
 )
 
-// defaultSandboxRoot is the default on-disk root of per-VM sandbox directories.
-// Overridden by Handler.SandboxRoot when multi-instance mode is active.
-const defaultSandboxRoot = "/run/sandswap/vm"
+// defaultSandboxRoot is the default on-disk root of per-VM sandbox directories:
+// instance.base_dir's default plus "/vm" — the same expression the sandlot
+// derives from a configured base and boxout derives from the shared config.
+// Overridden by Handler.SandboxRoot when a base is configured.
+const defaultSandboxRoot = sandlotconfig.DefaultInstanceBaseDir + "/vm"
 
 // errNoState indicates a sandbox dir has no state.json (either never written,
 // e.g. sandlot crashed before the post-Launch write, or already removed).

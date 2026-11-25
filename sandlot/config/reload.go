@@ -26,6 +26,15 @@ type HotReloadTargets struct {
 	// UpdateVMMConfig updates the VMM config (kernel, initramfs, vcpus, memory).
 	// Affects new VMs only. Nil = not available.
 	UpdateVMMConfig func(cfg TinyVMConfig)
+	// VerifyTinyVM proves the guest TCB of a reloaded config under the SAME
+	// policy an exec-role start applies (see preflight.VerifyGuestArtifacts):
+	// both artifacts under the pinned directory must match the SHA256SUMS pin;
+	// a pair with both artifacts outside it is a dev/e2e path and is exempt
+	// (logged). A mixed pair is refused. It is consulted BEFORE a
+	// kernel/initramfs edit is applied, and only when either path changes: a
+	// non-nil error vetoes the whole edit and the previous config keeps
+	// serving. Nil = no check wired (tests, prov-only path).
+	VerifyTinyVM func(cfg *SandlotConfig) error
 	// UpdateRecycleConfig updates the recycle parameters.
 	UpdateRecycleConfig func(cfg RecycleConfig)
 	// ReconcileSeeds is called when a seed key changed in the config file. It
@@ -156,6 +165,18 @@ func NewReloadCallback(current *config.WatchableConfig[SandlotConfig], targets *
 		if err := newCfg.Validate(); err != nil {
 			logger.Error("config reload: invalid values; keeping previous config", "error", err)
 			return
+		}
+		// A kernel/initramfs edit changes what the next tinyVM boots, so it
+		// must pass the same guest TCB verification an exec-role START ran.
+		// Checking here (before the Swap) turns a bad edit into a refusal of
+		// the WHOLE revision: the live config and the handler keep the last
+		// verified pair instead of the file silently outrunning both.
+		if targets.VerifyTinyVM != nil && newCfg.HasRole("exec") &&
+			(prev.TinyVM.Kernel != newCfg.TinyVM.Kernel || prev.TinyVM.Initramfs != newCfg.TinyVM.Initramfs) {
+			if err := targets.VerifyTinyVM(&newCfg); err != nil {
+				logger.Error("config reload: guest TCB verification failed; keeping previous config", "error", err)
+				return
+			}
 		}
 		oldCfg := current.Swap(newCfg)
 		ApplyHotReload(oldCfg, newCfg, targets, logger)

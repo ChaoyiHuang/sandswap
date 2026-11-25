@@ -17,6 +17,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	sandlotconfig "sandlot/config"
 )
 
 // TestVerifyVsockguardAttestation pins the startup contract: a missing
@@ -77,5 +79,46 @@ func TestVerifyVsockguardAttestation(t *testing.T) {
 	}
 	if err := VerifyVsockguardAttestation(link, 1234, false, lg); err == nil {
 		t.Fatal("symlinked attestation accepted")
+	}
+}
+
+// TestVerifyVsockguardPinRelocatedAttestation pins that the startup check
+// follows the CONFIGURED attestation path: a sandlot whose deployment wrote
+// the file outside the default runtime directory is verified against that
+// file, and never against the default location (which may hold a stale file
+// for another identity).
+func TestVerifyVsockguardPinRelocatedAttestation(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("attestation ownership check requires root")
+	}
+	lg := log.New(io.Discard, "", 0)
+	relocated := filepath.Join(t.TempDir(), "guard", "vsockguard.allowed_uid")
+	if err := os.MkdirAll(filepath.Dir(relocated), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(relocated, []byte("985\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyVsockguardPin(985, relocated, false, lg); err != nil {
+		t.Fatalf("relocated attestation for this uid rejected: %v", err)
+	}
+	if err := VerifyVsockguardPin(983, relocated, false, lg); err == nil {
+		t.Fatal("relocated attestation naming another uid accepted")
+	}
+	if err := VerifyVsockguardPin(983, relocated+".absent", false, lg); err == nil {
+		t.Fatal("absent relocated attestation accepted without the dev admission")
+	}
+	// An emptied key means the built-in default, like tinyvm.guest_tcb_dir.
+	cfg := sandlotconfig.Defaults()
+	if got := VsockguardAttestation(&cfg); got != sandlotconfig.DefaultVsockguardAttestation {
+		t.Fatalf("VsockguardAttestation(defaults) = %q, want %q", got, sandlotconfig.DefaultVsockguardAttestation)
+	}
+	cfg.VsockguardAttestation = relocated
+	if got := VsockguardAttestation(&cfg); got != relocated {
+		t.Fatalf("VsockguardAttestation(configured) = %q, want %q", got, relocated)
+	}
+	cfg.VsockguardAttestation = ""
+	if got := VsockguardAttestation(&cfg); got != sandlotconfig.DefaultVsockguardAttestation {
+		t.Fatalf("VsockguardAttestation(empty) = %q, want the default %q", got, sandlotconfig.DefaultVsockguardAttestation)
 	}
 }

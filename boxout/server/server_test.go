@@ -1047,6 +1047,10 @@ func TestUntrackedDestroyRefusedDirUntouched(t *testing.T) {
 // parent (which would neutralize core.isSandswapVMDir — rel is then always a
 // bare basename and every path "passes").
 func TestValidateSandboxDirTrustedRoot(t *testing.T) {
+	defaultBase := sandlotconfig.DefaultInstanceBaseDir
+	if defaultBase != "/run/sandswap" {
+		t.Fatalf("the default instance base moved to %q: the cases below pin /run/sandswap", defaultBase)
+	}
 	cases := []struct {
 		dir  string
 		root string
@@ -1057,7 +1061,7 @@ func TestValidateSandboxDirTrustedRoot(t *testing.T) {
 		{"/run/sandswap/1/vm/vm-a/deep/dir", "/run/sandswap/1/vm"},
 	}
 	for _, c := range cases {
-		root, err := validateSandboxDir(c.dir)
+		root, err := validateSandboxDir(c.dir, defaultBase)
 		if err != nil {
 			t.Errorf("%s: %v", c.dir, err)
 			continue
@@ -1067,9 +1071,129 @@ func TestValidateSandboxDirTrustedRoot(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "/etc/x", "/run/sandswap/other/x", "/run/sandswap/vm/../..", "relative/vm/x"} {
-		if _, err := validateSandboxDir(bad); err == nil {
+		if _, err := validateSandboxDir(bad, defaultBase); err == nil {
 			t.Errorf("validateSandboxDir(%q) accepted a foreign path", bad)
 		}
+	}
+}
+
+// TestValidateSandboxDirRelocatedBase pins that the trusted prefix follows
+// boxout's OWN instance.base_dir: under a relocated base the same two shapes
+// are admitted and trusted there, while the default-base paths (and every
+// sibling-prefix look-alike) become foreign — and vice versa. A server built
+// from a config with a relocated base admits exactly its own root.
+func TestValidateSandboxDirRelocatedBase(t *testing.T) {
+	const reloc = "/run/relocated-sandswap"
+	defaultBase := sandlotconfig.DefaultInstanceBaseDir
+	for _, c := range []struct {
+		dir  string
+		root string
+	}{
+		{reloc + "/vm/vm-a", reloc + "/vm"},
+		{reloc + "/7/vm/vm-a", reloc + "/7/vm"},
+		{reloc + "/7/vm/vm-a/vm-b", reloc + "/7/vm"},
+	} {
+		root, err := validateSandboxDir(c.dir, reloc)
+		if err != nil {
+			t.Errorf("%s: %v", c.dir, err)
+			continue
+		}
+		if root != c.root {
+			t.Errorf("validateSandboxDir(%s) root = %q, want %q", c.dir, root, c.root)
+		}
+	}
+	for _, bad := range []string{
+		"/run/sandswap/vm/vm-a",            // the default base is foreign under a relocated base
+		"/run/relocated-sandswap2/vm/vm-a", // a sibling sharing the textual prefix
+		reloc + "/vm/../..",
+		"relative/vm/x",
+		"",
+	} {
+		if _, err := validateSandboxDir(bad, reloc); err == nil {
+			t.Errorf("validateSandboxDir(%q, %s) accepted a foreign path", bad, reloc)
+		}
+	}
+	if _, err := validateSandboxDir(reloc+"/vm/vm-a", defaultBase); err == nil {
+		t.Errorf("a path under the relocated base %s was accepted under the default base", reloc)
+	}
+	for _, badBase := range []string{"relative/base", "/", ""} {
+		if _, err := validateSandboxDir("/whatever/vm/vm-a", badBase); err == nil {
+			t.Errorf("validateSandboxDir accepted an unusable trusted base %q", badBase)
+		}
+	}
+
+	// Which base a configuration gets: an instance inside the shipped shared
+	// runtime directory keeps the shared grammar (siblings admitted by the
+	// shape check, left to the own-root binding); only a base OUTSIDE it
+	// becomes its own base. Every configuration that works today keeps the
+	// base it had.
+	for _, c := range []struct{ base, want string }{
+		{"", defaultBase},
+		{defaultBase, defaultBase},
+		{defaultBase + "/boxout-it-a", defaultBase},
+		{defaultBase + "/boxout-it-a/", defaultBase},
+		{reloc, reloc},
+		{"/run/" + defaultBase[len("/run/"):] + "-2", "/run/" + defaultBase[len("/run/"):] + "-2"},
+	} {
+		cfg := sandlotconfig.Defaults()
+		cfg.Instance.BaseDir = c.base
+		if got := trustedSandboxBase(cfg); got != c.want {
+			t.Errorf("trustedSandboxBase(base_dir=%q) = %q, want %q", c.base, got, c.want)
+		}
+	}
+
+	// The server-level check is bound to the server's own config.
+	cfg := sandlotconfig.Defaults()
+	cfg.Instance.BaseDir = reloc
+	cfg.Instance.ID = "7"
+	s := newTestServer("/var/sandswap/volumes")
+	s.cfg = cfg
+	root, err := s.validateCreateSandboxDir(reloc+"/7/vm/vm-a", "vm-a")
+	if err != nil {
+		t.Fatalf("own-root create refused under a relocated base: %v", err)
+	}
+	if root != reloc+"/7/vm" {
+		t.Fatalf("trusted root = %q, want %s/7/vm", root, reloc)
+	}
+	if _, err := s.validateCreateSandboxDir("/run/sandswap/7/vm/vm-a", "vm-a"); err == nil {
+		t.Fatal("a default-base path was accepted by a server whose base is relocated")
+	}
+}
+
+// TestValidateSandboxDirBaseWithVMComponent pins the base-relative root
+// derivation: a relocated base may itself contain a "vm" path component
+// (including a trailing /vm). Searching the whole path for the first "/vm/"
+// would stop inside the base and derive a root outside this instance's tree,
+// refusing every create/destroy. The root must always be resolved after the
+// base prefix.
+func TestValidateSandboxDirBaseWithVMComponent(t *testing.T) {
+	for _, c := range []struct{ base, dir, root string }{
+		{"/srv/vm", "/srv/vm/7/vm/vm-a", "/srv/vm/7/vm"},
+		{"/srv/vm/base", "/srv/vm/base/7/vm/vm-a", "/srv/vm/base/7/vm"},
+		{"/srv/vm", "/srv/vm/vm/vm-a", "/srv/vm/vm"}, // single-instance shape under that base
+	} {
+		root, err := validateSandboxDir(c.dir, c.base)
+		if err != nil {
+			t.Errorf("base %s: %s: %v", c.base, c.dir, err)
+			continue
+		}
+		if root != c.root {
+			t.Errorf("validateSandboxDir(%s, %s) root = %q, want %q", c.dir, c.base, root, c.root)
+		}
+	}
+	// The same derivation through the server-level binding: a relocated base
+	// ending in /vm must still admit exactly its own instance root.
+	cfg := sandlotconfig.Defaults()
+	cfg.Instance.BaseDir = "/srv/vm"
+	cfg.Instance.ID = "7"
+	s := newTestServer("/var/sandswap/volumes")
+	s.cfg = cfg
+	root, err := s.validateCreateSandboxDir("/srv/vm/7/vm/vm-a", "vm-a")
+	if err != nil {
+		t.Fatalf("own-root create refused under a base ending in /vm: %v", err)
+	}
+	if root != "/srv/vm/7/vm" {
+		t.Fatalf("trusted root = %q, want /srv/vm/7/vm", root)
 	}
 }
 
@@ -1393,9 +1517,9 @@ func TestCreateVMVolumesMountGate(t *testing.T) {
 	s, ownRoot := newInstanceTestServer(t, "inst-a")
 	s.vmmCfg.VolumesDir = volRoot
 	vmID := "vm-gate-1"
-	// No sandbox_dir: the server derives <own root>/<vm_id>, which keeps the
-	// request valid until the mount gate (the sandbox_dir grammar is rooted at
-	// /run/sandswap and this instance root is a temp tree).
+	// No sandbox_dir: the server derives <own root>/<vm_id>. The explicit
+	// form under this relocated (temp-tree) root is pinned by
+	// TestCreateVMAcceptsRelocatedBaseRoot.
 	_ = ownRoot
 	req := map[string]any{
 		"vm_id": vmID, "warden_session_key": strings.Repeat("cd", 32),
@@ -1415,6 +1539,62 @@ func TestCreateVMVolumesMountGate(t *testing.T) {
 	resp = s.handleCreateVM(context.Background(), req)
 	if msg, _ := resp["error"].(string); !strings.Contains(msg, "launch:") {
 		t.Fatalf("with the admission set the request must reach the launch path, got %q", msg)
+	}
+}
+
+// TestCreateVMAcceptsRelocatedBaseRoot pins the fix for a relocated
+// instance.base_dir: the sidecar's own root (here a temp tree outside
+// /run/sandswap) is its trusted base, so a create whose sandbox_dir is
+// exactly <own root>/<vm_id> passes the path grammar and proceeds — to the
+// mount gate, and with the dev admission to the launch itself. Before the
+// base followed the configuration, every such create was refused with
+// "sandbox_dir must be under /run/sandswap/...", so a relocated sidecar could
+// never serve a VM. The two guards around it are unchanged: a sibling
+// instance's root (another base) is foreign to the grammar, and a path under
+// our own base that is not our root is refused by the own-root binding.
+func TestCreateVMAcceptsRelocatedBaseRoot(t *testing.T) {
+	s, ownRoot := newInstanceTestServer(t, "inst-r")
+	_, siblingRoot := newInstanceTestServer(t, "inst-s")
+	vmID := "vm-reloc-1"
+	key := strings.Repeat("ef", 32)
+	ctx := context.Background()
+	s.vmmCfg.VolumesDir = filepath.Join(t.TempDir(), "missing-volumes")
+
+	resp := s.handleCreateVM(ctx, map[string]any{
+		"vm_id": vmID, "sandbox_dir": filepath.Join(siblingRoot, vmID), "warden_session_key": key,
+	})
+	if resp["ok"] != false {
+		t.Fatal("a create in a sibling instance's root must be refused")
+	}
+	if msg, _ := resp["error"].(string); !strings.Contains(msg, "sandbox_dir must be under") {
+		t.Fatalf("a sibling root under another base must be refused by the grammar, got %q", msg)
+	}
+
+	// Same base, other shape (<base>/vm/<vm>): admitted by the grammar, so the
+	// refusal must come from the binding to THIS instance's root.
+	resp = s.handleCreateVM(ctx, map[string]any{
+		"vm_id": vmID, "sandbox_dir": filepath.Join(s.cfg.Instance.BaseDir, "vm", vmID), "warden_session_key": key,
+	})
+	if msg, _ := resp["error"].(string); resp["ok"] != false || !strings.Contains(msg, "not this boxout instance's root") {
+		t.Fatalf("an other-shape path under our base must be refused by the own-root binding, got ok=%v %q", resp["ok"], msg)
+	}
+
+	// Our own root: the grammar passes, the mount gate stops it.
+	resp = s.handleCreateVM(ctx, map[string]any{
+		"vm_id": vmID, "sandbox_dir": filepath.Join(ownRoot, vmID), "warden_session_key": key,
+	})
+	if msg, _ := resp["error"].(string); resp["ok"] != false || !strings.Contains(msg, "volumes_dir") {
+		t.Fatalf("an own-root create must pass the path grammar and stop at the mount gate, got ok=%v %q", resp["ok"], msg)
+	}
+
+	// With the dev admission the request reaches the launch itself.
+	s.allowInsecureVolumes = true
+	s.vmmCfg.VMMBinary = "/nonexistent/sandvmm-must-not-run"
+	resp = s.handleCreateVM(ctx, map[string]any{
+		"vm_id": vmID, "sandbox_dir": filepath.Join(ownRoot, vmID), "warden_session_key": key,
+	})
+	if msg, _ := resp["error"].(string); !strings.Contains(msg, "launch:") {
+		t.Fatalf("with the admission set the own-root request must reach the launch path, got %q", msg)
 	}
 }
 

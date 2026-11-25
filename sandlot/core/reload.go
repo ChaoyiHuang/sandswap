@@ -19,6 +19,7 @@ import (
 
 	"common/config"
 	sandlotconfig "sandlot/config"
+	"sandlot/preflight"
 )
 
 // StartConfigReload starts the hot-reload file watcher if a config path is set.
@@ -40,6 +41,13 @@ func StartConfigReload(cfg *sandlotconfig.SandlotConfig, liveConfig *config.Watc
 
 	slogLogger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	rw, err := config.NewReloadWatcher(cfg.ConfigFilePath, sandlotconfig.NewReloadCallback(liveConfig, &sandlotconfig.HotReloadTargets{
+		// A kernel/initramfs edit boots the next tinyVM, so it passes the same
+		// TCB pin check the exec-role start ran — preflight refuses the edit
+		// (previous configs keep serving) on a missing/mismatched pin, a
+		// non-root-owned artifact or directory, or a half-migrated TCB.
+		VerifyTinyVM: func(c *sandlotconfig.SandlotConfig) error {
+			return preflight.VerifyGuestArtifacts(c, logger)
+		},
 		UpdateVMMConfig: func(tinyCfg sandlotconfig.TinyVMConfig) {
 			// Partial application from the LIVE config: only the four
 			// hot-reloadable tinyvm fields ever change here. Restart-required

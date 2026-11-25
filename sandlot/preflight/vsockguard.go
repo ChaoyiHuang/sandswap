@@ -15,30 +15,45 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+
+	sandlotconfig "sandlot/config"
 )
 
-// vsockguardAttestation is the root-written statement that the warden-port BPF
-// guard is attached and which uid it allows. The sandlot (uid 985) cannot read
-// the bpffs pin itself: /sys/fs/bpf is root-only and bpf_obj_get needs both DAC
-// access and BPF privileges. The deploy/attach tooling (root) writes this file
-// after a successful attach; the systemd unit re-runs the same check in
-// ExecStartPre, so a stale file cannot outlive a detached pin or a reboot.
-const vsockguardAttestation = "/run/sandswap/vsockguard.allowed_uid"
+// VsockguardAttestation returns the attestation path in effect: the configured
+// vsockguard_attestation, else the built-in default (an emptied key means
+// "the default", exactly like tinyvm.guest_tcb_dir). The file it names is the
+// root-written statement that the warden-port BPF guard is attached and which
+// uid it allows. The sandlot (uid 985) cannot read the bpffs pin itself:
+// /sys/fs/bpf is root-only and bpf_obj_get needs both DAC access and BPF
+// privileges. The deploy/attach tooling (root) writes the file after a
+// successful attach; the systemd unit re-runs the same check in ExecStartPre,
+// so a stale file cannot outlive a detached pin or a reboot. A relocated file
+// must live in a root-controlled directory: only its owner and mode vouch for
+// it.
+func VsockguardAttestation(cfg *sandlotconfig.SandlotConfig) string {
+	if cfg.VsockguardAttestation == "" {
+		return sandlotconfig.DefaultVsockguardAttestation
+	}
+	return filepath.Clean(cfg.VsockguardAttestation)
+}
 
 // VerifyVsockguardPin proves the warden-port BPF guard is attached AND allows
-// THIS sandlot uid. Root sandlots skip the check (root is a trust root and the
-// hook admits root); a non-root sandlot verifies the root attestation's
-// ownership, mode and value. The dev/test admission downgrades a
-// missing/mismatched attestation to a warning.
-func VerifyVsockguardPin(sandlotUID uint32, allowMissing bool, logger *log.Logger) error {
+// THIS sandlot uid, reading the root-written attestation at path
+// (vsockguard_attestation; the deploy tooling's SANDSWAP_RUN_DIR must name the
+// same file). Root sandlots skip the check (root is a trust root and the hook
+// admits root); a non-root sandlot verifies the attestation's ownership, mode
+// and value. The dev/test admission downgrades a missing/mismatched
+// attestation to a warning.
+func VerifyVsockguardPin(sandlotUID uint32, attestation string, allowMissing bool, logger *log.Logger) error {
 	if sandlotUID == 0 {
 		logger.Printf("vsockguard: running as root — pin check skipped (root is a trust root and the BPF hook admits root)")
 		return nil
 	}
-	return VerifyVsockguardAttestation(vsockguardAttestation, sandlotUID, allowMissing, logger)
+	return VerifyVsockguardAttestation(attestation, sandlotUID, allowMissing, logger)
 }
 
 // VerifyVsockguardAttestation validates the root-written attestation file at

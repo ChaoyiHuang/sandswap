@@ -743,6 +743,10 @@ vmm_binary: ${SANDSWAP_BIN}/sandswap-sandvmm
 tinyvm:
   kernel: $(sandswap_guest_artifact vmlinux.bin)
   initramfs: $(sandswap_guest_artifact initramfs.cpio.gz)
+  # Where the deployer pinned the TCB: the sandlot verifies the SHA256SUMS
+  # pin only for artifacts under THIS directory, so a relocated
+  # SANDSWAP_GUEST_DIR must be declared here or the hash check is skipped.
+  guest_tcb_dir: ${SANDSWAP_GUEST_DIR}
   default_vcpus: ${SANDSWAP_DEFAULT_VCPUS:-2}
   default_memory_mb: ${SANDSWAP_DEFAULT_MEMORY_MB:-512}
   volumes_dir: ${vol_root}

@@ -29,6 +29,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	sandlotconfig "sandlot/config"
 	"sandlot/hostbin"
 )
 
@@ -490,10 +491,10 @@ func Launch(ctx context.Context, cfg Config, logger *log.Logger) (*RunningVM, er
 		cfg.VMMBinary = "sandvmm"
 	}
 	if cfg.SandboxDir == "" {
-		cfg.SandboxDir = filepath.Join("/run/sandswap/vm", cfg.ID)
+		cfg.SandboxDir = filepath.Join(sandlotconfig.DefaultInstanceBaseDir, "vm", cfg.ID)
 	}
 	if cfg.VolumesDir == "" {
-		cfg.VolumesDir = "/var/sandswap/volumes"
+		cfg.VolumesDir = sandlotconfig.DefaultVolumesDir
 	}
 	if cfg.KernelCmdline == "" {
 		// highres=off (copied from upstream example cmdlines) disables the

@@ -93,8 +93,9 @@ installs its own role from it. Per host, the notable destinations are:
 | gateway | `/usr/local/bin/sandswap-gateway` | gateway hosts |
 | sandlot / sandvmm | `/usr/local/bin/sandswap-sandlot` / `-sandvmm` | exec sandlot hosts |
 | sandns | `/usr/local/bin/sandns` | sandns host |
-| vmlinux.bin, initramfs.cpio.gz | `/usr/local/lib/sandswap/guest/` (root:root 0755 dir, 0644 files, with a generated `SHA256SUMS`) | exec sandlot hosts — the guest kernel is the in-VM TCB; it must never live in a service-writable directory |
-| vsockguard.bpf.o, vsockguardctl | `/usr/local/lib/sandswap/` / `/usr/local/bin/` | exec sandlot hosts |
+| vmlinux.bin, initramfs.cpio.gz | `/usr/local/lib/sandswap/guest/` (root:root 0755 dir, 0644 files, with a generated `SHA256SUMS`) | exec sandlot hosts — the guest kernel is the in-VM TCB; it must never live in a service-writable directory. This is the default location: export `SANDSWAP_GUEST_DIR=<dir>` to install the pair elsewhere (same ownership rules) — the deployer then writes that directory into the generated sandlot config as `tinyvm.guest_tcb_dir`, and `uninstall.sh` and `security/verify-host-security.sh` follow the same variable |
+| vsockguard.bpf.o | `/var/lib/sandswap/` | exec sandlot hosts — the deployer's copy of the BPF object (0644). The attach/verify helpers read `output/vsockguard.bpf.o` by default; set `VSOCKGUARD_OBJ` to this installed copy when attaching without the source tree |
+| vsockguardctl | `/usr/local/bin/` | exec sandlot hosts |
 | rootfs-template/ | shared `flat-templates/rootfs/v1/` | shared storage |
 | certs | `/etc/sandswap/certs/` | all |
 | generated YAML configs | `/etc/sandswap/*.yaml` | per role |
@@ -501,7 +502,7 @@ every start via `/usr/local/lib/sandswap/apply-prov-ownership`, which reads
 | `/etc/sandswap` | root : root | 0755 | config root |
 | `/etc/sandswap/volume-seed` | root : `sandprov` | 0640 | name derivation secret — prov reads, sandvmm must not; minted once, never regenerated. The group is the `sandprov` account on EVERY shape: a dedicated prov instance runs AS sandprov, and the merged `exec,prov` sandlot carries sandprov as a SUPPLIED supplementary group (the sandvmm spawn replaces its own group set, so the grant never reaches the VMM/FUSE daemon) |
 | `/var/lib/sandswap` | root : root | 0755 | state root; the gateway's writable identity store + lock live in the private `state/` subdirectory (0700, gateway identity — unit shapes get that from `StateDirectory`), never at the root |
-| `/usr/local/lib/sandswap/guest` | root : root | 0755 (files 0644 + `SHA256SUMS`) | the guest TCB (kernel + initramfs). Executed as the in-VM root of trust and therefore never writable — not even renamable — by a service identity; the sandlot verifies the hashes at start |
+| `/usr/local/lib/sandswap/guest` | root : root | 0755 (files 0644 + `SHA256SUMS`) | the guest TCB (kernel + initramfs). Executed as the in-VM root of trust and therefore never writable — not even renamable — by a service identity; the sandlot verifies the hashes at start. Default location: `SANDSWAP_GUEST_DIR` relocates it, and the sandlot verifies only under the directory its config names (`tinyvm.guest_tcb_dir`), which the deployer keeps in step |
 | `/var/lib/sandswap/volumes` | *prov identity* : shared group | 2710 | the virtio-fs share root: prov creates/removes, sandvmm traverses only (no readdir, no create) |
 | `/var/lib/sandswap/templates`, `flat-templates`, `overlay-templates` | *prov identity* : shared group | 2750 | stores the prov writes and the virtio-fs server reads layer content; the `refs/` metadata tree inside is group `sandtmpl` (982 — prov + exec sandlot, never sandvmm) |
 

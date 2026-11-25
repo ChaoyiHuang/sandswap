@@ -114,6 +114,11 @@ data:
       volumes_dir: /sandswap/volumes
       kernel: /sandswap-host/vmlinux.bin
       initramfs: /sandswap-host/initramfs.cpio.gz
+      # The hostPath carries the SHA256SUMS pin deploy-lib writes beside the
+      # pair, so an exec-role pod verifies the guest TCB at start exactly like
+      # a bare-metal node. Without this key both artifacts count as dev/e2e
+      # paths and the hash check is skipped.
+      guest_tcb_dir: /sandswap-host
       default_vcpus: 2
       default_memory_mb: 512
       overlayfs_templates: /sandswap/overlay-templates

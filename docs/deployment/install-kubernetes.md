@@ -231,10 +231,13 @@ full 8-variant matrix; the dimension flags restrict it.
   `/sandswap-host`) carries the kernel/initramfs and is the guest root of
   trust. It must be root:root 0755 with 0644 artifacts — a pod-side
   identity can traverse/read but never rename or replace an entry. The
-  sandlot verifies `SHA256SUMS` at start when the artifacts resolve under
-  the default guest-TCB directory; the k8s configs set the explicit
-  `/sandswap-host/...` paths, so the hash step applies to bare-metal shapes
-  (where the default path is the root-only guest directory).
+  operator config declares `tinyvm.guest_tcb_dir: /sandswap-host` and
+  `deploy-lib.sh` writes the `SHA256SUMS` pin beside the pair after
+  deploying them, so an exec-role pod runs the SAME start-time TCB hash
+  verification as a bare-metal node (a missing or mismatched pin refuses
+  to start). A manually prepared host that skips the deploy step must
+  provide the pair and its pin there itself:
+  `cd /var/lib/sandswap && sha256sum vmlinux.bin initramfs.cpio.gz > SHA256SUMS`.
 - **hostNetwork sandlots**: the sandlot DaemonSet runs hostNetwork — it
   must reach the guest TAPs and the boxout socket; NetworkPolicy does not
   govern hostNetwork pods (cluster-wide rules still apply to the gateways).

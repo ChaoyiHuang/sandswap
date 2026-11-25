@@ -622,11 +622,14 @@ install_sandlot() {
     mount_shared_storage
     bash "$DEPLOY_DIR/setup-host.sh" --role sandlot --subnet "$subnet" --gateway-ip "$gw_ip"
 
-    install -m 0755 "$OUTPUT/sandlot" /usr/local/bin/sandswap-sandlot
-    install -m 0755 "$OUTPUT/sandvmm" /usr/local/bin/sandswap-sandvmm
+    # The install layout comes from common.sh's variables (never literals):
+    # one place defines where the binaries, the TCB and the vsockguard
+    # objects land, for every deployer.
+    install -m 0755 "$OUTPUT/sandlot" "$SANDSWAP_BIN/sandswap-sandlot"
+    install -m 0755 "$OUTPUT/sandvmm" "$SANDSWAP_BIN/sandswap-sandvmm"
     sandswap_install_guest_artifacts "$OUTPUT"
-    [[ -f "$OUTPUT/vsockguard.bpf.o" ]] && install -m 0644 "$OUTPUT/vsockguard.bpf.o" /var/lib/sandswap/
-    [[ -x "$OUTPUT/vsockguardctl" ]] && install -m 0755 "$OUTPUT/vsockguardctl" /usr/local/bin/
+    [[ -f "$OUTPUT/vsockguard.bpf.o" ]] && install -m 0644 "$OUTPUT/vsockguard.bpf.o" "$SANDSWAP_VAR/"
+    [[ -x "$OUTPUT/vsockguardctl" ]] && install -m 0755 "$OUTPUT/vsockguardctl" "$SANDSWAP_BIN/"
 
     # Cert subset for an EXEC node: exactly the client material for THIS
     # node's id ( extended by the stream-identity rule) — never

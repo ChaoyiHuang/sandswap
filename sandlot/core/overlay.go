@@ -27,6 +27,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"common/sandfs"
+	sandlotconfig "sandlot/config"
 	"sandlot/vmm"
 )
 
@@ -722,7 +723,7 @@ func (h *Handler) restoreMountedOverlaysFromMountinfo() {
 	volumesDir := h.vmmCfg.VolumesDir
 	h.mu.RUnlock()
 	if volumesDir == "" {
-		volumesDir = "/var/sandswap/volumes"
+		volumesDir = sandlotconfig.DefaultVolumesDir
 	}
 
 	data, err := os.ReadFile("/proc/self/mountinfo")
@@ -971,7 +972,7 @@ func (s *OverlaySet) MergeRefs(persisted map[string]string) int {
 // Returns the number of restored entries.
 func (s *OverlaySet) RestoreFromMountinfo(volumesDir string) int {
 	if volumesDir == "" {
-		volumesDir = "/var/sandswap/volumes"
+		volumesDir = sandlotconfig.DefaultVolumesDir
 	}
 	data, err := os.ReadFile("/proc/self/mountinfo")
 	if err != nil {
