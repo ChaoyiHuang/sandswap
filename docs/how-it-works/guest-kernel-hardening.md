@@ -83,7 +83,7 @@ at build time:
   UAF, the legacy-AIO/eventfd/epoll recursion, and netlink's
   `net_cookie` hashing that removes the `/proc/net/netlink` pointer
   disclosure, plus its `sk_filter` header reset). The patch-set hash is
-  part of the artifact identity (`output/vmlinux.config-rev`).
+  part of the artifact identity (`output/vmlinux.bin.config-rev`).
 - **Gates**: after `make olddefconfig` the build runs
   `check_kernel_config`, which fails naming any re-enabled disabled symbol
   (a `select` edge) or missing required symbol — a renamed disable is
@@ -94,7 +94,7 @@ at build time:
   `__x64_sys_mq_open`), `ovl_fill_super` and `packet_create` (absent), and
   `virtio_fs_init`/`fuse_dev_init` (present). The policy revision —
   config hash, patch-set hash, tag, commit, and init-hardening variant —
-  is recorded in `output/vmlinux.config-rev` so an artifact built before
+  is recorded in `output/vmlinux.bin.config-rev` so an artifact built before
   the minimization is never considered current.
 
 Tests: `e2e/kernel-config-gate.sh` exercises the gate against synthetic

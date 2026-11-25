@@ -136,7 +136,7 @@ bash build/build.sh <target>
 
 | Target | Builds | Output |
 |---|---|---|
-| `kernel` | builds the pinned CH kernel from source (pinned COMMIT, not a mutable tag) with the IPv6/sock_diag features **and the attack-surface minimization** (USER_NS/TUN/VETH/KVM/DEBUG_FS/USERFAULTFD/IO_URING/BPF/OVERLAY_FS/FUSE-extras/PACKET/ZSWAP/ZRAM/ZSMALLOC(_STAT)/CONNECTOR/AUDIT/MODIFY_LDT_SYSCALL/UNIX_DIAG/CRYPTO_USER_API_RNG compiled out; X86_UMIP + LEGACY_VSYSCALL_NONE enabled; FUSE_FS kept for VIRTIO_FS; PERF_EVENTS is arch-selected by x86 and stays seccomp-denied). The dev-only v6.2 `download` path is refused | `output/vmlinux.bin` (~12–20 MB) + `output/vmlinux.config-rev` + `output/vmlinux.bin.config` |
+| `kernel` | builds the pinned CH kernel from source (pinned COMMIT, not a mutable tag) with the IPv6/sock_diag features **and the attack-surface minimization** (USER_NS/TUN/VETH/KVM/DEBUG_FS/USERFAULTFD/IO_URING/BPF/OVERLAY_FS/FUSE-extras/PACKET/ZSWAP/ZRAM/ZSMALLOC(_STAT)/CONNECTOR/AUDIT/MODIFY_LDT_SYSCALL/UNIX_DIAG/CRYPTO_USER_API_RNG compiled out; X86_UMIP + LEGACY_VSYSCALL_NONE enabled; FUSE_FS kept for VIRTIO_FS; PERF_EVENTS is arch-selected by x86 and stays seccomp-denied). The dev-only v6.2 `download` path is refused | `output/vmlinux.bin` (~12–20 MB) + `output/vmlinux.bin.config-rev` + `output/vmlinux.bin.config` |
 | `warden` | the in-VM agent (musl static; runs the Rust unit suite first) | `warden/target/.../release/warden` |
 | `initramfs` | packs warden + busybox into the boot image. The busybox is the tenant-visible guest TCB: the build fetches one pinned published build — `busybox-static` **1.37.0-7ubuntu1** (Ubuntu 26.04, baseline amd64) from the Ubuntu archive — and verifies both the .deb and the extracted binary against `build/checksums.sh`, so the guest shell is the same bytes on every build host regardless of the distro's busybox version; it aborts on any mismatch, installs it **0555 root:root** (the guest root must not rewrite the shell later tenants execute), and packs the cpio with `--owner root:root` | `output/initramfs.cpio.gz` (~5 MB) |
 | `vmm` | sandvmm (release profile) | `output/sandvmm` (~6–8 MB) |
@@ -154,7 +154,7 @@ rename would otherwise make the option silently inert). The build runs it
 after `make olddefconfig` and again as `nm` symbol probes on the pre-strip
 image, and records the policy revision, `config_sha256`, `patchset_sha256`,
 `policy_sha256`, tag, commit and init-hardening variant in
-`output/vmlinux.config-rev` (the saved `.config` sits beside the image) so
+`output/vmlinux.bin.config-rev` (the saved `.config` sits beside the image) so
 an artifact built before the policy is never considered current; the
 release packager re-derives and compares every one of those values. See
 [Guest Kernel Hardening](../how-it-works/guest-kernel-hardening.md) §2.

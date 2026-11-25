@@ -105,7 +105,9 @@ sandswap-<ver>-linux-amd64/
 │                           static binaries (gateway, sandlot, sandvmm, sandns,
 │                           boxout, sandctl, bindregdump, warden-probe,
 │                           template-tool, vsockguardctl, vsockguard.bpf.o),
-│                           vmlinux.bin (CONFIG_IPV6=y), initramfs.cpio.gz,
+│                           vmlinux.bin (CONFIG_IPV6=y) + vmlinux.bin.config
+│                           + vmlinux.bin.config-rev (saved .config and
+│                           identity sidecar), initramfs.cpio.gz,
 │                           rootfs-template/, rootfs-ubuntu/,
 │                           eino/openai/keepalive example agents,
 │                           loadgen (the benchmark client),
