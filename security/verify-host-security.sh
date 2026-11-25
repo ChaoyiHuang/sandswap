@@ -118,7 +118,10 @@ fi
 # ── configured storage paths ───────────────────────────────────────────────
 # Checks 8/9 resolve the share root / template stores from the deployment's
 # sandlot configs (a dedicated-prov host may mount /mnt/sandswap), not from
-# the default /var/lib/sandswap. Parse the configs with the Go loader's YAML
+# the default /var/lib/sandswap. Check 13 does the same for the guest TCB
+# (tinyvm.guest_tcb_dir and the kernel/initramfs paths): a deployment that
+# installed the TCB outside the default directory is checked where it lives.
+# Parse the configs with the Go loader's YAML
 # semantics and check every path they name; an unparsable config is
 # surfaced, never silently skipped.
 _sandlot_config_paths() {
@@ -141,7 +144,11 @@ def emit(kind, v):
     if not os.path.isabs(v):
         v = os.path.join(os.path.dirname(os.path.abspath(cfg)), v)
     print("%s\t%s" % (kind, v))
-emit("volroot", (doc.get("tinyvm") or {}).get("volumes_dir"))
+tinyvm = doc.get("tinyvm") or {}
+emit("volroot", tinyvm.get("volumes_dir"))
+emit("tcbdir", tinyvm.get("guest_tcb_dir"))
+emit("tcbfile", tinyvm.get("kernel"))
+emit("tcbfile", tinyvm.get("initramfs"))
 emit("tpl", doc.get("overlayfs_templates"))
 prov = doc.get("provision") or {}
 emit("tpl", prov.get("templates_dir"))
@@ -151,12 +158,16 @@ PY
 }
 _CFG_VOLROOTS=()
 _CFG_TPLDIRS=()
+_CFG_TCBDIRS=()
+_CFG_TCBFILES=()
 _CFG_PATH_WARN=""
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' >/dev/null 2>&1; then
     while IFS=$'\t' read -r _kind _path; do
         case "$_kind" in
             volroot) _CFG_VOLROOTS+=("$_path") ;;
             tpl|flat) _CFG_TPLDIRS+=("$_path") ;;
+            tcbdir) _CFG_TCBDIRS+=("$_path") ;;
+            tcbfile) _CFG_TCBFILES+=("$_path") ;;
             unparsed) _CFG_PATH_WARN="$_CFG_PATH_WARN $_path" ;;
         esac
     done < <(_sandlot_config_paths)
@@ -1302,46 +1313,174 @@ fi
 # decides what the next tenant boots (a boundary breach, not an in-sandbox
 # event). The pinned home is /usr/local/lib/sandswap/guest — root:root 0755
 # with a SHA256SUMS pin written by the deployer; a legacy copy under the state
-# root is reported by name so the drift is visible.
+# root is reported by name so the drift is visible. A deployment that installed
+# the TCB elsewhere declares it in its sandlot configs (tinyvm.guest_tcb_dir —
+# where the deployer writes its SANDSWAP_GUEST_DIR — and the kernel/initramfs
+# paths): those locations get the same checks, so the files the node actually
+# boots are root-controlled and pinned wherever they live.
 echo "[13/13] guest TCB (kernel + initramfs) not writable by any service identity"
-_tcb_checked=0
-_tcb_found=0
-for _tdir in /usr/local/lib/sandswap/guest /var/lib/sandswap; do
+_tcb_default=/usr/local/lib/sandswap/guest
+_tcb_legacy=/var/lib/sandswap
+# _tcb_real <path> — canonical form for comparing directories: symlinks
+# resolved when the path exists (a root-owned symlinked pin directory is a
+# legitimate shape), normal form otherwise. Falls back to the input when
+# realpath is unavailable.
+_tcb_real() {
+    realpath -m -- "$1" 2>/dev/null || printf '%s\n' "$1"
+}
+# Every directory that may hold the TCB: the two known locations plus the
+# configured ones, de-duplicated in order.
+_tcb_all=( "$_tcb_default" "$_tcb_legacy" )
+_tcb_all+=( ${_CFG_TCBDIRS[@]+"${_CFG_TCBDIRS[@]}"} )
+for _f in ${_CFG_TCBFILES[@]+"${_CFG_TCBFILES[@]}"}; do
+    _tcb_all+=( "$(dirname "$_f")" )
+done
+_tcb_dirs=()
+for _tdir in "${_tcb_all[@]}"; do
+    _dup=0
+    for _seen in ${_tcb_dirs[@]+"${_tcb_dirs[@]}"}; do
+        [[ "$(_tcb_real "$_seen")" == "$(_tcb_real "$_tdir")" ]] && { _dup=1; break; }
+    done
+    (( _dup )) || _tcb_dirs+=( "$_tdir" )
+done
+# Every artifact the node may boot: the conventional names in each candidate
+# directory plus every kernel/initramfs the configs name. The deployer ships
+# the standard pair, but the sandlot verifies whatever the config names — a
+# custom artifact name must not slip past this check, so the configured files
+# are checked directly.
+_tcb_files=()
+for _tdir in "${_tcb_dirs[@]}"; do
     for _tf in vmlinux.bin initramfs.cpio.gz; do
-        _tpath="$_tdir/$_tf"
-        [[ -f "$_tpath" ]] || continue
-        _tcb_found=1
-        _tcb_checked=$((_tcb_checked + 1))
-        _towner="$(stat -c '%U:%G' "$_tpath" 2>/dev/null || echo '?')"
-        _tmode="$(stat -c '%a' "$_tpath" 2>/dev/null || echo '')"
-        if [[ "${_towner%%:*}" == "root" ]] && [[ "$_tmode" =~ ^[0-7]{3,4}$ ]] && (( (8#$_tmode & 8#022) == 0 )); then
-            ok "$_tpath is root-owned and not group/world-writable ($_towner $_tmode)"
-        else
-            bad "$_tpath is $_towner $_tmode — a writable guest kernel/initramfs lets that identity decide what the next tenant boots"
-        fi
-        _dpath="$(dirname "$_tpath")"
-        _downer="$(stat -c '%U' "$_dpath" 2>/dev/null || echo '?')"
-        _dmode="$(stat -c '%a' "$_dpath" 2>/dev/null || echo '')"
-        if [[ "$_downer" == "root" ]] && [[ "$_dmode" =~ ^[0-7]{3,4}$ ]] && (( (8#$_dmode & 8#022) == 0 )); then
-            ok "$_dpath (TCB directory) is root-owned, not group/world-writable ($_dmode)"
-        else
-            bad "$_dpath (TCB directory) is owned by $_downer mode $_dmode — directory write alone is enough to RENAME/REPLACE the TCB; fix: chown root:root $_dpath && chmod 0755 $_dpath"
-        fi
+        [[ -f "$_tdir/$_tf" ]] && _tcb_files+=( "$_tdir/$_tf" )
     done
 done
-if [[ -f /usr/local/lib/sandswap/guest/SHA256SUMS ]]; then
-    if ( cd /usr/local/lib/sandswap/guest && sha256sum -c --quiet SHA256SUMS ) >/dev/null 2>&1; then
-        ok "guest TCB matches its SHA256SUMS pin"
+for _f in ${_CFG_TCBFILES[@]+"${_CFG_TCBFILES[@]}"}; do
+    [[ -f "$_f" ]] || continue
+    _dup=0
+    for _seen in ${_tcb_files[@]+"${_tcb_files[@]}"}; do
+        [[ "$(_tcb_real "$_seen")" == "$(_tcb_real "$_f")" ]] && { _dup=1; break; }
+    done
+    (( _dup )) || _tcb_files+=( "$_f" )
+done
+_tcb_found=0
+for _tpath in ${_tcb_files[@]+"${_tcb_files[@]}"}; do
+    _tcb_found=1
+    _towner="$(stat -c '%U:%G' "$_tpath" 2>/dev/null || echo '?')"
+    _tmode="$(stat -c '%a' "$_tpath" 2>/dev/null || echo '')"
+    if [[ "${_towner%%:*}" == "root" ]] && [[ "$_tmode" =~ ^[0-7]{3,4}$ ]] && (( (8#$_tmode & 8#022) == 0 )); then
+        ok "$_tpath is root-owned and not group/world-writable ($_towner $_tmode)"
     else
-        bad "guest TCB does NOT match /usr/local/lib/sandswap/guest/SHA256SUMS — a kernel/initramfs was modified or replaced outside the deployer"
+        bad "$_tpath is $_towner $_tmode — a writable guest kernel/initramfs lets that identity decide what the next tenant boots"
     fi
-else
-    warn "no /usr/local/lib/sandswap/guest/SHA256SUMS pin — the TCB hash check was NOT performed (run the current deployer to install it)"
+done
+for _tdir in "${_tcb_dirs[@]}"; do
+    _tcb_dir_has=0
+    for _f in ${_tcb_files[@]+"${_tcb_files[@]}"}; do
+        [[ "$(_tcb_real "$(dirname "$_f")")" == "$(_tcb_real "$_tdir")" ]] && { _tcb_dir_has=1; break; }
+    done
+    # Directory ownership, once per directory. A root-owned symlink is a
+    # legitimate pin-directory shape (the sandlot accepts it and checks the
+    # target), so the LINK's owner is checked and the verdict is about the
+    # target directory — stat does not follow links by default, and would
+    # otherwise report the link's 0777 mode as a writable TCB directory.
+    _tcb_dir_trusted=1
+    if (( _tcb_dir_has )); then
+        _tdir_check="$_tdir"
+        if [[ -L "$_tdir" ]]; then
+            _lowner="$(stat -c '%U' "$_tdir" 2>/dev/null || echo '?')"
+            if [[ "$_lowner" == "root" ]]; then
+                _tdir_check="$(_tcb_real "$_tdir")"
+            else
+                bad "$_tdir (TCB directory) is a symlink owned by $_lowner, want root — the sandlot refuses a link a service identity could retarget"
+                _tdir_check=""
+                _tcb_dir_trusted=0
+            fi
+        fi
+        if [[ -n "$_tdir_check" ]]; then
+            _downer="$(stat -c '%U' "$_tdir_check" 2>/dev/null || echo '?')"
+            _dmode="$(stat -c '%a' "$_tdir_check" 2>/dev/null || echo '')"
+            if [[ "$_downer" == "root" ]] && [[ "$_dmode" =~ ^[0-7]{3,4}$ ]] && (( (8#$_dmode & 8#022) == 0 )); then
+                ok "$_tdir_check (TCB directory) is root-owned, not group/world-writable ($_dmode)"
+            else
+                bad "$_tdir_check (TCB directory) is owned by $_downer mode $_dmode — directory write alone is enough to RENAME/REPLACE the TCB; fix: chown root:root $_tdir_check && chmod 0755 $_tdir_check"
+            fi
+        fi
+    fi
+    # The pin is verified wherever a SHA256SUMS exists. A missing pin is a
+    # failure only for a directory the config DECLARES as the pinned TCB home
+    # while a TCB file lives there (the sandlot itself refuses to start on
+    # it); the default directory keeps its warning, and any other directory
+    # holding a TCB file without a pin gets a warning (that TCB's hash is not
+    # verified at start) — never a new failure for a shape that passed before.
+    if (( ! _tcb_dir_trusted )); then
+        echo "  – $_tdir: pin verification skipped (the directory itself is a finding above)"
+    elif [[ -f "$_tdir/SHA256SUMS" ]]; then
+        if ( cd "$_tdir" && sha256sum -c --quiet SHA256SUMS ) >/dev/null 2>&1; then
+            if [[ "$_tdir" == "$_tcb_default" ]]; then
+                ok "guest TCB matches its SHA256SUMS pin"
+            else
+                ok "guest TCB in $_tdir matches its SHA256SUMS pin"
+            fi
+        else
+            bad "guest TCB does NOT match $_tdir/SHA256SUMS — a kernel/initramfs was modified or replaced outside the deployer"
+        fi
+    elif [[ "$_tdir" == "$_tcb_default" ]]; then
+        # The default home's missing-pin warning is about the location the
+        # deployment actually uses: a config that declares a relocated
+        # tinyvm.guest_tcb_dir has moved that home (verified above), so the
+        # warning is stale advice there. A default directory that DOES exist
+        # is still reported — it is then a leftover worth a pin or a removal.
+        if (( ${#_CFG_TCBDIRS[@]} > 0 )) && [[ ! -e "$_tcb_default" ]]; then
+            :
+        else
+            warn "no /usr/local/lib/sandswap/guest/SHA256SUMS pin — the TCB hash check was NOT performed (run the current deployer to install it)"
+        fi
+    elif (( _tcb_dir_has )); then
+        _tcb_declared=0
+        for _d in ${_CFG_TCBDIRS[@]+"${_CFG_TCBDIRS[@]}"}; do
+            [[ "$(_tcb_real "$_d")" == "$(_tcb_real "$_tdir")" ]] && { _tcb_declared=1; break; }
+        done
+        if (( _tcb_declared )); then
+            bad "no $_tdir/SHA256SUMS pin although a guest kernel/initramfs lives there — tinyvm.guest_tcb_dir names this directory, so the sandlot refuses to start until the deployer pins it (sandswap_install_guest_artifacts)"
+        else
+            warn "no $_tdir/SHA256SUMS pin for the guest kernel/initramfs there — its hash is not verified at start; run the current deployer to install it under the pinned directory"
+        fi
+    fi
+done
+# A configured kernel/initramfs OUTSIDE every declared pinned directory: under
+# the sandlot's PAIR rule (VerifyGuestArtifacts) the hash check runs only when
+# BOTH artifacts resolve under the pinned directory. Both outside is a dev/e2e
+# pair (unverified — reported, not failed: the legacy fallback and dev trees
+# are legitimate non-production shapes, but the drift must be visible). If the
+# SIBLING is inside, the pair is mixed and the sandlot refuses to start. This
+# pass aggregates files across configs and cannot pair them per config, so the
+# warning names both outcomes. Judged only when a config declares
+# tinyvm.guest_tcb_dir. The DEFAULT directory is the exception: an artifact
+# left there while the config pins another directory is a typo or a
+# half-migration the sandlot refuses at start, so it is a failure here too.
+if (( ${#_CFG_TCBDIRS[@]} > 0 )); then
+    for _f in ${_CFG_TCBFILES[@]+"${_CFG_TCBFILES[@]}"}; do
+        _tcb_pinned=0
+        for _d in "${_CFG_TCBDIRS[@]}"; do
+            [[ "$(_tcb_real "$_d")" == "$(_tcb_real "$(dirname "$_f")")" ]] && { _tcb_pinned=1; break; }
+        done
+        (( _tcb_pinned )) && continue
+        if [[ "$(_tcb_real "$(dirname "$_f")")" == "$(_tcb_real "$_tcb_default")" ]]; then
+            bad "$_f lives in the default TCB directory while tinyvm.guest_tcb_dir pins another — the sandlot refuses to start until all three move together (the deployer does this)"
+        else
+            warn "$_f boots OUTSIDE the pinned TCB directory (tinyvm.guest_tcb_dir) — the pair is unverified when BOTH artifacts are outside (dev/e2e), and the sandlot refuses to start when its sibling is inside; run the current deployer to install the pair under the pinned directory"
+        fi
+    done
 fi
 if (( _tcb_found == 0 )); then
-    echo "  – no guest kernel/initramfs found in the known locations (gateway/provision-only host without a TCB copy)"
+    echo "  – no guest kernel/initramfs found in the known or configured locations (gateway/provision-only host without a TCB copy)"
 fi
-unset _tcb_checked _tcb_found _tdir _tf _tpath _towner _tmode _dpath _downer _dmode
+if [[ -n "$_CFG_PATH_WARN" ]]; then
+    echo "  – the configured TCB locations could not all be resolved from the sandlot configs (see the earlier warning); only the known locations were examined"
+fi
+unset _tcb_found _tdir _tf _tpath _towner _tmode _downer _dmode
+unset _tcb_default _tcb_legacy _tcb_all _tcb_dirs _tcb_files _f _seen _dup _tcb_dir_has _tcb_declared _d _tcb_pinned
+unset _tcb_real _tdir_check _lowner _tcb_dir_trusted
 
 # ── 13b. sandlot units still restrict namespace creation ────────────────────
 # The unit-level SystemCallFilter deliberately allows `unshare` so the

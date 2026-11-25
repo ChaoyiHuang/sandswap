@@ -512,6 +512,81 @@ func TestSandlotConfigValidate(t *testing.T) {
 	}
 }
 
+// TestValidateHostLocationPaths pins the host-location knobs' shape rules: a
+// relative path resolves against the service's working directory (silently
+// never matching where the deployment installed) and "/" is never a usable
+// kernel/initramfs, TCB directory, pin file or instance base.
+func TestValidateHostLocationPaths(t *testing.T) {
+	cases := []struct {
+		name string
+		mut  func(*SandlotConfig)
+	}{
+		{"relative kernel", func(c *SandlotConfig) { c.TinyVM.Kernel = "vmlinux.bin" }},
+		{"relative initramfs", func(c *SandlotConfig) { c.TinyVM.Initramfs = "initramfs.cpio.gz" }},
+		{"relative guest_tcb_dir", func(c *SandlotConfig) { c.TinyVM.GuestTcbDir = "guest" }},
+		{"relative attestation", func(c *SandlotConfig) { c.VsockguardAttestation = "guard/allowed_uid" }},
+		{"relative base_dir", func(c *SandlotConfig) { c.Instance.BaseDir = "run/sandswap" }},
+		{"root kernel", func(c *SandlotConfig) { c.TinyVM.Kernel = "/" }},
+		{"root guest_tcb_dir", func(c *SandlotConfig) { c.TinyVM.GuestTcbDir = "/" }},
+		{"root base_dir", func(c *SandlotConfig) { c.Instance.BaseDir = "/" }},
+		{"instance id with a separator", func(c *SandlotConfig) { c.Instance.ID = "a/b" }},
+		{"instance id dot dot", func(c *SandlotConfig) { c.Instance.ID = ".." }},
+		{"instance id dot", func(c *SandlotConfig) { c.Instance.ID = "." }},
+		// The reserved component: <base>/vm is the single-instance root, so an
+		// id of "vm" makes boxout's sandbox_dir grammar derive the wrong root.
+		{"instance id vm", func(c *SandlotConfig) { c.Instance.ID = "vm" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			tc.mut(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Errorf("Validate() accepted %s", tc.name)
+			}
+		})
+	}
+	// The shipped defaults and a relocated deployment both pass.
+	relocated := Defaults()
+	relocated.TinyVM.GuestTcbDir = "/opt/sandswap/guest"
+	relocated.TinyVM.Kernel = "/opt/sandswap/guest/vmlinux.bin"
+	relocated.TinyVM.Initramfs = "/opt/sandswap/guest/initramfs.cpio.gz"
+	relocated.Instance.BaseDir = "/srv/sandswap"
+	relocated.Instance.ID = "node-7"
+	relocated.VsockguardAttestation = "/srv/sandswap/guard/vsockguard.allowed_uid"
+	if err := relocated.Validate(); err != nil {
+		t.Errorf("a fully relocated configuration was rejected: %v", err)
+	}
+}
+
+// TestInstanceSandboxRoot pins the single expression both the sandlot and
+// boxout derive: an explicitly empty base_dir falls back to the default base
+// (the sandlot used to leave /run/sandswap/vm while boxout derived
+// <default>/<id>/vm, so an id-bearing config with an emptied base refused
+// every create), and an id is always nested under the base.
+func TestInstanceSandboxRoot(t *testing.T) {
+	cases := []struct{ name, base, id, want string }{
+		{"defaults", "", "", "/run/sandswap/vm"},
+		{"default base explicit", DefaultInstanceBaseDir, "", DefaultInstanceBaseDir + "/vm"},
+		{"id with empty base", "", "7", DefaultInstanceBaseDir + "/7/vm"},
+		{"id with base", "/srv/sandswap", "node-7", "/srv/sandswap/node-7/vm"},
+		{"relocated base only", "/srv/sandswap", "", "/srv/sandswap/vm"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Instance.BaseDir = tc.base
+			cfg.Instance.ID = tc.id
+			if got := InstanceSandboxRoot(&cfg); got != tc.want {
+				t.Fatalf("InstanceSandboxRoot = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	// The reserved id is refused with a message naming the collision.
+	if err := ValidateInstanceID("vm"); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("ValidateInstanceID(vm) = %v, want the reserved-component refusal", err)
+	}
+}
+
 // ── configurable service identities: env override of the pinned defaults ──
 
 // TestVMMSeccompRejectsProcess pins the config-layer rejection of the

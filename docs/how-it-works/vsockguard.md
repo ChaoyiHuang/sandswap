@@ -89,10 +89,12 @@ The hook admits the pinned service UID and **host root** (root is a trust
 root — it can detach the program or read the session key anyway); every
 other UID is denied the warden port. Because `/sys/fs/bpf` is root-only, the
 non-root sandlot cannot read the pin itself: the root-run attach tool writes
-`/run/sandswap/vsockguard.allowed_uid` **after a successful attach**, the
-systemd unit re-proves the live pin in a root `ExecStartPre` at every start,
-and the sandlot validates the file's root ownership/mode and uid. `detach`
-removes it. Build output:
+the attestation — `/run/sandswap/vsockguard.allowed_uid` by default; the
+location is the sandlot's `vsockguard_attestation` key (see the
+[sandlot configuration](../operations/configuration/sandlot.md)) — **after a
+successful attach**, the systemd unit re-proves the live pin in a root
+`ExecStartPre` at every start, and the sandlot validates the file's root
+ownership/mode and uid. `detach` removes it. Build output:
 `output/vsockguard.bpf.o` + `output/vsockguardctl`. The
 attachment is pinned under `/sys/fs/bpf/vsockguard/` (`prog`, `link`,
 `allowed_uid`) so it survives the ctl process exiting; `detach` removes all

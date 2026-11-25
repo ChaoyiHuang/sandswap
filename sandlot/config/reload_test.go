@@ -12,6 +12,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -68,5 +69,51 @@ func TestReloadRefusesUnrepresentableFlagValue(t *testing.T) {
 
 	if got := w.Get(); got.Recycle.MaxUses != before.Recycle.MaxUses {
 		t.Errorf("an edit was applied despite an unrepresentable flag override (max_uses=%d)", got.Recycle.MaxUses)
+	}
+}
+
+// TestReloadVetoesUnverifiedKernelChange pins the hot-reload TCB gate: a
+// kernel/initramfs edit must pass the same pin check an exec-role start runs,
+// and a failing check refuses the WHOLE revision — the live config keeps the
+// last verified pair instead of the file outrunning it. Edits that do not
+// touch the boot artifacts never invoke the check.
+func TestReloadVetoesUnverifiedKernelChange(t *testing.T) {
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := Defaults()
+	w := config.NewWatchableConfig(cfg)
+	calls := 0
+	cb := NewReloadCallback(w, &HotReloadTargets{
+		VerifyTinyVM: func(c *SandlotConfig) error {
+			calls++
+			return errors.New("guest TCB pin is unavailable")
+		},
+	}, discard)
+
+	cb([]byte("tinyvm:\n  kernel: /tmp/other-vmlinux.bin\n"))
+	if calls != 1 {
+		t.Fatalf("the TCB check ran %d times for a kernel edit, want 1", calls)
+	}
+	if got := w.Get().TinyVM.Kernel; got != DefaultKernelPath {
+		t.Errorf("a vetoed kernel edit was applied: kernel = %q", got)
+	}
+
+	// A resources-only edit changes nothing the node boots: no TCB check, and
+	// the edit applies.
+	cb([]byte("tinyvm:\n  default_vcpus: 4\n"))
+	if calls != 1 {
+		t.Errorf("the TCB check ran for a non-artifact edit (%d calls)", calls)
+	}
+	if got := w.Get().TinyVM.DefaultVCPUs; got != 4 {
+		t.Errorf("a resources-only edit did not apply: vcpus = %d", got)
+	}
+
+	// A passing check lets the edit through.
+	w2 := config.NewWatchableConfig(Defaults())
+	cb2 := NewReloadCallback(w2, &HotReloadTargets{
+		VerifyTinyVM: func(c *SandlotConfig) error { return nil },
+	}, discard)
+	cb2([]byte("tinyvm:\n  initramfs: /opt/tcb/initramfs.cpio.gz\n"))
+	if got := w2.Get().TinyVM.Initramfs; got != "/opt/tcb/initramfs.cpio.gz" {
+		t.Errorf("a verified initramfs edit did not apply: %q", got)
 	}
 }

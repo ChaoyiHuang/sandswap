@@ -122,19 +122,49 @@ const (
 	defaultMaxConns        = 256
 )
 
-// defaultInstanceBaseDir mirrors sandlot/config Defaults().Instance.BaseDir.
-const defaultInstanceBaseDir = "/run/sandswap"
-
-// InstanceSandboxRoot derives a boxout's own instance sandbox root from the
-// shared sandlot config — the same expression sandlot/cmd/main.go uses
-// (filepath.Join(base_dir, instance.id, "vm")). With the default config this is
-// /run/sandswap/vm; with instance.id set it is <base_dir>/<id>/vm.
-func InstanceSandboxRoot(cfg sandlotconfig.SandlotConfig) string {
+// instanceBaseDir returns the trusted runtime base every caller-supplied
+// sandbox_dir must live under: boxout's OWN startup configuration
+// (instance.base_dir — the root-side config source, never a request field),
+// else the built-in default shared with the sandlot. A deployment that
+// relocates the base relocates the trusted prefix with it, on both sides.
+func instanceBaseDir(cfg sandlotconfig.SandlotConfig) string {
 	base := cfg.Instance.BaseDir
 	if base == "" {
-		base = defaultInstanceBaseDir
+		base = sandlotconfig.DefaultInstanceBaseDir
 	}
-	return filepath.Clean(filepath.Join(base, cfg.Instance.ID, "vm"))
+	return filepath.Clean(base)
+}
+
+// InstanceSandboxRoot derives a boxout's own instance sandbox root from the
+// shared sandlot config — the ONE shared expression (see
+// sandlotconfig.InstanceSandboxRoot; an empty instance.base_dir falls back to
+// the default base, exactly as the sandlot does). With the default config this
+// is /run/sandswap/vm; with instance.id set it is <base_dir>/<id>/vm.
+func InstanceSandboxRoot(cfg sandlotconfig.SandlotConfig) string {
+	return sandlotconfig.InstanceSandboxRoot(&cfg)
+}
+
+// trustedSandboxBase returns the containment base for every caller-supplied
+// sandbox path (validateSandboxDir / refuseSymlinkComponents), derived from
+// boxout's OWN startup configuration and never from a request:
+//
+//   - while the instance's root lives inside the shipped shared runtime
+//     directory, that directory stays the base, so the two-layer contract is
+//     unchanged: the shared grammar admits EVERY instance's tree there, and
+//     handleCreateVM / handleDestroyVM then bind the path to this instance's
+//     own root (a sibling's tree is refused by that binding, by name);
+//   - a relocated instance.base_dir (outside the shipped directory) is its
+//     own base: the former hardcoded prefix refused every sandbox_dir of such
+//     a deployment, so a relocated sidecar could never serve a VM.
+//
+// Both are root-controlled directories; the narrower one is never wider than
+// the shipped grammar was for the same configuration.
+func trustedSandboxBase(cfg sandlotconfig.SandlotConfig) string {
+	base := instanceBaseDir(cfg)
+	if strings.HasPrefix(base, sandlotconfig.DefaultInstanceBaseDir+"/") {
+		return sandlotconfig.DefaultInstanceBaseDir
+	}
+	return base
 }
 
 // instanceSandboxRoot returns this server's own root. cfg is immutable after
@@ -667,7 +697,7 @@ func (s *Server) handleCreateVM(ctx context.Context, req map[string]any) map[str
 	// a shape parsed out of the caller's path.
 	ownRoot := s.instanceSandboxRoot()
 	if v, ok := req["sandbox_dir"].(string); ok && v != "" {
-		root, derr := validateCreateSandboxDir(v, vmID)
+		root, derr := s.validateCreateSandboxDir(v, vmID)
 		if derr != nil {
 			return map[string]any{"ok": false, "error": derr.Error()}
 		}
@@ -1020,18 +1050,20 @@ func handoffAPIToken(sandboxDir string, uid int) error {
 }
 
 // validateSandboxDir enforces the create_vm sandbox_dir rules on ANY
-// caller-supplied path: under /run/sandswap/vm/ or /run/sandswap/<id>/vm/,
-// no "..". Returns "" and (via the error return) the reason on refusal. The
-// same validation gates create_vm and the untracked destroy path — a path
-// that passes RemoveState/RemoveSandboxDir must never be attacker-steerable.
+// caller-supplied path, relative to the trusted base (see trustedSandboxBase):
+// under <base>/vm/ or <base>/<id>/vm/, no "..". Returns "" and (via the error
+// return) the reason on refusal. The same validation gates create_vm and the
+// untracked destroy path — a path that passes RemoveState/RemoveSandboxDir must
+// never be attacker-steerable.
 // validateCreateSandboxDir validates a caller-supplied sandbox_dir for a
 // specific vm_id: the path must be EXACTLY <root>/<vm_id> for one of the two
-// supported root shapes, and no component below /run/sandswap may be a
-// symlink. This binds the path to the VM identity — a caller cannot pick an
-// arbitrary subdirectory (or a symlinked prefix) and turn boxout's root
+// supported root shapes, and no component below the base may be a symlink.
+// This binds the path to the VM identity — a caller cannot pick an arbitrary
+// subdirectory (or a symlinked prefix) and turn boxout's root
 // mkdir/chmod/chown/RemoveAll into a host primitive.
-func validateCreateSandboxDir(sandboxDir, vmID string) (string, error) {
-	root, err := validateSandboxDir(sandboxDir)
+func (s *Server) validateCreateSandboxDir(sandboxDir, vmID string) (string, error) {
+	base := trustedSandboxBase(s.cfg)
+	root, err := validateSandboxDir(sandboxDir, base)
 	if err != nil {
 		return "", err
 	}
@@ -1042,7 +1074,7 @@ func validateCreateSandboxDir(sandboxDir, vmID string) (string, error) {
 	if clean != filepath.Join(root, vmID) {
 		return "", fmt.Errorf("sandbox_dir %q must be exactly %s", sandboxDir, filepath.Join(root, vmID))
 	}
-	if err := refuseSymlinkComponents(clean); err != nil {
+	if err := refuseSymlinkComponents(clean, base); err != nil {
 		return "", err
 	}
 	// Return the TRUSTED ROOT (not the full path): callers use it as the
@@ -1081,12 +1113,12 @@ func refuseSymlinkedPath(path string) error {
 	return nil
 }
 
-// refuseSymlinkComponents walks /run/sandswap → path with Lstat and refuses a
-// symlink in any component. A root-owned runtime directory makes this
-// unreachable in the shipped deployment; it is the defense for a runtime dir
-// that an unprivileged identity can write.
-func refuseSymlinkComponents(path string) error {
-	const base = "/run/sandswap"
+// refuseSymlinkComponents walks base → path with Lstat and refuses a symlink
+// in any component. A root-owned runtime directory makes this unreachable in
+// the shipped deployment; it is the defense for a runtime dir that an
+// unprivileged identity can write.
+func refuseSymlinkComponents(path, base string) error {
+	base = filepath.Clean(base)
 	if !strings.HasPrefix(path, base+"/") {
 		return fmt.Errorf("path %q is not under %s", path, base)
 	}
@@ -1113,33 +1145,43 @@ func refuseSymlinkComponents(path string) error {
 	return nil
 }
 
-func validateSandboxDir(sandboxDir string) (string, error) {
+// validateSandboxDir checks a caller-supplied sandbox_dir against the trusted
+// base (see instanceBaseDir) and returns the trusted sandbox ROOT it derives
+// from the validated prefix shape. The shape is resolved RELATIVE to the base:
+// searching the whole path for the first "/vm/" would pick a "vm" component of
+// the base itself (a relocated base ending in /vm) and derive the wrong root,
+// refusing every create/destroy.
+func validateSandboxDir(sandboxDir, base string) (string, error) {
 	if sandboxDir == "" {
 		return "", fmt.Errorf("missing sandbox_dir")
 	}
-	validPrefix := strings.HasPrefix(sandboxDir, "/run/sandswap/vm/") || (strings.HasPrefix(sandboxDir, "/run/sandswap/") && strings.Contains(sandboxDir, "/vm/"))
-	if !validPrefix {
-		return "", fmt.Errorf("sandbox_dir must be under /run/sandswap/vm/ or /run/sandswap/<id>/vm/")
+	base = filepath.Clean(base)
+	if !filepath.IsAbs(base) || base == "/" {
+		return "", fmt.Errorf("instance base %q is not an absolute directory path", base)
 	}
+	// The traversal refusal runs on the caller's RAW value: filepath.Clean
+	// would lexically collapse ".." (e.g. <base>/x/../vm) and the cleaned path
+	// could pass a shape check the caller never legitimately named.
 	if strings.Contains(sandboxDir, "..") {
 		return "", fmt.Errorf("sandbox_dir contains path traversal")
 	}
-	// The trusted sandbox ROOT derives from the validated prefix shape, NEVER
-	// from the caller's path itself (filepath.Dir(sandboxDir) would let
-	// sandboxDir's own parent neutralize core's containment check — rel is
-	// then always a bare basename).
-	switch {
-	case strings.HasPrefix(sandboxDir, "/run/sandswap/vm/"):
-		return "/run/sandswap/vm", nil
-	default:
-		// Multi-instance shape /run/sandswap/<id>/vm/<vm>: the root is the
-		// FIRST "/vm" directory segment after /run/sandswap/ (LastIndex would
-		// pick up a "/vm" inside the per-VM dir name itself).
-		if idx := strings.Index(sandboxDir, "/vm/"); idx > 0 {
-			return sandboxDir[:idx+3], nil
-		}
-		return "", fmt.Errorf("sandbox_dir has no /vm/ segment")
+	clean := filepath.Clean(sandboxDir)
+	rel, ok := strings.CutPrefix(clean, base+"/")
+	if !ok {
+		return "", fmt.Errorf("sandbox_dir must be under %s/vm/ or %s/<id>/vm/", base, base)
 	}
+	// Single-instance shape <base>/vm/<...>.
+	if strings.HasPrefix(rel, "vm/") {
+		return base + "/vm", nil
+	}
+	// Multi-instance shape <base>/<id>/vm/<vm>: the root is the FIRST "/vm"
+	// directory segment after <base>/ (LastIndex would pick up a "/vm" inside
+	// the per-VM dir name itself). Resolving through rel keeps the derivation
+	// independent of any "vm" component in the base path.
+	if idx := strings.Index(rel, "/vm/"); idx > 0 {
+		return base + "/" + rel[:idx+3], nil
+	}
+	return "", fmt.Errorf("sandbox_dir must be under %s/vm/ or %s/<id>/vm/", base, base)
 }
 
 // handleDestroyVM kills a sandvmm process and cleans up.
@@ -1158,7 +1200,7 @@ func (s *Server) handleDestroyVM(ctx context.Context, req map[string]any) map[st
 		// caller-supplied value is validated BEFORE any action, and a failed
 		// validation is a loud error — never a silent skip, never a partial
 		// side effect.
-		root, verr := validateCreateSandboxDir(sandboxDir, vmID)
+		root, verr := s.validateCreateSandboxDir(sandboxDir, vmID)
 		if verr != nil {
 			s.logger.Printf("destroy_vm: refusing untracked destroy of %q: %v", vmID, verr)
 			return map[string]any{"ok": false, "error": fmt.Sprintf("untracked destroy refused: %v", verr)}
@@ -1794,7 +1836,7 @@ func (s *Server) handleReadoptVMs(ctx context.Context, req map[string]any) map[s
 func (s *Server) handleRestoreOverlays(ctx context.Context, req map[string]any) map[string]any {
 	volumesDir := s.currentVMMConfig().VolumesDir
 	if volumesDir == "" {
-		volumesDir = "/var/sandswap/volumes"
+		volumesDir = sandlotconfig.DefaultVolumesDir
 	}
 	n := s.overlays.RestoreFromMountinfo(volumesDir)
 	merged := s.overlays.MergeRefs(core.LoadOverlayRefs(s.overlayStatePath))

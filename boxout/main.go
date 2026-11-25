@@ -106,6 +106,20 @@ func main() {
 		cfg.ConfigFilePath = *configPath
 	}
 
+	// instance.base_dir is boxout's TRUSTED prefix for every sandbox_dir the
+	// unprivileged sandlot sends (validateSandboxDir), and instance.id names
+	// the directory joined under it. Refuse a relative value, the filesystem
+	// root, or an id that is not a single path component HERE, loudly —
+	// boxout's startup does not run the full config validation, so without
+	// this the prefix check would silently never match (or match everything)
+	// and an id containing ".." would escape the configured base.
+	if base := cfg.Instance.BaseDir; base != "" && (filepath.Clean(base) == "/" || !filepath.IsAbs(base)) {
+		logger.Fatalf("instance.base_dir must be an absolute directory path (got %q)", base)
+	}
+	if err := sandlotconfig.ValidateInstanceID(cfg.Instance.ID); err != nil {
+		logger.Fatalf("%v", err)
+	}
+
 	// Apply CLI overrides for network
 	if *networkBackend != "" {
 		cfg.Network.Backend = *networkBackend

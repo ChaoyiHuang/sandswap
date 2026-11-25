@@ -828,6 +828,17 @@ k8s_phase_host_prep() {
     # the PVC below, read by root). It stays root-owned; the ONLY hostPath
     # consumer of $DEPLOY_DIR is the kernel/initramfs pair:
     chmod a+r "$DEPLOY_DIR/vmlinux.bin" "$DEPLOY_DIR/initramfs.cpio.gz" 2>/dev/null || true
+    # The sandlot config pins /sandswap-host as tinyvm.guest_tcb_dir
+    # (configmaps.yaml), so the pair must carry the SHA256SUMS pin every
+    # exec-role pod verifies at start. Generated AFTER tc_deploy_artifacts so
+    # it always matches the pair the pods will boot; a failure must fail the
+    # deploy — letting pods boot an unpinned TCB is the exact state the pin
+    # exists to prevent.
+    if ! ( cd "$DEPLOY_DIR" && sha256sum vmlinux.bin initramfs.cpio.gz > SHA256SUMS ); then
+        log_error "cannot write the guest TCB pin $DEPLOY_DIR/SHA256SUMS"
+        exit 1
+    fi
+    chmod 0644 "$DEPLOY_DIR/SHA256SUMS"
     # TCB directory ownership: the kernel/initramfs hostPath is mounted into
     # every sandlot pod, and the guest kernel is the TCB — the directory must
     # be root-owned 0755 so no pod-side identity can rename/replace it.

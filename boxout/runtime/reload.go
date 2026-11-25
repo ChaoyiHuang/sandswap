@@ -19,6 +19,7 @@ import (
 
 	"common/config"
 	sandlotconfig "sandlot/config"
+	"sandlot/preflight"
 
 	"boxout/server"
 )
@@ -54,6 +55,17 @@ func StartConfigReload(cfg sandlotconfig.SandlotConfig, srv *server.Server, logg
 		if err := newCfg.Validate(); err != nil {
 			logger.Printf("config reload: invalid values (%v); keeping the previous config", err)
 			return
+		}
+		// A kernel/initramfs edit changes what the next create_vm boots, so it
+		// passes the same guest TCB pin check the sandlot's start/reload path
+		// runs, BEFORE the swap: a failed check keeps the previous config
+		// serving instead of letting the file outrun the verified pair.
+		if newCfg.HasRole("exec") &&
+			(prev.TinyVM.Kernel != newCfg.TinyVM.Kernel || prev.TinyVM.Initramfs != newCfg.TinyVM.Initramfs) {
+			if err := preflight.VerifyGuestArtifacts(&newCfg, logger); err != nil {
+				logger.Printf("config reload: guest TCB verification failed (%v); keeping the previous config", err)
+				return
+			}
 		}
 		cs := watchableCfg.Swap(newCfg).Diff(newCfg)
 		for _, fc := range cs.HotReload {

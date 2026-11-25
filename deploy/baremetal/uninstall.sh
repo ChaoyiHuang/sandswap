@@ -245,10 +245,13 @@ rm -f /usr/local/lib/sandswap/apply-prov-ownership 2>/dev/null || true
 # three files; a re-deploy re-copies them from output/ in seconds — this is
 # NOT a rebuild). Item-wise delete + rmdir so anything an operator added to
 # the directory survives visibly instead of being silently swept.
+# $SANDSWAP_GUEST_DIR (from common.sh) is the same variable the deployer
+# installed under: a TCB deployed with SANDSWAP_GUEST_DIR=<dir> is removed by
+# uninstalling with the same value — the default location otherwise.
 for tcb in vmlinux.bin initramfs.cpio.gz SHA256SUMS; do
-    rm -f "/usr/local/lib/sandswap/guest/$tcb" 2>/dev/null || true
+    rm -f "$SANDSWAP_GUEST_DIR/$tcb" 2>/dev/null || true
 done
-rmdir /usr/local/lib/sandswap/guest 2>/dev/null || true
+rmdir "$SANDSWAP_GUEST_DIR" 2>/dev/null || true
 echo "  ✓ Binaries removed"
 
 # ── 8. Remove runtime state ─────────────────────────────────────────
@@ -437,7 +440,7 @@ echo "    Remaining unit files / drop-in dirs: $remaining_units"
 remaining_slices=$(systemctl list-units 'system-sandswap-*.slice' --all --no-legend --no-pager 2>/dev/null | grep -c . || true)
 echo "    Loaded sandswap slices: $remaining_slices"
 remaining_libart=0
-for _p in /usr/local/lib/sandswap/guest \
+for _p in "$SANDSWAP_GUEST_DIR" \
           /usr/local/lib/sandswap/runtime.sh \
           /usr/local/lib/sandswap/apply-prov-ownership; do
     [[ -e "$_p" ]] && remaining_libart=$((remaining_libart + 1))
