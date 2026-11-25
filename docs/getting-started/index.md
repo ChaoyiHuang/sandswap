@@ -135,7 +135,8 @@ sudo bash deploy/baremetal/deploy-single-node.sh --skip-build
 ```
 
 The deployer prepares the host (service identities, udev, sysctls), mints the
-certificates, seeds the `rootfs:v1` template, installs and enables
+certificates, seeds the `rootfs:v1` template (and `ubuntu:24.04` when
+`output/rootfs-ubuntu` is built), installs and enables
 `sandswap-gateway.service` + `sandswap-sandlot.service`, waits for the pool
 (`CLEAN >= 3`), and only then writes `/etc/sandswap/sandctl.env`.
 `--no-tls` makes the HTTP listeners plaintext (stream mTLS stays on);
@@ -167,7 +168,11 @@ output/sandctl api sandfs create --agent <agent_id> --name s1 \
 ```
 
 `rootfs:v1` is the busybox template included with `build.sh all` — the
-deployer seeds it to `/var/lib/sandswap/flat-templates/rootfs/v1/`.
+deployer seeds it to `/var/lib/sandswap/flat-templates/rootfs/v1/`. Use
+`--template ubuntu:24.04` instead for a full Ubuntu coding toolchain
+(python3 + pip, git, make, …); that is the sandbox
+[`examples/claude-code`](../../examples/claude-code) runs Claude Code in
+([Agent MCP Integration §9](../integration/agent-mcp.md#9-examples)).
 `--vcpus` / `--memory-mb` are concrete resource requirements. Note the
 returned `sandfs_id` — every execution call addresses its target sandbox with
 it explicitly.

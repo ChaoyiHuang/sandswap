@@ -196,7 +196,7 @@ Everything lands in `output/`. The runtime pairing:
 | `output/{gateway,sandlot,boxout,sandns}` | the services (`boxout` for K8s boxout mode, `sandns` for distributed) |
 | `output/sandctl` | the operator CLI |
 | `output/rootfs-template/` | the busybox base rootfs the bare-metal/e2e deploy scripts stage as the flat template `rootfs:v1` (scanned by the prov sandlot's `-flat-templates` dir) |
-| `output/rootfs-ubuntu/` | the Ubuntu 24.04 base rootfs (python3/ca-certificates/locales layered via a root chroot) the **k8s deployers** stage as their flat `rootfs:v1` — `deploy-k8s-*.sh` auto-builds it when missing; an unprivileged `build.sh all` keeps an existing complete one and tells you to rerun as root (see §3) |
+| `output/rootfs-ubuntu/` | the Ubuntu 24.04 base rootfs with a general coding toolchain (python3 + pip/venv, git, make, curl, unzip, procps, ca-certificates, locales — layered via a root chroot; env knobs in [templates](templates.md#32-ubuntu-base--buildbuild-ubuntu-rootfssh)). The **bare-metal single-node deployer** stages it as the flat template `ubuntu:24.04`; the **k8s deployers** stage it as their flat `rootfs:v1` — both auto-build it when missing; an unprivileged `build.sh all` keeps an existing complete one and tells you to rerun as root (see §3) |
 | `output/vsockguard.bpf.o` + `output/vsockguardctl` | vsockguard attach ([Deployment → Host Prerequisites](../deployment/prerequisites.md#42-vsockguard-impersonation-control)) |
 
 Verify the freshness gate:

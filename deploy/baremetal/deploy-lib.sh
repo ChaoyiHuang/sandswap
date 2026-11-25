@@ -289,9 +289,14 @@ bm_preflight() {
     done
 
     # Orphan sandswap host processes (survived preclean = systemd or a foreign
-    # supervisor keeps respawning them)
+    # supervisor keeps respawning them). Identified by KERNEL exe identity — the
+    # same rule bm_kill_leftover_processes applies — never by a cmdline pattern:
+    # `pgrep -f 'sandswap-(…)'` also matches whichever shell LAUNCHED this deploy
+    # when its command line merely mentions the names (a script, CI step, or an
+    # agent's shell running `deploy-single-node.sh …; systemctl status sandswap-sandlot`),
+    # and the deploy then refuses itself as its own orphan.
     local orphans
-    orphans="$(pgrep -f 'sandswap-(sandvmm|sandlot|gateway|dns|boxout)' 2>/dev/null | tr '\n' ' ' || true)"
+    orphans="$(bm_sandswap_leftover_pids | tr '\n' ' ')"
     if [[ -n "${orphans// /}" ]]; then
         bm_pf_fail "orphan sandswap processes survived cleanup: $orphans (check: systemctl list-units 'sandswap-*')"
     fi
@@ -360,28 +365,32 @@ bm_preflight() {
 # checked). comm names are irrelevant here, so the 15-char comm
 # truncation ("sandswap-sandvmm" → "sandswap-sandvm") that breaks
 # pkill -x never applies.
-bm_kill_leftover_processes() {
-    local pid exe
-    local -A targets=()
-    # Global out-param: number of PIDs actually killed (callers gate
-    # follow-ups like the vhost_vsock reload on it).
-    BM_LEFTOVER_KILLS=0
-
-    # ── 1) unit-cgroup survivors ─────────────────────────────────────
-    # Every PID still inside a sandswap unit cgroup after the stop.
+# bm_sandswap_leftover_pids — print "pid<TAB>identity" for every process that IS
+# a Sandswap host service, by kernel identity (the one implementation; shared by
+# the kill path and the preflight check so they can never disagree):
+#   unit-cgroup  — a PID still inside a sandswap systemd unit cgroup after stop
+#   <exe path>   — /proc/<pid>/exe resolves to an installed Sandswap binary
+#   /usr/local/bin/etcd — only with a Sandswap instance marker in argv
+# This shell ($$), its parent and PID 1 are never listed. Never matches by
+# cmdline pattern: a shell whose argv merely MENTIONS the names (the one that
+# launched this deploy, an editor, a CI step) is not a Sandswap process.
+bm_sandswap_leftover_pids() {
+    local pid exe argv
+    local -A seen=()
+    # 1) unit-cgroup survivors
     while IFS= read -r pid; do
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
         [[ "$pid" == "$$" || "$pid" == "$PPID" || "$pid" == "1" ]] && continue
-        targets[$pid]="unit-cgroup"
+        seen[$pid]=1
+        printf '%s\tunit-cgroup\n' "$pid"
     done < <(find /sys/fs/cgroup/system.slice -maxdepth 3 -type f \
                  -path '*sandswap*' -name cgroup.procs -exec cat {} + 2>/dev/null)
-
-    # ── 2) orphan scan by kernel-verified executable identity ────────
+    # 2) orphan scan by kernel-verified executable identity
     for pid in /proc/[0-9]*; do
         pid="${pid#/proc/}"
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
         [[ "$pid" == "$$" || "$pid" == "$PPID" || "$pid" == "1" ]] && continue
-        [[ -n "${targets[$pid]:-}" ]] && continue
+        [[ -n "${seen[$pid]:-}" ]] && continue
         # Strip the " (deleted)" suffix the kernel appends when the binary
         # file was replaced after the process started (deploy reinstalls).
         exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
@@ -389,23 +398,37 @@ bm_kill_leftover_processes() {
         case "$exe" in
             /usr/local/bin/sandswap-gateway|/usr/local/bin/sandswap-sandlot|\
 /usr/local/bin/sandswap-sandvmm|/usr/local/bin/sandns|/usr/local/bin/sandswap-boxout)
-                targets[$pid]="$exe"
+                printf '%s\t%s\n' "$pid" "$exe"
                 ;;
             /usr/local/bin/etcd)
                 # Shared binary path: require one of OUR markers so a
                 # foreign etcd cluster on the same host is never touched.
-                local argv
                 argv="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true) "
                 case "$argv" in
                     *"--name sandswap-etcd "*|\
 *"--data-dir /var/lib/sandswap-etcd "*|\
 *"--initial-cluster-token sandswap-etcd "*)
-                        targets[$pid]="$exe"
+                        printf '%s\t%s\n' "$pid" "$exe"
                         ;;
                 esac
                 ;;
         esac
     done
+    return 0
+}
+
+bm_kill_leftover_processes() {
+    local pid exe ident
+    local -A targets=()
+    # Global out-param: number of PIDs actually killed (callers gate
+    # follow-ups like the vhost_vsock reload on it).
+    BM_LEFTOVER_KILLS=0
+
+    # The verified target set — same identity rules as the preflight check.
+    while IFS=$'\t' read -r pid ident; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        targets[$pid]="$ident"
+    done < <(bm_sandswap_leftover_pids)
 
     # ── kill the verified PID set (re-verify first) ──────────────────
     for pid in "${!targets[@]}"; do

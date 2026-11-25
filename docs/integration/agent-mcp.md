@@ -252,7 +252,60 @@ default is the single source of truth — no second copy in deploy templates):
 - `gateway -print-mcp-instructions` prints the built-in guide for
   inspection or piping; it is not a required step in any flow.
 
-## 9. Framework examples
+## 9. Examples
+
+### 9.1 Claude Code — an agent with no SDK
+
+[`examples/claude-code`](../../examples/claude-code/README.md) (shipped in
+the release package under `examples/claude-code/`) is the reference for
+plugging in a ready-made agent: Claude Code, with no SDK and no code, is
+connected by two files in the project directory — a `.mcp.json` pointing
+at `POST /mcp` with `${CLAUDE_CODE_SANDBOX_API_KEY}` expanded into both
+auth headers, and a `.claude/settings.json` that auto-approves the server
+and denies the local `Bash`/`Write`/`Edit` tools, so the whole
+edit-run-fix-commit loop runs through the 12 tools in a sandbox from the
+stock `ubuntu:<release>` template. The README is a step-by-step walkthrough
+from a clean deploy to creating the agent + SandFS to running the task,
+and `analyze_session.py` rebuilds the finished turn from Claude Code's own
+transcript as a thinking→tool timeline.
+
+Three rules the wiring lives or dies by, whichever the client:
+
+1. **Both auth headers, every request** (§3). Claude Code expands
+   `${VAR}` from its environment at connect time.
+2. **A private variable name.** The example uses
+   `CLAUDE_CODE_SANDBOX_API_KEY`, never `SANDSWAP_API_KEY`: `sandctl`
+   reads the latter from the environment for *every* `--agent` call, so a
+   key exported under that name for one example silently hijacks all other
+   `sandctl` usage in the shell.
+3. **Trust the workspace once.** Claude Code ignores a project's
+   `.claude/settings.json` in an untrusted directory — the first
+   interactive launch must accept the trust dialog, or the local tools are
+   not denied. On a TLS deployment Node also needs the deployer's CA:
+   `export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt`.
+
+**What the loop costs.** A real run of the example, measured from the
+transcript: the model's wait before its first token is **79.5%** of the
+turn, emitting its blocks **19.6%**, tool execution **1.1%** — the model
+spends four times longer thinking than speaking, and the sandbox is a
+rounding error. Inside a call, Sandswap's own share of an `execute` is
+about 10 ms on a nested-virt host (gateway processing + the node's
+dispatch + the fixed exec floor: guest mount bookkeeping, fork+execve,
+the shell start — the `exec (warden)` rows of the
+[benchmark reports](../benchmark/index.md)); everything above that is
+what the command starts, and the Python interpreter alone is ~50 ms, paid
+on every `python3 -c`. So the two levers are the loop count (one merged
+`execute` is one fewer thinking→tool round) and the interpreter starts
+(file-sized jobs in the shell, one `python3` script instead of several
+`python3 -c`). This is the guidance the server's `instructions` already
+give the agent; §8.
+
+One detail for commit steps: the sandbox's `/bin/sh` is `dash`, which
+has no `pipefail` — `cmd | tail` masks `cmd`'s exit code, so an `&&`
+chain after a piped test run commits on red. Run the suite unpiped and
+let its exit code gate the chain.
+
+### 9.2 Framework clients (Go SDK)
 
 - **[examples/eino-sandswap](https://github.com/ChaoyiHuang/sandswap/tree/main/examples/eino-sandswap)**
   — CloudWeGo Eino: MCP tool discovery → OpenAI-style tool schema, two
@@ -260,3 +313,23 @@ default is the single source of truth — no second copy in deploy templates):
 - **[examples/openai-sandswap](https://github.com/ChaoyiHuang/sandswap/tree/main/examples/openai-sandswap)**
   — official OpenAI SDKs; `SANDSWAP_BENCH_MODE=mcp` benchmarks the whole
   agent loop through MCP tool calls.
+
+### 9.3 Beyond coding: any agent that drives tools through a shell
+
+"Coding" is the first instance, not the limit — the same recipe serves
+every agent whose loop sends commands to a tool running in the sandbox,
+and the pattern that makes long-running tools work is the **background
+exec** (§8): start the tool once with `background: true`, keep it alive,
+and drive it with one short `execute` per step, so its startup is paid
+once instead of per call.
+
+**Browser automation**, for instance: start a Playwright (or Chromium)
+driver in the background that listens on a local socket or reads commands
+from a workspace file; then navigate, click and read the DOM with one
+`execute` per action. A browser takes seconds to start — per-call startup
+would dominate the loop — while against a warm driver each step is one
+small command, and the session state (cookies, the open page) lives in
+the driver. Template: the flat `ubuntu:<release>` sandbox plus the
+Playwright browsers, then `save-template` to freeze it. The same shape
+covers a database or REPL kept alive in the background, a build watcher,
+or a Jupyter kernel driven through a file.

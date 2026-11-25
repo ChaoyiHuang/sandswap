@@ -20,7 +20,12 @@
 #   - Still supports apt install for additional packages (requires chroot + root)
 # The template can be used in two ways:
 #   1. Bind mount mode: -flat-templates output/rootfs-ubuntu/
-#   2. OverlayFS mode:  place under -overlayfs-templates as ubuntu/v1/
+#   2. OverlayFS mode:  place under -overlayfs-templates as ubuntu/24.04/
+# The default package set is a general coding toolchain (python3 + pip/venv,
+# git, make, curl, unzip, procps) so an AI coding agent driving the sandbox
+# through the agent API/MCP — e.g. Claude Code (examples/claude-code) — can
+# clone, edit, test and commit without a custom template. Override UBUNTU_PACKAGES
+# for a different set; a flat SandFS can apt-install more and save-as-template.
 # Output: $OUTPUT (default: output/rootfs-ubuntu/)
 
 set -euo pipefail
@@ -36,7 +41,7 @@ OUTPUT="${OUTPUT:-$PROJECT_ROOT/output/rootfs-ubuntu}"
 UBUNTU_BASE_URL="${UBUNTU_BASE_URL:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-amd64.tar.gz}"
 UBUNTU_MIRROR="${UBUNTU_MIRROR:-https://archive.ubuntu.com/ubuntu}"
 UBUNTU_SUITE="${UBUNTU_SUITE:-noble}"
-UBUNTU_PACKAGES="${UBUNTU_PACKAGES:-python3,ca-certificates,locales}"
+UBUNTU_PACKAGES="${UBUNTU_PACKAGES:-python3,python3-pip,python3-venv,git,make,curl,unzip,procps,ca-certificates,locales}"
 DOWNLOAD_CACHE="${DOWNLOAD_CACHE:-}"
 
 # ── Colors ─────────────────────────────────────────────────────
@@ -270,6 +275,19 @@ LANG=en_US.UTF-8
 LC_ALL=en_US.UTF-8
 EOF
 
+# pip: Ubuntu's "externally managed" guard makes a bare `pip install` fail
+# with PEP 668 unless --break-system-packages is passed. That guard protects a
+# distro's apt-managed system Python from pip/apt conflicts; the guest is a
+# single-user root VM whose rootfs is the agent's own SandFS, so the guard
+# only adds a flag an agent has to discover. Lift it in the site-level config
+# (python3-pip is in the default set; harmless when it is not).
+if [[ -d "$OUTPUT/usr/lib/python3/dist-packages/pip" ]]; then
+    cat > "$OUTPUT/etc/pip.conf" << 'EOF'
+[global]
+break-system-packages = true
+EOF
+fi
+
 # Clean apt cache to reduce template size
 rm -rf "$OUTPUT/var/lib/apt/lists/"*
 rm -rf "$OUTPUT/var/cache/apt/"*
@@ -301,6 +319,17 @@ if [[ ! -f "$OUTPUT/etc/hostname" ]]; then
     ERRORS=$((ERRORS + 1))
 fi
 
+# The coding toolchain the default package set promises. Checked here so a
+# partial chroot pass fails the build, not an agent's first pip/git call.
+if [[ ",$UBUNTU_PACKAGES," == *",python3,"* && ! -x "$OUTPUT/usr/bin/python3" ]]; then
+    log_error "/usr/bin/python3 not found (python3 is in UBUNTU_PACKAGES)"
+    ERRORS=$((ERRORS + 1))
+fi
+if [[ ",$UBUNTU_PACKAGES," == *",git,"* && ! -x "$OUTPUT/usr/bin/git" ]]; then
+    log_error "/usr/bin/git not found (git is in UBUNTU_PACKAGES)"
+    ERRORS=$((ERRORS + 1))
+fi
+
 if [[ "$ERRORS" -gt 0 ]]; then
     log_error "Verification failed with $ERRORS error(s)"
     exit 1
@@ -321,14 +350,11 @@ echo "  Files:      $FILE_COUNT"
 echo "  Mirror:     $UBUNTU_MIRROR"
 echo "  Suite:      $UBUNTU_SUITE"
 echo ""
-echo "  Usage (bind mount):"
-echo "    gateway -flat-templates $OUTPUT"
-echo ""
-echo "  Usage (OverlayFS template):"
-echo "    mkdir -p /var/sandswap/templates/ubuntu/v1"
-echo "    cp -a $OUTPUT/. /var/sandswap/templates/ubuntu/v1/"
-echo "    gateway -overlayfs-templates /var/sandswap/templates"
-echo "    # Then create sandfs with {\"template\": \"ubuntu:v1\"}"
+echo "  Register as a flat template (name/version under a -flat-templates scan root):"
+echo "    sudo mkdir -p /var/sandswap/flat-templates/ubuntu"
+echo "    sudo cp -a $OUTPUT /var/sandswap/flat-templates/ubuntu/24.04"
+echo "    # Then create sandfs with {\"template\": \"ubuntu:24.04\"}"
+echo "    # deploy/baremetal/deploy-single-node.sh does this step itself as ubuntu:24.04"
 echo "═══════════════════════════════════════════════════════"
 
 # Public template: normalize to the Sandswap TEMPLATE CONTRACT

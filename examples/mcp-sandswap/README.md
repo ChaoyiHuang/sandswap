@@ -41,4 +41,4 @@ program prints your SandFS instances and stops there.
 
 ## License
 
-BUSL-1.1 (same as the repository).
+Apache-2.0 (see [`../LICENSE`](../LICENSE)).

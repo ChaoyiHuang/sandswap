@@ -1,0 +1,4 @@
+# Local provisioning state written by setup.sh (.env.sh carries the agent API key)
+.env.sh
+.work/
+__pycache__/

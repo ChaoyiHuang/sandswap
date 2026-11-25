@@ -58,8 +58,11 @@ the real proc/dev inside the guest). Any source works — the repo ships two bui
   a symlink farm for the coreutils, minimal `/etc`, writable `/tmp`
   `/workspace` `/home/agent` (a few MB).
 - `build.sh ubuntu-rootfs` — the official minimal Ubuntu base tarball (no
-  debootstrap), extracted and optionally extended with `UBUNTU_PACKAGES`
-  via a chroot apt pass (~80 MB).
+  debootstrap), extracted and extended with `UBUNTU_PACKAGES` via a chroot
+  apt pass; the default set is a general coding toolchain (python3 + pip/venv,
+  git, make, curl, unzip, procps — ~250 MB), so a coding agent such as Claude
+  Code ([`examples/claude-code`](../../examples/claude-code)) works out of
+  the box.
 
 Container images work too — an OCI image archive or a plain rootfs tar,
 converted offline with `template-tool import`
@@ -73,7 +76,8 @@ Register it by placing the directory in the prov instance's
 `-flat-templates` scan root as `<name>/<version>/` — no restart, no
 registration command: the prov instance re-runs its discovery scan
 whenever a template is referenced or listed, so the ref file appears on
-first use:
+first use. The bare-metal single-node deployer does this for the Ubuntu
+build (as `ubuntu:24.04`, beside the busybox `rootfs:v1`); by hand it is:
 
 ```bash
 sudo mkdir -p /var/sandswap/flat-templates/ubuntu
