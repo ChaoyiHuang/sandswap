@@ -53,7 +53,7 @@ back to CLEAN    DESTROYED (recycle,
   (`-pool "small:2,medium:3,large:1"` keeps that many CLEAN VMs per
   spec).
 - **IN USE** — a SandFS is mounted and commands are executing.
-- **LEASED** — the commands finished; the sticky lease (100 ms idle
+- **LEASED** — the commands finished; the sticky lease (3 ms idle
   window by default, capped by `-max-sticky-sec`) holds the VM mounted.
   The next call within the window returns the VM to IN USE without a
   remount — this is what makes an agent's consecutive calls warm. An

@@ -175,10 +175,10 @@ const (
 
 // Fallbacks used when the MCP server has no ExecuteHandler / Lease (unit
 // tests): the gateway config defaults (gateway/config Defaults; the sticky
-// window default is 100ms).
+// window default is 3ms).
 const (
 	fallbackMaxExecTimeoutSec = 180
-	fallbackStickyMs          = 100
+	fallbackStickyMs          = 3
 )
 
 // renderInstructions substitutes serve-time values into an instructions text.

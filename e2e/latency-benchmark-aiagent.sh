@@ -21,7 +21,7 @@
 # latency-baremetal.sh benchmarks.
 # Benchmark cases: 1 warmup (excluded) + WARM_N
 # back-to-back `echo hi` (sticky lease) + COLD_N alternating rounds of
-# `echo a`/`echo b` with SWITCH_GAP_MS (> sticky-ms 100) so each cross-agent
+# `echo a`/`echo b` with SWITCH_GAP_MS (> LEASE_MS, 100 by default) so each cross-agent
 # call cold-mounts. Each round produces two cold samples (A and B), so the
 # reported cold count is 2 x COLD_N; the default 50 rounds = 100 cold samples.
 # Usage:
@@ -98,6 +98,10 @@ ETCD_ENDPOINT="${ETCD_ENDPOINT:-http://127.0.0.1:2379}"
 ETCD_DATA="${ETCD_DATA:-/tmp/sandswap-aiagent-etcd-data}"
 GW_ID_EXEC="${GW_ID_EXEC:-gw-exec-bench}"
 GW_ID_HUMAN="${GW_ID_HUMAN:-gw-human-bench}"
+# The warm phase sleeps WARM_GAP_MS (5 ms) between calls, so the gateway must
+# run the wide 100 ms window (the recorded benchmark environment), not its
+# built-in default.
+LEASE_MS="${LEASE_MS:-100}"
 
 source "$ROOT/e2e/common.sh"
 source "$ROOT/e2e/pin.sh"

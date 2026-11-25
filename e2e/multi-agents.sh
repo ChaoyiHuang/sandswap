@@ -45,6 +45,9 @@ TEMPLATE_DIR="${TEMPLATE_DIR:-/tmp/sandswap-templates}"
 # Force sandlot -pool "medium:1" so both agents reuse the same tinyVM
 SANDLOT_POOL="medium:1"
 NETWORK_BACKEND="${NETWORK_BACKEND:-bridge}"
+# Phase 9 (sticky-lease sanity) drives curl-paced back-to-back calls: it needs
+# the wide 100 ms window, not the gateway's built-in default.
+LEASE_MS="${LEASE_MS:-100}"
 source "$ROOT/e2e/common.sh"
 
 # Run directly from $OUTPUT (no deploy step) — tc_use_output_binaries sets

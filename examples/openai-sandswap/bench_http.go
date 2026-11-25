@@ -29,7 +29,10 @@ package main
 // Benchmark cases: 1 warmup (excluded), then
 // WARM_N back-to-back `echo hi` to agent A (sticky lease hit), then COLD_N
 // rounds alternating `echo a` (A) / `echo b` (B) with a SWITCH_GAP_MS sleep
-// (> sticky-ms 100) so each cross-agent call cold-mounts.
+// (> the gateway's -sticky-ms) so each cross-agent call cold-mounts. The
+// gateway runs with -sticky-ms 100 (e2e/latency-benchmark-aiagent.sh deploys
+// it so); WARM_GAP_MS must sit well inside that window or the warm phase
+// lands cold.
 
 import (
 	"bytes"

@@ -56,6 +56,9 @@ export GATEWAY_ADDR=":3001" HUMAN_ADDR="127.0.0.1:3101" STREAM_ADDR=":9999"   # 
 export GATEWAY_URL="http://localhost:3001" HUMAN_URL="http://localhost:3101"
 export TC_NODE_ID="probe-node"
 export KEEP_LOGS=1
+# The "warm" samples are 5 ms apart: they are only warm under the wide 100 ms
+# window, not the gateway's built-in default.
+LEASE_MS="${LEASE_MS:-100}"
 # shellcheck disable=SC1091
 source "$ROOT/e2e/common.sh"
 

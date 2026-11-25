@@ -483,8 +483,8 @@ single vsock round trip. Only the active agent's directory is visible to
 the guest; every write lands on the agent's persistent volume.
 
 **4. Sticky lease (same agent, consecutive calls).** Within the lease
-window (default 100 ms) the VM is still mounted — the next call takes the
-warm path. The 100 ms is a latency/VM-hold trade-off, not a functional
+window (default 3 ms) the VM is still mounted — the next call takes the
+warm path. The window is a latency/VM-hold trade-off, not a functional
 floor: `-sticky-ms` accepts down to 1 ms (the minimum; 0 is rejected), and
 the load benchmark ran a 1 ms window with back-to-back follow-up calls
 still landing warm — see

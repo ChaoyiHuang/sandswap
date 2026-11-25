@@ -330,7 +330,7 @@ stream:
   tls_cert: ${CERT_DIR}/stream.crt
   tls_key: ${CERT_DIR}/stream.key
   tls_ca: ${CERT_DIR}/ca.crt
-lease: { sticky_ms: 100, max_sticky_sec: 5 }
+lease: { sticky_ms: 3, max_sticky_sec: 5 }
 exec: { default_timeout_sec: 30, max_timeout_sec: 180 }
 YAML
     write_unit "sandswap-gateway-bp${i}" "sandswap-gateway" "$RUN_DIR/gw-exec${i}.yaml"

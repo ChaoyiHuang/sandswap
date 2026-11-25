@@ -239,12 +239,18 @@ if [[ -n "${TC_GATEWAY_CONFIG:-}" ]]; then
         -default-exec-timeout-sec 5 -max-exec-timeout-sec 2 \
         > "$LOG_DIR/gateway-refused.log" 2>&1 &
 else
+    # -sticky-ms only when this run set LEASE_MS (unset = the gateway's
+    # built-in default); an empty flag value would fail flag parsing.
+    lease_flags=()
+    if [[ -n "$LEASE_MS" ]]; then
+        lease_flags=(-sticky-ms "$LEASE_MS")
+    fi
     "$local_gw_bin" \
         -agent-addr "$GATEWAY_ADDR" \
         -human-addr "$HUMAN_ADDR" \
         -stream-addr "$STREAM_ADDR" \
         -vol-root "$VOL_ROOT" \
-        -sticky-ms "$LEASE_MS" \
+        ${lease_flags[@]+"${lease_flags[@]}"} \
         -max-sticky-sec "$MAX_LEASE_SEC" \
         -allow-anonymous-human \
         -default-exec-timeout-sec 5 -max-exec-timeout-sec 2 \

@@ -804,7 +804,7 @@ if [[ -z "$VOL_A" ]]; then
 else
     tc_log_info "agent A volume: $VOL_A"
     # Spam loop in the background for ~8s, dense enough to cover the switch
-    # window (sticky ~100ms). While A is legitimately mounted every request
+    # window (the sync sticky window). While A is legitimately mounted every request
     # is a dedup no-op; the one that matters lands right after the unmount.
     SPAM_PID=""
     STALE_ALIAS="$(openssl rand -hex 16)"

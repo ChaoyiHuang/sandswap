@@ -312,7 +312,7 @@ rm -f "$LOG_DIR/sandlot.log"
 start_sandlot_short
 wait_clean "$POOL_SIZE" 120 || tc_log_warn "pool not ready before the countdown phase; continuing"
 
-# Key point: after a sync exec finishes, the ~100ms sticky lease expires and the gateway unmounts asynchronously,
+# Key point: after a sync exec finishes, the sync sticky window expires and the gateway unmounts asynchronously,
 # so at kill time the VM is already clean (the countdown is a no-op for clean VMs by design). A background exec must hold
 # the lease and the mount — which is exactly the truly dangerous production case (a node dying under live load).
 BG=$(curl -s -m 30 -X POST "$GATEWAY_URL/agent/execute" \
@@ -444,7 +444,7 @@ tc_log_section "CountdownNoopOnCleanVM: unmounted CLEAN VM survives heartbeat si
 # Precondition: make sure the pool is fully CLEAN (rebuilt at the end of WardenCountdown, but confirm once more).
 wait_clean "$POOL_SIZE" 60 || tc_log_warn "CountdownNoopOnCleanVM: pool not fully CLEAN; continuing"
 
-# Run one sync exec: mount → exec → sticky(100ms) expiry → gateway async OP_UNMOUNT
+# Run one sync exec: mount → exec → sticky-window expiry → gateway async OP_UNMOUNT
 # → warden unmount_workspace → mount_active=false → VM back to CLEAN. This flips the VM from
 # "mount_active=true" back to "mount_active=false" — the precondition state for this section.
 R=$(gw_exec "$TC_API_KEY" "$TC_SANDFS_ID" "echo clean-vm-probe")

@@ -421,7 +421,13 @@ func (c *GatewayConfig) IdleTimeout() time.Duration {
 // behavior when the flag is not explicit). Every literal pair that both sides
 // used to spell out independently is named here and referenced from both.
 const (
-	DefaultStickyMs     = 100
+	// DefaultStickyMs is the sync sticky window in milliseconds: how long a
+	// VM stays mounted for the same agent after a sync exec / file op before
+	// the lease expires and the SandFS is swapped out. Short by design — an
+	// agent's think-gap between tool calls dwarfs it, so the VM returns to
+	// the pool almost immediately while truly back-to-back calls still land
+	// warm. Minimum 1 ms (ValidateLease).
+	DefaultStickyMs     = 3
 	DefaultMaxStickySec = 5
 
 	DefaultAgentAddr  = ":3000"

@@ -324,7 +324,7 @@ SG=$(new_sandfs "re-adopt")
 [[ -n "$SG" ]] || { tc_log_error "create sandfs G"; exit 1; }
 
 # Hold the mount with a bg exec and CONFIRM the VM is IN_USE at kill time:
-# a plain sync exec's mount survives only the 100ms sticky window, so the old
+# a plain sync exec's mount survives only the sync sticky window, so the old
 # version raced the async unmount and often killed an already-CLEAN VM —
 # degenerating into a plain restart test while claiming to cover the
 # stale-mount re-adopt path.

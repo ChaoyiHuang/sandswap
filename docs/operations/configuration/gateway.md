@@ -113,11 +113,11 @@ two cluster roles. A knob outside a mode's list is accepted but inert there.
 ## 5. Lease / Exec — hot-reload
 **Scope:** single-node and exec — the agent execution path. Human gateways serve no agent traffic.
 
-**Background.** The sticky lease is the "same agent's next call reuses its warm VM" window: after a VM is released it stays reserved for the agent for `sticky_ms`, capped by `max_sticky_sec` so a burst of idle VMs cannot accumulate. Exec timeouts bound sync exec calls; the background-lease cap bounds how long an async exec may keep its VM.
+**Background.** The sticky lease is the "same agent's next call reuses its warm VM" window: after a VM is released it stays reserved for the agent for `sticky_ms`, capped by `max_sticky_sec` so a burst of idle VMs cannot accumulate. The 3 ms default keeps back-to-back calls from one client (sent on the same connection, sub-millisecond apart) warm while handing the VM back to the pool well inside an agent think-gap. Exec timeouts bound sync exec calls; the background-lease cap bounds how long an async exec may keep its VM.
 
 | CLI flag | YAML key | Default | Unit |
 |---|---|---|---|
-| `-sticky-ms` | `lease.sticky_ms` | 100 | milliseconds. **Minimum 1** — 0 and negative values are rejected at startup and refused on hot-reload (the previous value is kept) |
+| `-sticky-ms` | `lease.sticky_ms` | 3 | milliseconds. **Minimum 1** — 0 and negative values are rejected at startup and refused on hot-reload (the previous value is kept) |
 | `-max-sticky-sec` | `lease.max_sticky_sec` | 5 | seconds. **Minimum 1** — lower values silently disable the maxHold reaper safety net, so they are rejected the same way |
 | `-default-exec-timeout-sec` | `exec.default_timeout_sec` | 30 | seconds. **Minimum 1** |
 | `-max-exec-timeout-sec` | `exec.max_timeout_sec` | 180 | seconds. **Minimum 1, and >= `default_timeout_sec`** — out-of-range values are rejected at startup and refused on hot-reload (the old silent normalization — max<default becoming the default — is gone). Must also stay **strictly below** the warden countdown (default 300 s) so a max-length sync exec always finishes (and sends its response) before the warden's countdown can fire — the countdown must only ever trip a cleanup overrun, never a legal long exec. And it must satisfy the **T_safe headroom** `5 s (health tick) + max_exec_timeout + 30 s (node heartbeat) < T_safe` (660 s with the contract defaults): enforced at startup (the gateway refuses to start), on hot-reload (the value is refused and the old one kept) and against every node's reported `T_safe` at connect (a node whose timing cannot hold the configured max exec is rejected) — a maximum-length exec must not still hold its mount when the presence key expires |

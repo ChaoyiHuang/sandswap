@@ -34,8 +34,8 @@ func TestDefaults(t *testing.T) {
 	if d.Stream.Addr != ":9998" {
 		t.Errorf("Stream.Addr = %q, want :9998", d.Stream.Addr)
 	}
-	if d.Lease.StickyMs != 100 {
-		t.Errorf("Lease.StickyMs = %d, want 100", d.Lease.StickyMs)
+	if d.Lease.StickyMs != 3 {
+		t.Errorf("Lease.StickyMs = %d, want 3", d.Lease.StickyMs)
 	}
 	if d.Exec.DefaultTimeoutSec != 30 {
 		t.Errorf("Exec.DefaultTimeoutSec = %d, want 30", d.Exec.DefaultTimeoutSec)
@@ -380,8 +380,8 @@ func TestApplyFlagOverridesNoExplicit(t *testing.T) {
 	cfg.ApplyFlagOverrides(flags, explicitSet)
 
 	// Should remain at default since the flag wasn't explicitly set.
-	if cfg.Lease.StickyMs != 100 {
-		t.Errorf("Lease.StickyMs = %d, want 100 (default, flag not explicit)", cfg.Lease.StickyMs)
+	if cfg.Lease.StickyMs != 3 {
+		t.Errorf("Lease.StickyMs = %d, want 3 (default, flag not explicit)", cfg.Lease.StickyMs)
 	}
 }
 

@@ -205,10 +205,10 @@ The test starts the full stack (gateway + sandlot + real KVM tinyVMs, pool size 
 
 This directory also ships a **latency benchmark** (`SANDSWAP_BENCH_MODE=http|mcp`) that measures every segment of the path straight from the gateway's own metrics — no log scraping (it is the designated replacement for the deleted log-scraping `e2e/latency.sh` / `e2e/latency-baremetal.sh` benchmarks; `e2e/latency-benchmark-aiagent.sh` drives it). The gateway returns `gateway_duration_ns` (gateway E2E), `sandlot_duration_ns` (sandlot dispatch→response, incl. vsock round trip) and `exec_duration_ns` (warden guest spawn→wait) in every execute response; the HTTP mode also reads the `X-Sandbox-Lease: hit` header for warm/cold ground-truth classification.
 
-The benchmark cases: 1 warmup (excluded) + `WARM_N` back-to-back `echo hi` (sticky lease hit) + `COLD_N` alternating `echo a`/`echo b` with a `SWITCH_GAP_MS` sleep (> sticky-ms 100) so each cross-agent call cold-mounts.
+The benchmark cases: 1 warmup (excluded) + `WARM_N` back-to-back `echo hi` (sticky lease hit) + `COLD_N` alternating `echo a`/`echo b` with a `SWITCH_GAP_MS` sleep (> the gateway's `-sticky-ms`) so each cross-agent call cold-mounts.
 
 ```bash
-# Direct run (needs a live gateway + two agent keys):
+# Direct run (needs a live gateway started with -sticky-ms 100 + two agent keys):
 export SANDSWAP_BENCH_MODE=http
 export GATEWAY_URL=http://localhost:3000
 export SANDSWAP_API_KEY_A=sk-... SANDSWAP_API_KEY_B=sk-...
@@ -253,8 +253,8 @@ The LLM is driven once to establish the mount and collect `T_llm`; then the benc
 | `SANDSWAP_API_KEY_A` / `_B` | — | Two agent keys (warm = A, switch = A↔B) |
 | `SANDSWAP_SANDFS_A` / `_B` | — (required) | sandfs_id; discover via `list_sandfs` / `GET /agent/sandfs` |
 | `WARM_N` / `COLD_N` | 30 / 20 | Warm / switch sample counts |
-| `WARM_GAP_MS` | 5 | Sleep between warm calls (≪ sticky window, keeps them warm) |
-| `SWITCH_GAP_MS` | 300 | Gap between switch calls (> sticky-ms 100) |
+| `WARM_GAP_MS` | 5 | Sleep between warm calls. The gateway must run with `-sticky-ms 100` (what `e2e/latency-benchmark-aiagent.sh` deploys): on the built-in default (3 ms) every warm-phase call would outlive the lease and land cold |
+| `SWITCH_GAP_MS` | 300 | Gap between switch calls (> the gateway's `-sticky-ms`) |
 | `SWITCH_SETTLE_MS` | 1000 | Sleep after the warm phase, before the first switch call |
 | `N_LLM` | 5 | MCP mode: LLM round-trip sample count |
 | `BENCH_VERBOSE` | 0 | Print the per-sample detail table |

@@ -18,7 +18,7 @@
 //	                                start, status poll, kill) is running
 //	no active bg exec              — every background exec is done (poll saw
 //	                                done/killed/not_found) OR past its deadline
-//	syncStickyUntil elapsed        — the 100ms post-sync-release window passed
+//	syncStickyUntil elapsed        — the sync sticky window (lease.sticky_ms) passed
 // lease_duration is a background exec's ABSOLUTE run-time cap (maxHold), NOT an
 // idle window. A status poll does NOT extend it. When the deadline elapses, the
 // exec is marked done (expired) and the lease is re-evaluated; if nothing else
@@ -32,7 +32,7 @@
 //     nothing holds → unmount (cgroup.kill clears A and B together).
 //   - sync exec between bg polls: BeginExec/EndExec brackets the RPC; the sync
 //     exec does NOT touch any bg deadline (no lease extension). After it ends a
-//     100ms sticky window arms, but an active bg still dominates the hold.
+//     sync sticky window arms, but an active bg still dominates the hold.
 // Idle timers: each entry has one time.AfterFunc, armed to the next release
 // opportunity (min of active bg deadlines, syncStickyUntil, or the global
 // maxHold safety cap for pure-sync sandboxes). On fire it re-evaluates under the
@@ -63,7 +63,7 @@ const leaseShards = 32
 // the reaper releases it once maxHold elapses).
 type Lease struct {
 	shards  [leaseShards]*leaseShard
-	timeout atomic.Int64 // sync sticky window (default 100ms), int64 nanoseconds
+	timeout atomic.Int64 // sync sticky window (lease.sticky_ms), int64 nanoseconds
 	maxHold atomic.Int64 // absolute hold cap for pure-sync sandboxes (default 5s)
 
 	// onExpiry is set once by StartExpiryWorker at startup, before any HTTP

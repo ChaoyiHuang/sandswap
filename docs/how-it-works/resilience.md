@@ -1272,7 +1272,7 @@ of the ownership-transfer paradigm:
   requests (503 SANDBOX_CLEANING), guaranteeing no concurrency before
   cleanup completes.
 - **Sticky lease / placement affinity**: consecutive same-agent calls reuse
-  the VM (100ms idle window); placement (persistent in etcd) takes over the
+  the VM (3 ms idle window); placement (persistent in etcd) takes over the
   deleted in-memory preferred-node's full job — node affinity across
   restarts, unmounts, and takeovers.
 - **L1 retry / L2 cleanup**: vsock transport error → L1 retry (fresh

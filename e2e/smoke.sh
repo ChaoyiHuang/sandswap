@@ -33,6 +33,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Phase 7 asserts X-Sandbox-Lease: hit on curl-paced back-to-back calls (ms of
+# process spawn + connect between requests): it needs the wide 100 ms window,
+# not the gateway's built-in default.
+LEASE_MS="${LEASE_MS:-100}"
 source "$ROOT/e2e/common.sh"
 
 cleanup() {
