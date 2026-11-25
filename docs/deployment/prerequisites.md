@@ -266,7 +266,7 @@ ping -c1 <node>            # from outside: no reply
 # an ICMP port-unreachable for its 5-tuple → delivered (ct state related).
 
 # 4. Loopback/SYN hygiene backfill present: the kernel patch-set hash in
-#    output/vmlinux.config-rev matches the release manifest.
+#    output/vmlinux.bin.config-rev matches the release manifest.
 ```
 
 A deployment that cannot enforce (1) and (2) at its edge and also serves

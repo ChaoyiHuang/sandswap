@@ -78,7 +78,7 @@ MATRIX_CLOSURE_FILES=(
 # alone does not. Entries must be REAL build outputs with stable presence —
 # a missing name or a deploy-staged file that flaps between rounds (the old
 # output/etcd entry) silently defeats reuse. The kernel config sidecars are
-# vmlinux.bin.config / vmlinux.bin.config-rev (NOT vmlinux.config*).
+# vmlinux.bin.config / vmlinux.bin.config-rev.
 MATRIX_ARTIFACTS=(
     output/vmlinux.bin output/vmlinux.bin.config-rev output/vmlinux.bin.config
     output/initramfs.cpio.gz

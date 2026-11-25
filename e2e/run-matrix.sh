@@ -97,7 +97,7 @@ MATRIX_CLOSURE_FILES=(
 # presence: a name that is missing (or a deploy-staged file that appears and
 # disappears between rounds — output/etcd did) flips the identity on every
 # pass and silently defeats reuse. The kernel config sidecars are
-# vmlinux.bin.config / vmlinux.bin.config-rev (NOT vmlinux.config*).
+# vmlinux.bin.config / vmlinux.bin.config-rev.
 MATRIX_ARTIFACTS=(
     output/vmlinux.bin output/vmlinux.bin.config-rev output/vmlinux.bin.config
     output/initramfs.cpio.gz

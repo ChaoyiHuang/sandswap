@@ -333,6 +333,11 @@ cp -a "$ROOT/output/rootfs-ubuntu" "$STAGE/output/rootfs-ubuntu"
 # Kernel identity travels with the image: config policy revision, .config
 # digest and applied patch-set digest (the gates above proved they match).
 cp -a "$KERNEL_REV_FILE" "$STAGE/output/vmlinux.bin.config-rev"
+# ...and the saved .config that digest was taken of: the exact Kconfig output
+# the image was built from, so a consumer can audit the shipped kernel's
+# options (kernel/ is deliberately not in the package). The digest gate above
+# proved these bytes are the sidecar's config_sha256.
+cp -a "$KERNEL_CONFIG_FILE" "$STAGE/output/vmlinux.bin.config"
 mkdir -p "$STAGE/output/etcd"
 cp -a "$ROOT/output/etcd/etcd" "$ROOT/output/etcd/etcdctl" "$STAGE/output/etcd/"
 chmod +x "$STAGE/output/gateway" "$STAGE/output/sandlot" "$STAGE/output/sandvmm" \
@@ -375,17 +380,18 @@ done
 # Every shipped artifact must exist and be non-empty before the tarball is
 # sealed: a truncated/missing binary fails only on the consumer host, and the
 # tarball hash cannot catch an omission that happened before assembly. The
-# list mirrors the copy above (plus the kernel identity sidecar).
+# list mirrors the copy above (plus the kernel identity sidecar and the saved
+# .config beside it).
 for art in gateway sandlot sandvmm sandns boxout sandctl bindregdump \
            warden-probe template-tool vsockguardctl vsockguard.bpf.o \
-           vmlinux.bin vmlinux.bin.config-rev initramfs.cpio.gz \
+           vmlinux.bin vmlinux.bin.config-rev vmlinux.bin.config initramfs.cpio.gz \
            eino-sandswap openai-sandswap keepalive-sandswap loadgen \
            etcd/etcd etcd/etcdctl; do
     [ -s "$STAGE/output/$art" ] || err "release artifact missing or empty: output/$art"
 done
 [ -d "$STAGE/output/rootfs-template" ] || err "release artifact missing: output/rootfs-template"
 [ -d "$STAGE/output/rootfs-ubuntu" ] || err "release artifact missing: output/rootfs-ubuntu"
-log "release artifacts present and non-empty (binaries, kernel + identity, initramfs, templates, etcd)"
+log "release artifacts present and non-empty (binaries, kernel + identity + .config, initramfs, templates, etcd)"
 
 # ── Tar + checksums + release notes ──────────────────────────────────
 mkdir -p "$DIST_DIR"
@@ -489,8 +495,8 @@ GOOGLE_API_KEY) — the deployment itself does not.
 - docs: configuration, deployment, integration, storage contract
 - examples/claude-code: the Claude Code integration walkthrough (text only)
 - output: static binaries (gateway/sandlot/sandvmm/sandns/boxout/sandctl/...),
-  IPv6-enabled guest kernel, initramfs, rootfs templates (busybox + ubuntu),
-  example agents, vendored etcd
+  IPv6-enabled guest kernel (+ its saved .config and identity sidecar),
+  initramfs, rootfs templates (busybox + ubuntu), example agents, vendored etcd
 
 ## Uninstall
 

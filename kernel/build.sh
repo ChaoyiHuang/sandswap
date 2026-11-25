@@ -356,13 +356,11 @@ kernel_output_is_current() {
     local img="$OUTPUT_DIR/vmlinux.bin"
     [[ -f "$img" ]] || return 1
     [[ "$(kernel_version_of "$img")" == "$KERNEL_TAG_VERSION" ]] || return 1
-    # The build writes "<image>.config-rev" (e.g. vmlinux.bin.config-rev) with
-    # rev/config_sha256/patchset_sha256 lines; the legacy vmlinux.config-rev
-    # name is still read, but a single-line legacy file cannot match the
-    # structured identity and therefore forces the rebuild.
+    # The build writes "<image>.config-rev" beside the image with the
+    # rev/config_sha256/patchset_sha256 identity lines; no sidecar, or one
+    # that does not match, means the artifact is not current.
     local rev_file patchset
-    rev_file="$OUTPUT_DIR/$(basename "$img").config-rev"
-    [[ -f "$rev_file" ]] || rev_file="$OUTPUT_DIR/vmlinux.config-rev"
+    rev_file="$img.config-rev"
     patchset="$(kernel_patchset_hash)" || return 1
     kernel_identity_matches "$rev_file" "$patchset" || return 1
     kernel_has_ipv6 "$img" || return 1
