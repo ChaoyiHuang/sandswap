@@ -304,6 +304,21 @@ done
 # docs/
 cp -a "$ROOT/docs" "$STAGE/docs"
 
+# examples/claude-code/: the Claude Code integration walkthrough — text only
+# (.mcp.json, settings, TASK.md, seed/setup scripts, the analyzer), no build
+# step, so a release-package user can run it straight from the extracted tree
+# without a source checkout. Only that example: the others are Go modules
+# that ship as prebuilt binaries under output/.
+mkdir -p "$STAGE/examples/claude-code"
+for f in README.md TASK.md analyze_session.py lib.sh seed.sh setup.sh \
+         .mcp.json .gitignore; do
+    [ -f "$ROOT/examples/claude-code/$f" ] || err "missing examples/claude-code/$f"
+    cp -a "$ROOT/examples/claude-code/$f" "$STAGE/examples/claude-code/$f"
+done
+cp -a "$ROOT/examples/LICENSE" "$STAGE/examples/LICENSE"
+mkdir -p "$STAGE/examples/claude-code/.claude"
+cp -a "$ROOT/examples/claude-code/.claude/settings.json" "$STAGE/examples/claude-code/.claude/settings.json"
+
 # output/: prebuilt artifacts. Everything the deploy/e2e scripts and the
 # storage contract need; explicitly NOT output/warden (embedded in the
 # initramfs) and no Go/Rust sources.
@@ -472,6 +487,7 @@ GOOGLE_API_KEY) — the deployment itself does not.
 - security: operational vsockguard/host-security scripts (audit material is
   not shipped)
 - docs: configuration, deployment, integration, storage contract
+- examples/claude-code: the Claude Code integration walkthrough (text only)
 - output: static binaries (gateway/sandlot/sandvmm/sandns/boxout/sandctl/...),
   IPv6-enabled guest kernel, initramfs, rootfs templates (busybox + ubuntu),
   example agents, vendored etcd

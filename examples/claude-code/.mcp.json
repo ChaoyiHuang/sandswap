@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sandswap": {
+      "type": "http",
+      "url": "https://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CLAUDE_CODE_SANDBOX_API_KEY}",
+        "X-Sandswap-Api-Key": "${CLAUDE_CODE_SANDBOX_API_KEY}"
+      }
+    }
+  }
+}

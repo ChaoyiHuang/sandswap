@@ -80,9 +80,20 @@ tar xzf "sandswap-${VER}-linux-amd64.tar.gz" && cd "sandswap-${VER}-linux-amd64"
 # deploy single node (systemd services, dedicated non-root identities)
 sudo bash deploy/baremetal/deploy-single-node.sh --skip-build
 
-# 3 real AI agents against the deployment: creates the agents + sandfs and
-# prints every LLM↔sandbox interaction
-# (key: DEEPSEEK_API_KEY, or OPENAI_API_KEY / GOOGLE_API_KEY)
+# Plug in an agent — pick one:
+
+# (a) Claude Code, with no SDK and no code: two config files in the package
+#     wire it to the sandbox (local shell denied, every command runs in a
+#     tinyVM). Creates the agent + SandFS and seeds a failing test suite;
+#     then, from the example directory, launch Claude Code on it.
+bash examples/claude-code/setup.sh
+source examples/claude-code/.env.sh
+export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt
+cd examples/claude-code && claude "Complete the task in TASK.md using only the sandswap tools."
+
+# (b) SDK agents: 3 real AI agents against the deployment — creates the
+#     agents + sandfs and prints every LLM↔sandbox interaction
+#     (key: DEEPSEEK_API_KEY, or OPENAI_API_KEY / GOOGLE_API_KEY)
 sudo env DEEPSEEK_API_KEY=sk-... \
     bash deploy/baremetal/verify-eino.sh --agent-count 3
 
@@ -95,7 +106,9 @@ at Sandswap, authenticate with an API key, address one SandFS by its
 `sandfs_id` over either surface (same semantics):
 [MCP](docs/integration/agent-mcp.md) (`POST /mcp`, 12 tools) ·
 [HTTP](docs/integration/agent-http.md) (`POST /agent/execute`,
-`POST /agent/file`).
+`POST /agent/file`). Claude Code is the zero-code instance of that
+([walkthrough](examples/claude-code/README.md), including what a tool
+call costs and how to make the loop fast).
 
 ### For humans
 
@@ -198,7 +211,7 @@ network/vsockguard/  BPF LSM vsock transport guard (C)
 initramfs/    minimal initramfs: warden + busybox
 kernel/       guest kernel: pinned source tree + hardening
 templates/    rootfs templates (busybox base, sqlite, …)
-examples/     example agents: Eino, openai-go, keepalive client
+examples/     example agents: Claude Code, Eino, openai-go, keepalive client
 e2e/          self-contained end-to-end test scripts
 build/        build scripts (all components + freshness check)
 deploy/       deployment scripts (baremetal + k8s)

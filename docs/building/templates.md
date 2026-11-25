@@ -314,19 +314,30 @@ runs apt inside a chroot):
 sudo bash build/build-ubuntu-rootfs.sh
 ```
 
-Output: `output/rootfs-ubuntu/`. The builder downloads the official minimal
-`ubuntu-base` tarball (no debootstrap), unpacks it, configures apt sources,
-and installs extra packages in one chroot pass. Environment knobs:
+Output: `output/rootfs-ubuntu/` (~250 MB). The builder downloads the official
+minimal `ubuntu-base` tarball (no debootstrap), unpacks it, configures apt
+sources, and installs extra packages in one chroot pass. The default
+package set is a general coding toolchain — `python3` + pip/venv, `git`,
+`make`, `curl`, `unzip`, `procps` — so an AI coding agent driving a sandbox
+through the agent API/MCP (e.g. Claude Code,
+[`examples/claude-code`](../../examples/claude-code)) can clone, edit,
+test and commit without a custom template; pip's externally-managed guard
+is lifted in the image's `/etc/pip.conf` for the same reason. Environment
+knobs:
 
 | Variable | Default | Effect |
 |---|---|---|
 | `UBUNTU_BASE_URL` | cdimage.ubuntu.com ubuntu-base 24.04 URL | the base tarball to download (point at a mirror copy) |
 | `UBUNTU_MIRROR` | `https://archive.ubuntu.com/ubuntu` | apt mirror written into the chroot's sources |
 | `UBUNTU_SUITE` | `noble` | apt suite written into the chroot's sources |
-| `UBUNTU_PACKAGES` | `python3,ca-certificates,locales` | extra apt packages installed in the chroot pass |
+| `UBUNTU_PACKAGES` | `python3,python3-pip,python3-venv,git,make,curl,unzip,procps,ca-certificates,locales` | extra apt packages installed in the chroot pass |
 | `OUTPUT` | `output/rootfs-ubuntu/` | destination directory |
 
-Register it where the prov sandlot scans flat templates:
+`deploy/baremetal/deploy-single-node.sh` registers it as the flat template
+`ubuntu:<release>` (the version read from the tree's own `os-release`, so
+`ubuntu:24.04` for the default base) whenever `output/rootfs-ubuntu` is
+present. Register it by hand elsewhere — where the prov sandlot scans flat
+templates:
 
 ```bash
 sudo mkdir -p /var/sandswap/flat-templates/ubuntu

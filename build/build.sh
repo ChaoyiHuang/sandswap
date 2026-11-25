@@ -510,7 +510,7 @@ build_all() {
     echo "  output/keepalive-sandswap     (keep-alive demo, ~5 MB)"
     echo "  output/loadgen               (concurrent load driver, ~3 MB)"
     echo "  output/rootfs-template         (directory, ~few MB)"
-    echo "  output/rootfs-ubuntu           (directory, ~150 MB)"
+    echo "  output/rootfs-ubuntu           (directory, ~250 MB)"
     echo "  output/vsockguard.bpf.o        (BPF LSM program)"
     echo "  output/vsockguardctl           (libbpf attach/detach control tool)"
     echo ""
@@ -530,14 +530,15 @@ build_rootfs_template() {
 build_ubuntu_rootfs() {
     # The Ubuntu template's package layer is a chroot install (root-only).
     # A complete existing template is kept when the build runs unprivileged;
-    # an absent/incomplete one fails with the exact command instead of
-    # silently producing a template without python3.
+    # an absent/incomplete one (no python3 + git — the default package set's
+    # anchors) fails with the exact command instead of silently keeping a
+    # template without the coding toolchain.
     if [[ "$(id -u)" -ne 0 ]]; then
-        if [[ -x "$ROOT/output/rootfs-ubuntu/usr/bin/python3" ]]; then
+        if [[ -x "$ROOT/output/rootfs-ubuntu/usr/bin/python3" && -x "$ROOT/output/rootfs-ubuntu/usr/bin/git" ]]; then
             warn "Ubuntu rootfs template requires root to rebuild — keeping the existing complete template"
             return 0
         fi
-        err "Ubuntu rootfs template requires root (chroot package install): sudo bash build/build.sh all"
+        err "Ubuntu rootfs template missing or incomplete (python3 + git) and requires root (chroot package install): sudo bash build/build.sh all"
     fi
     log "Building Ubuntu rootfs template..."
     (cd "$ROOT/build" && bash build-ubuntu-rootfs.sh)

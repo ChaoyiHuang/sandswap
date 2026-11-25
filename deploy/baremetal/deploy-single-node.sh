@@ -140,15 +140,37 @@ fi
 log "[4/8] Installing gateway..."
 sandswap_install_binary "$OUTPUT/gateway" "$SANDSWAP_BIN/sandswap-gateway"
 
-# Deploy rootfs template (gateway needs it for flat-templates)
-# Layout flat-templates/rootfs/v1/ registers template ref "rootfs:v1" —
-# the same convention used by e2e tests and examples.
+# Deploy flat templates: layout flat-templates/<name>/<version>/ registers the
+# ref "<name>:<version>" on the prov instance's scan — the same convention the
+# e2e tests and examples use. rootfs:v1 is the busybox base; ubuntu:<release>
+# is the Ubuntu coding-toolchain base (python3/pip/git/make — what
+# examples/claude-code and any coding agent expects out of the box), staged
+# when its build output is present so a release/dev tree carries it too.
+SEEDED_TEMPLATE=0
 if [[ -d "$OUTPUT/rootfs-template" ]]; then
     # Wipe any stale template dir first: a prior deploy/e2e may have left
     # symlinks (bin/sbin/lib/...) that cp -a cannot overwrite with directories.
     rm -rf "$SANDSWAP_VAR/flat-templates/rootfs/v1"
     mkdir -p "$SANDSWAP_VAR/flat-templates/rootfs/v1"
     cp -a "$OUTPUT/rootfs-template/." "$SANDSWAP_VAR/flat-templates/rootfs/v1/"
+    log "Busybox rootfs template staged (rootfs:v1)"
+    SEEDED_TEMPLATE=1
+fi
+if [[ -d "$OUTPUT/rootfs-ubuntu/bin" ]]; then
+    # The version is the tree's own os-release (24.04 for the default base), so
+    # a build against a different UBUNTU_BASE_URL registers under its real
+    # release instead of a hardcoded one.
+    UBUNTU_RELEASE="$(sed -n 's/^VERSION_ID="\([^"]*\)"/\1/p' "$OUTPUT/rootfs-ubuntu/etc/os-release" 2>/dev/null | head -1)"
+    UBUNTU_RELEASE="${UBUNTU_RELEASE:-v1}"
+    rm -rf "$SANDSWAP_VAR/flat-templates/ubuntu/$UBUNTU_RELEASE"
+    mkdir -p "$SANDSWAP_VAR/flat-templates/ubuntu/$UBUNTU_RELEASE"
+    cp -a "$OUTPUT/rootfs-ubuntu/." "$SANDSWAP_VAR/flat-templates/ubuntu/$UBUNTU_RELEASE/"
+    log "Ubuntu rootfs template staged (ubuntu:$UBUNTU_RELEASE, $(du -sh "$SANDSWAP_VAR/flat-templates/ubuntu/$UBUNTU_RELEASE" | cut -f1))"
+    SEEDED_TEMPLATE=1
+else
+    log "  output/rootfs-ubuntu absent — no ubuntu:<release> template (sudo bash build/build.sh ubuntu-rootfs)"
+fi
+if [[ "$SEEDED_TEMPLATE" -eq 1 ]]; then
     # Public template readable by the seed identity (0000-mode oddballs in
     # distro trees would break seeding — see e2e/single-node-multi-agent.sh note).
     # Shared-group shape via the canonical tool (see e2e/single-node-multi-agent.sh).
@@ -156,7 +178,6 @@ if [[ -d "$OUTPUT/rootfs-template" ]]; then
     [[ -x "$TEMPLATE_TOOL" ]] || { err "output/template-tool missing — run: bash build/build.sh go"; }
     chgrp -R "$SS_SHARED_GROUP" "$SANDSWAP_VAR/flat-templates"
     "$TEMPLATE_TOOL" normalize "$SANDSWAP_VAR/flat-templates"
-    log "Rootfs template deployed (rootfs:v1)"
 fi
 
 # Generate gateway config (HTTP listener TLS only when --no-tls is absent; the

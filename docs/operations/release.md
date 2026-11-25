@@ -97,6 +97,10 @@ sandswap-<ver>-linux-amd64/
 │                           against the prebuilt output/
 ├── security/               vsockguard attach/attest/detach/verify, host checks
 ├── docs/                   the documentation tree
+├── examples/claude-code/   the Claude Code integration walkthrough — text
+│                           only (.mcp.json, settings, TASK.md, seed/setup
+│                           scripts, analyze_session.py): run it straight
+│                           from the extracted tree, no source checkout
 ├── output/                 PREBUILT artifacts + .release-stamp:
 │                           static binaries (gateway, sandlot, sandvmm, sandns,
 │                           boxout, sandctl, bindregdump, warden-probe,
