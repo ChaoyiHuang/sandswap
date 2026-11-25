@@ -323,7 +323,7 @@ assert_eq "15.2 new file has content" "$READ_NEW" "rename me"
 # --- Test 16: Persistence across lease ---
 log_step "Test 16: Persistence across lease"
 file_write "persist.txt" "persistent data" > /dev/null
-# Wait for lease to expire (default 100ms, wait 500ms to be safe)
+# Wait for the sticky lease to expire (wait 500ms to be safe)
 sleep 0.5
 # Read the file again — should still be there (same agent volume)
 PERSIST_TEXT=$(file_read_text "persist.txt")

@@ -232,7 +232,7 @@ stream:
   tls_cert: ${CERT_DIR}/stream.crt
   tls_key: ${CERT_DIR}/stream.key
   tls_ca: ${CERT_DIR}/ca.crt
-lease: { sticky_ms: 100, max_sticky_sec: 5 }
+lease: { sticky_ms: 3, max_sticky_sec: 5 }
 # The sandlot runs with -allow-short-resilience-timings (T_safe=70s), so the
 # gateway max exec must satisfy 5s tick + max + 30s heartbeat < 70s.
 exec: { default_timeout_sec: 30, max_timeout_sec: 30 }

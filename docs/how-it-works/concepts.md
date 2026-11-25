@@ -69,7 +69,7 @@ One line each; the linked page is where each is actually explained.
 - **Warm / cold path** — warm: the request lands on a VM that already has the
   agent's SandFS mounted. Cold: the VM is idle, so the agent's SandFS
   must be mounted first. See [VM Lifecycle](vm-lifecycle.md).
-- **Sticky lease** — the short window (default 100 ms, min 1 ms) after a call
+- **Sticky lease** — the short window (default 3 ms, min 1 ms) after a call
   during which the same agent's next call reuses the still-mounted VM — what
   makes consecutive calls warm. See [VM Lifecycle](vm-lifecycle.md).
 - **Template** — a rootfs image stored as an OCI artifact that a SandFS is

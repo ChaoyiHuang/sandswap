@@ -182,7 +182,7 @@ volume.
 4. **Route**: single-node mode uses the local pool. Distributed mode reads
    ownership: fresh owner → serve; dead owner → CAS takeover after the
    claim guard; stale-but-tolerable → reroute (DNS/307) or serve.
-5. **Lease and acquire**: the sticky lease (default 100 ms) reuses the
+5. **Lease and acquire**: the sticky lease (default 3 ms) reuses the
    still-mounted VM for the same agent. `pool.Acquire` picks a CLEAN VM
    and caps VMs at `PoolSize`.
 6. **Dispatch and relay**: send the VMCommand over the node's stream

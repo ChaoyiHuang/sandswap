@@ -34,7 +34,7 @@ data:
     stream:
       addr: "0.0.0.0:9998"
     lease:
-      sticky_ms: 100
+      sticky_ms: 3
       max_sticky_sec: 5
     exec:
       default_timeout_sec: 30
@@ -80,7 +80,7 @@ data:
     stream:
       addr: "0.0.0.0:9998"
     lease:
-      sticky_ms: 100
+      sticky_ms: 3
       max_sticky_sec: 5
     exec:
       default_timeout_sec: 30

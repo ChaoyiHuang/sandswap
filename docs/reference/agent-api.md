@@ -199,7 +199,7 @@ in the VM. The VM is released (unmounted) when **any** of these occurs:
 
 1. **Poll observes completion** — a `/agent/exec/status` returning `done` (or
    `not_found`) marks the exec finished; if no other background exec or in-flight
-   sync exec holds the VM, it is released (after the 100 ms sync sticky window).
+   sync exec holds the VM, it is released (after the 3 ms sync sticky window).
 2. **Kill** — `/agent/exec/kill` marks the exec finished and releases likewise.
 3. **`lease_duration` elapses** — the exec's absolute run-time cap. The VM is
    unmounted; unmount's `cgroup.kill` clears the still-running expired task.
@@ -218,7 +218,7 @@ extend it. If a poll observes the exec still `running`, the lease is untouched.
 - **Sync exec / file op during a background exec**: an in-flight sync exec or
   file op holds the VM (it cannot be released while the RPC is in progress), but
   it does **not** extend any background exec's deadline. A sync exec that
-  completes arms a 100 ms sticky window, but an active background exec still
+  completes arms a 3 ms sticky window, but an active background exec still
   dominates the hold.
 
 This guarantees a background task runs at most `lease_duration` (unless another
@@ -556,5 +556,5 @@ status (`400`, `401`, `404`, `405`, `413`, `500`, `502`).
 | `GET /agent/sandfs` | — | No body expected. |
 | Sync exec timeout | default 30 s, max 180 s (must stay < warden countdown 300 s) | `-default-exec-timeout-sec` / `-max-exec-timeout-sec`; agent `timeout` is clamped to max; negative `timeout` returns `400`. |
 | Background lease | default cap 1 h | `lease_duration` = background exec absolute run-time cap (`0` = the configured `-max-background-lease-sec` cap); status polls do not extend it; above-cap / negative returns `400`. |
-| Sticky lease | 100 ms, max 5 s | `-sticky-ms` / `-max-sticky-sec`. |
+| Sticky lease | 3 ms, max 5 s | `-sticky-ms` / `-max-sticky-sec`. |
 | Listener timeouts | read 30 s; write `-max-exec-timeout-sec` + 30 s | Keep-alive idle timeout `-idle-timeout` (default 1 h). |

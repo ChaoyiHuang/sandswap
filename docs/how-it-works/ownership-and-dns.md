@@ -262,7 +262,7 @@ sandns is consulted again only when a new connection must be established:
 ### 3.6 The warm path
 
 The above is the cold path. When the sticky lease is live (same sandfs,
-within the 100 ms idle window), the request short-circuits at step 2: no
+within the 3 ms idle window), the request short-circuits at step 2: no
 Claim write, no `Acquire`, no VM resolution — the gateway routes the command
 straight to the bound VM over the cached node stream. This is why the warm
 path is sub-millisecond.

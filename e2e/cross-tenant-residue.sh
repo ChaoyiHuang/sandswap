@@ -316,7 +316,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 log_section "Phase 4: Switch to agent B (same VM) and probe"
 # ══════════════════════════════════════════════════════════════════
-# Let A's sticky lease expire (default 100ms) so B's exec hot-swaps the VM.
+# Let A's sticky lease expire (the gateway's sync sticky window) so B's exec hot-swaps the VM.
 sleep 1
 cat > /tmp/sandswap-residue-probe.py <<'PYEOF'
 import ctypes

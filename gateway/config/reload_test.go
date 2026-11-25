@@ -339,9 +339,9 @@ func TestApplyHotReloadShedRefused(t *testing.T) {
 // TestReloadKeepsCLIFlagOverrides pins the precedence contract ACROSS a reload:
 // a value supplied by an explicit CLI flag must survive a config-file edit.
 // The callback used to decode into Defaults() only, so the first unrelated edit
-// reverted every flag-provided value (probe: -sticky-ms 500 → 100,
-// -route-stale-sec 25 → 20 on a sched.policy edit; a raised -etcd-fence-sec
-// dropped back to 180 mid-partition).
+// reverted every flag-provided value (probe: -sticky-ms 500 → the built-in
+// default, -route-stale-sec 25 → 20 on a sched.policy edit; a raised
+// -etcd-fence-sec dropped back to 180 mid-partition).
 func TestReloadKeepsCLIFlagOverrides(t *testing.T) {
 	flags := &GatewayFlags{StickyMs: 500, StalenessRouteStaleSec: 25}
 	explicit := map[string]bool{"sticky-ms": true, "route-stale-sec": true}

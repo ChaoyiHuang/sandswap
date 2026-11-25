@@ -26,6 +26,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# The drill is 100 ms → 500 ms → 100 ms (Phase 7 edits LEASE_MS and rewrites
+# the config): start from the explicit 100 ms so every step is a real change.
+LEASE_MS="${LEASE_MS:-100}"
 source "$ROOT/e2e/common.sh"
 
 cleanup() {

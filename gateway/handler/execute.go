@@ -769,7 +769,7 @@ func (h *ExecuteHandler) ExecuteDirect(ctx context.Context, apiKey string, req E
 
 	// 12. Lease management. Background execs register an absolute lease deadline
 	// (lease_duration = run-time cap; polls do NOT extend it). Sync execs arm the
-	// 100ms sticky window via TouchSync (does not touch bg deadlines). The spec
+	// sync sticky window via TouchSync (does not touch bg deadlines). The spec
 	// rides along so a newly created entry carries the bound's bucket from birth
 	// — SetSpec alone can't do that (it no-ops when the entry doesn't exist yet).
 	if req.Background && execRes.ExecID != "" {

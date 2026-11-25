@@ -106,6 +106,9 @@ ITER_N="${ITER_N:-20}"
 FILE_MB="${FILE_MB:-16}"
 UNMOUNT_WAIT_S="${UNMOUNT_WAIT_S:-90}"
 BENCH_VERBOSE="${BENCH_VERBOSE:-0}"
+# Benchmark window: 1 ms, like the load benchmark (the gateway's own
+# unmount_stats are window-independent; each iteration waits for the unmount).
+LEASE_MS="${LEASE_MS:-1}"
 
 source "$ROOT/e2e/common.sh"
 source "$ROOT/e2e/pin.sh"

@@ -25,7 +25,11 @@
 #   GATEWAY_URL     — gateway HTTP base URL (agent API)    (default: http://localhost:3001)
 #   HUMAN_ADDR      — human API listen addr                (default: :3100)
 #   HUMAN_URL       — human API base URL (/stats, /human/*)(default: http://localhost:3100)
-#   LEASE_MS        — sticky lease window                  (default: 100)
+#   LEASE_MS        — gateway sticky window in ms. UNSET by default: the
+#                     harness then passes no sticky-ms (neither the flag nor
+#                     lease.sticky_ms) and the gateway runs its built-in
+#                     default. Set it BEFORE sourcing when a suite's
+#                     assertions depend on a specific window.
 #   MAX_LEASE_SEC   — max background exec lease            (default: 30)
 #   POOL_SIZE       — tinyVM pool size                    (default: 3)
 #   VM_MEMORY_MB    — per-VM memory                        (default: 256)
@@ -59,7 +63,13 @@ GATEWAY_URL="${GATEWAY_URL:-http://localhost:3001}"
 # passed — the harness runs anonymous, so the default bind is loopback.
 HUMAN_ADDR="${HUMAN_ADDR:-127.0.0.1:3100}"
 HUMAN_URL="${HUMAN_URL:-http://localhost:3100}"
-LEASE_MS="${LEASE_MS:-100}"
+# LEASE_MS is deliberately left UNSET: nothing is handed to the gateway unless
+# a suite sets it, so the battery runs on the gateway's built-in sticky
+# default. A suite whose assertions need a specific window declares it BEFORE
+# sourcing this file — e.g. LEASE_MS="${LEASE_MS:-100}" for curl-paced warm-hit
+# assertions (ms of process spawn + connect between requests), or the
+# benchmarks' own 1 ms.
+LEASE_MS="${LEASE_MS:-}"
 MAX_LEASE_SEC="${MAX_LEASE_SEC:-30}"
 POOL_SIZE="${POOL_SIZE:-3}"
 VM_MEMORY_MB="${VM_MEMORY_MB:-256}"
@@ -636,6 +646,7 @@ tc_node_cert() {
 # After calling this, set TC_GATEWAY_CONFIG=<path> and call tc_start_gateway.
 tc_gen_gateway_config() {
     local path="$1"
+    # The head of the config: everything before the lease block.
     cat > "$path" <<EOF
 vol_root: "${VOL_ROOT}"
 mode: ""
@@ -654,16 +665,26 @@ stream:
   tls_cert: "${CERT_DIR}/gateway.crt"
   tls_key: "${CERT_DIR}/gateway.key"
   tls_ca: "${CERT_DIR}/ca.crt"
-
-lease:
-  sticky_ms: ${LEASE_MS}
-  max_sticky_sec: ${MAX_LEASE_SEC}
+EOF
+    # The lease block, generated line by line: lease.sticky_ms is written ONLY
+    # when the suite set LEASE_MS. An empty value would decode as 0 (refused at
+    # startup); omitting the key is how a suite runs on the gateway's built-in
+    # default (the harness sets none; LoadFromFile decodes over Defaults()).
+    {
+        echo ""
+        echo "lease:"
+        if [[ -n "$LEASE_MS" ]]; then
+            echo "  sticky_ms: ${LEASE_MS}"
+        fi
+        echo "  max_sticky_sec: ${MAX_LEASE_SEC}"
+        cat <<EOF
 
 exec:
   default_timeout_sec: 30
   max_timeout_sec: 180
 
 EOF
+    } >> "$path"
     tc_log_pass "Gateway config written to $path"
 }
 
@@ -840,13 +861,18 @@ tc_start_gateway() {
             "${extra_flags[@]}" \
             > "$LOG_DIR/gateway.log" 2>&1 &
     else
-        # Legacy CLI-flag mode
+        # Legacy CLI-flag mode. -sticky-ms is passed ONLY when the suite set
+        # LEASE_MS; otherwise the gateway runs its built-in default.
+        local lease_flags=()
+        if [[ -n "$LEASE_MS" ]]; then
+            lease_flags=(-sticky-ms "$LEASE_MS")
+        fi
         ss_service_exec sandserv -- "$gateway_bin" \
             -agent-addr "$GATEWAY_ADDR" \
             -human-addr "$HUMAN_ADDR" \
             -stream-addr "$STREAM_ADDR" \
             -vol-root "$VOL_ROOT" \
-            -sticky-ms "$LEASE_MS" \
+            ${lease_flags[@]+"${lease_flags[@]}"} \
             -max-sticky-sec "$MAX_LEASE_SEC" \
             -identity-store "$id_store" \
             -stream-tls-cert "$CERT_DIR/gateway.crt" \

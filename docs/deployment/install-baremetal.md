@@ -636,7 +636,7 @@ stream:
   tls_key: /etc/sandswap/certs/stream.key
   tls_ca: /etc/sandswap/certs/ca.crt
 
-lease: { sticky_ms: 100, max_sticky_sec: 5 }
+lease: { sticky_ms: 3, max_sticky_sec: 5 }
 exec: { default_timeout_sec: 30, max_timeout_sec: 180 }
 ```
 

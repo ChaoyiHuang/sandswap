@@ -662,7 +662,7 @@ YAML
     cat >> "$output" << YAML
 
 lease:
-  sticky_ms: 100
+  sticky_ms: 3
   max_sticky_sec: 5
 
 exec:
