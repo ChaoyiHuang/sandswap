@@ -35,6 +35,9 @@
 #ifndef SYS_mount_setattr
 #define SYS_mount_setattr 442
 #endif
+/* Older distro headers may omit these names. Match Linux's x86_64
+ * arch/x86/entry/syscalls/syscall_64.tbl and warden/src/seccomp.rs:
+ * 457/458 are statmount/listmount; 454/455 are futex_wake/futex_wait. */
 #ifndef SYS_statmount
 #define SYS_statmount 457
 #endif

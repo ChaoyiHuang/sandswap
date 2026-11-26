@@ -25,7 +25,7 @@ filesystem identifiers are intentionally excluded from this submission.
 | Connection | Mac → loopback SSH forward → Linux HTTPS gateway `/mcp` |
 | Authentication | Explicit deployment CA; certificate and hostname verification enabled; both agent authentication headers |
 | Host | Dedicated Linux test environment; 2 × Xeon Gold 6248R, 48 cores / 96 threads, approximately 376 GiB RAM; kernel `6.8.0-149-generic` |
-| Sandbox | Single-node systemd deployment, `medium:3` pool, flat `ubuntu:24.04` SandFS, 2 vCPUs / 512 MiB |
+| Sandbox | Single-node systemd deployment, `medium:3` pool, flat `ubuntu:24.04` SandFS requesting a minimum of 2 vCPUs / 512 MiB |
 
 Claude Code remained on the Mac. The validator used isolated configuration,
 `--tools ''`, `--allowedTools mcp__sandswap`, `--permission-mode dontAsk`, and
@@ -93,6 +93,14 @@ Both targeted commands exited 0. The original full-round failures remain in
 the totals above. Combining those results with successful targeted reruns
 does **not** constitute another complete 69-row run.
 
+The syscall constants are ABI identifiers, not tuning values. Linux's
+[x86_64 syscall table](https://github.com/torvalds/linux/blob/v6.8/arch/x86/entry/syscalls/syscall_64.tbl)
+assigns 457/458 to `statmount/listmount` and 454/455 to `futex_wake/futex_wait`.
+The fallback applies only when the build headers omit the `SYS_*` definitions.
+The warden already denied 457/458; the incorrect probe invoked futex operations
+and returned `EINVAL` instead of testing the intended `EPERM` denial.
+`mount_setattr=442` and `pidfd_open=434` are unchanged.
+
 The deploy gate passed under the runner's classification rules. The one
 `BLOCKED-PRODUCT` was the standalone boxout host-setup script correctly refusing
 to change an existing bare-metal service identity to its reserved UID. Actual
@@ -104,6 +112,9 @@ deployment or parameter combination.
 
 The same round's native HTTP microbenchmarks used same-host transport and
 BusyBox microcommands, unlike the Mac/Ubuntu coding loop:
+
+Here, **cold mount/execute reuses an already booted VM**. It includes binding
+another SandFS and running the command, not booting a new guest kernel.
 
 | Measurement | Samples | Client P50 | Client P95 | Gateway P95 |
 |---|---:|---:|---:|---:|
@@ -123,6 +134,67 @@ dual-agent, bare-metal, and embedded verifiers did not. Their PASS verdicts do
 not prove model-driven background execution in every mode. Independent HTTP
 background-lifecycle assertions and the deterministic 12-tool MCP suite passed
 separately. The new Claude validator requires actual tool-use evidence.
+
+## Additional startup measurements
+
+The earlier full round measured command latency and load, but did not collect
+a VM-startup distribution. A separate supplement on **2026-11-26** used the
+same Linux host and unchanged `6126eb8` source/build. Each of the four cases
+below ran one excluded warmup followed by **30 successful measured samples**;
+there were no failed samples or retries. P50 is the median and P95 is the
+nearest-rank percentile. These small-sample figures are observations, not an SLA.
+
+### New VM: create request to verified warden readiness
+
+A temporary Go driver timed the existing
+[`Handler.CreateVerifiedVM`](../../sandlot/core/commands.go) call with a
+monotonic clock. Each sample created a fresh sandvmm process and guest kernel,
+then destroyed it and confirmed process death before the next sample. The
+timer includes allocation/admission, VMM setup, state persistence, kernel and
+warden startup, and the authenticated, protocol-checked vsock readiness probe.
+It excludes compiling/downloading artifacts, starting a gateway, and teardown.
+
+| Fresh VM specification | Samples | P50 | P95 | Min–max |
+|---|---:|---:|---:|---:|
+| 1 vCPU / 256 MiB | 30 | 153.599 ms | 173.676 ms | 152.767–174.286 ms |
+| 2 vCPUs / 512 MiB | 30 | 155.451 ms | 156.721 ms | 133.858–157.681 ms |
+
+This measures the VM creation path, not whole-service startup or a pure kernel
+boot timestamp. Guests were offline (`network.NewNoop`), so TAP/NAT provisioning
+is excluded. VMM seccomp, VMM API authentication, and the live vsock guard
+remained enabled; `init_on_free=false` was the deployment default. Host page
+cache was not dropped, and no manual CPU/NUMA pinning was applied. The P95
+difference between these two small samples does not establish a resource-size
+performance trend.
+
+### New SandFS: creation to first successful command with a ready pool
+
+The second measurement used the standard gateway and sandlot binaries with
+three ready `medium` VMs (**4 vCPUs / 1024 MiB each**). Each sample created a new
+agent outside the timed interval, then timed `POST /human/sandfs` followed
+immediately by its first `POST /agent/execute` running `printf ready`.
+The command had to return exit code 0 and exactly `ready`. SandFS/agent deletion
+and a 200 ms inter-sample pause were outside the timer. SandFS requests specified
+minimum resources of 2 vCPUs / 512 MiB; those are not the pool VM sizes.
+
+| Local flat template | Samples | SandFS create P50 / P95 | First execute P50 / P95 | Create → first result P50 / P95 |
+|---|---:|---:|---:|---:|
+| BusyBox, approximately 2.2 MiB | 30 | 5.601 / 6.112 ms | 1.875 / 2.964 ms | **7.614 / 8.397 ms** |
+| Ubuntu 24.04, approximately 224 MiB | 30 | 551.853 / 566.656 ms | 5.108 / 5.863 ms | **556.918 / 571.432 ms** |
+
+All times in this table are client wall times over persistent same-host
+loopback HTTP connections; the gateway–sandlot stream used mTLS. The combined
+column is measured per sample, not the sum of independently computed
+percentiles. It includes flat-template materialization and the first guest
+process, but excludes image download/import, agent registration, fresh-VM boot,
+remote SSH/TLS latency, and model inference. Templates and host caches were
+already available. Ubuntu is the SandFS userspace, not a separate Ubuntu
+systemd boot. Its approximately 0.55 s creation phase dominates the result;
+this should not be confused with the approximately 2 ms reuse-path cold mount.
+
+Only this aggregate summary is published. The temporary driver, raw samples,
+and service logs remain local/private. Test VMs, temporary deployment and
+credentials were removed, and previously active services were restored.
 
 ## Other fixes and preparation findings
 
