@@ -332,22 +332,22 @@ git clone <repo-url>                         # clone this repository
 cd sandswap
 bash build/install-deps.sh                   # one-shot dependency installer (apt + dnf/yum)
 bash build/build.sh all                      # freshness-gated build
-BENCH_VERBOSE=1 sudo bash e2e/latency-benchmark-aiagent.sh http single
-BENCH_VERBOSE=1 sudo bash e2e/latency-benchmark-aiagent.sh http distributed
+sudo env BENCH_VERBOSE=1 bash e2e/latency-benchmark-aiagent.sh http single
+sudo env BENCH_VERBOSE=1 bash e2e/latency-benchmark-aiagent.sh http distributed
 # mcp mode (also times the LLM round trip — needs DEEPSEEK_API_KEY /
 # OPENAI_API_KEY / GOOGLE_API_KEY):
-DEEPSEEK_API_KEY=sk-... sudo bash e2e/latency-benchmark-aiagent.sh mcp single
-DEEPSEEK_API_KEY=sk-... sudo bash e2e/latency-benchmark-aiagent.sh mcp distributed
+sudo env DEEPSEEK_API_KEY=sk-... bash e2e/latency-benchmark-aiagent.sh mcp single
+sudo env DEEPSEEK_API_KEY=sk-... bash e2e/latency-benchmark-aiagent.sh mcp distributed
 sudo bash e2e/latency-benchmark-unmount.sh all
 # single scenario instead of all: baseline | cache16m | dirty16m
 sudo bash e2e/latency-benchmark-unmount.sh cache16m
 # cache-size curve: workload file size in MB (default 16)
-FILE_MB=128 sudo bash e2e/latency-benchmark-unmount.sh cache16m
+sudo env FILE_MB=128 bash e2e/latency-benchmark-unmount.sh cache16m
 # per-sample detail (kept in baremetal-raw/ for this run):
-BENCH_VERBOSE=1 sudo bash e2e/latency-benchmark-aiagent.sh http single
+sudo env BENCH_VERBOSE=1 bash e2e/latency-benchmark-aiagent.sh http single
 # warden-side per-op timing lines live at debug level (guest console cost —
 # they tax the measured path at info):
-SANDLOT_EXTRA_FLAGS="-warden-log debug" sudo bash e2e/latency-benchmark-aiagent.sh http single
+sudo env SANDLOT_EXTRA_FLAGS="-warden-log debug" bash e2e/latency-benchmark-aiagent.sh http single
 ```
 
 Every script is self-cleaning and asserts its own quality gate (≥90% of

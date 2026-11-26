@@ -17,7 +17,7 @@ out of the box.
 This example has two points. The first is the wiring: a Claude Code →
 Sandswap integration is **one `.mcp.json` file**. The second is efficiency:
 what a tool call costs and how to make an agent's loop fast — measured on
-this exact setup, at the end of [Step 8](#step-8--run-the-task).
+this exact setup, in [Step 9](#step-9--see-where-the-time-went).
 
 ```text
  Claude Code (your machine)                Sandswap (one node)
@@ -50,28 +50,50 @@ window — three separate programs, none nested:
 |---|---|---|
 | **Terminal A** | a normal system terminal | `sandctl`, `seed.sh`, and *launching* `claude` in step 7 |
 | **Claude Code** | the interactive UI terminal A launches in step 7 | step 8 only: give the task, watch the tool calls |
-| **Terminal B** | a second normal terminal | step 8, verifying from outside while Claude Code stays open |
+| **Terminal B** | a second normal terminal | step 8, verifying from outside while Claude Code stays open; step 9, if you run the analyzer from here |
 
 > **Do not run any command below inside an existing Claude Code session —
 > and above all not `claude`.** That is Claude Code inside Claude Code; it
 > hangs. Copy every command into your own terminal instead.
 
-All commands run from the **Sandswap root** — which one depends on how you
-got Sandswap:
+**Get Sandswap — two ways.** Every command below runs from the **Sandswap
+root** and uses the artifacts under `output/`; pick one way, the steps are
+the same from either:
 
-| You have | Root | Build step |
+| Way | Sandswap root | Build |
 |---|---|---|
-| a source checkout | the repository root | step "build" below, when source changed |
-| a release package (`sandswap-<ver>-linux-amd64.tar.gz`) unpacked at `/opt/sandswap` | `/opt/sandswap` | none — everything is prebuilt, `build/` is not shipped |
+| **A. Release package** — everything prebuilt, no toolchain | the extracted `sandswap-<ver>-linux-amd64/` | none (`build/` is not shipped) |
+| **B. Source checkout** — you build it | the repository root | `build.sh all` |
+
+**A. Release package** — download, verify, extract, as in the repository
+README's [quick start](../../README.md#quick-start):
 
 ```bash
-cd /opt/sandswap        # release package; or: cd <your checkout>
+# resolve the latest release tag (or pin one, e.g. VER=v0.1.0)
+VER=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+    https://github.com/ChaoyiHuang/sandswap/releases/latest | awk -F/ '{print $NF}')
+echo "latest release: ${VER}"
+
+# download + verify + extract
+curl -fLO "https://github.com/ChaoyiHuang/sandswap/releases/download/${VER}/sandswap-${VER}-linux-amd64.tar.gz"
+curl -fLO "https://github.com/ChaoyiHuang/sandswap/releases/download/${VER}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+tar xzf "sandswap-${VER}-linux-amd64.tar.gz" && cd "sandswap-${VER}-linux-amd64"
 ```
 
-**Prerequisites.** A KVM host with the artifacts under `output/` (a
-release package has them; a checkout builds them); the `claude` CLI
-installed and logged in (`claude --version`). Source checkout only — if the
-source changed since the last build:
+**B. Source checkout** — clone, install the toolchain, build:
+
+```bash
+git clone https://github.com/ChaoyiHuang/sandswap.git
+cd sandswap
+sudo bash build/install-deps.sh    # one-time toolchain
+sudo bash build/build.sh all       # kernel → warden → initramfs → vmm → go (+ rootfs chroot)
+```
+
+**Prerequisites.** A KVM host (`/dev/kvm`, `/dev/vhost-vsock`); the
+`claude` CLI installed and logged in (`claude --version`). Build
+prerequisites for B: [Building](../../docs/building/index.md). Source
+checkout only — if the source changed since the last build:
 
 ```bash
 bash build/build.sh check            # all [FRESH] → nothing to do
@@ -209,7 +231,7 @@ output/sandctl api execute --agent "$CLAUDE_CODE_AGENT_ID" --sandfs "$CLAUDE_COD
 The second call is several times cheaper, on the identical Sandswap path.
 That difference is **process startup inside the guest** (the interpreters
 and tools the first call starts), not Sandswap — and it is the whole story
-of making an agent fast here (Step 8).
+of making an agent fast here (Step 9).
 
 ## Step 6 — Seed the demo task
 
@@ -263,7 +285,7 @@ read `calc/core.py` with `file_read`, fix it with `file_write`, and re-run
 the suite + commit with **one** more `execute` — all through the MCP tools,
 with your local shell and editor denied the whole time. `TASK.md` asks for
 that shape on purpose: it is the efficient one, and the point of the
-example (the analyzer at the end of this step shows what it saves).
+example (the analyzer in the next step shows what it saves).
 
 Verify from the outside when it finishes (another terminal; Claude Code
 stays open):
@@ -276,7 +298,7 @@ output/sandctl api execute --agent <agent id> --sandfs <sandfs id> \
 Expected: `OK`, and two commits — `fix calc` on top of `add failing calc
 suite`.
 
-### See where the time went
+## Step 9 — See where the time went
 
 Claude Code records every session under `~/.claude/projects/`: each LLM
 call's thinking time, every tool call and its result, all timestamped. The
@@ -293,7 +315,16 @@ It picks the newest transcript for this directory whose first prompt is the
 pass a `.jsonl` path to choose one) and prints the turn as the loop it is:
 every round's **thinking, what it said, how long it thought, then the tool
 it called and how long that took — each `execute` split into its measured
-layers**. A real interactive run:
+layers**.
+
+The exec floor (the first line) is measured live on the run's sandbox, so
+the shell you run the analyzer in needs the three exports of steps 3–4 —
+from another terminal, export them again, or `source
+examples/claude-code/.env.sh` when `setup.sh` wrote it for this run.
+Without them the line reads `NOT MEASURED` with the reason, and Table 3
+charges the whole exec layer to the command.
+
+A real interactive run:
 
 **Table 1 — the loop, in time order.** Each LLM call, then the tools it
 called, with every `execute`'s command spelled out one `&&`-step per line.
@@ -428,7 +459,7 @@ separate `python3 -c` probes ≈ 10×, the same three probes in one `python3`
 with a model in the loop, one fewer thinking→tool round-trip (see the
 analyzer above).
 
-## Step 9 — Clean up
+## Step 10 — Clean up
 
 ```bash
 output/sandctl api sandfs delete "$CLAUDE_CODE_SANDFS_ID"
@@ -481,13 +512,14 @@ cd examples/claude-code && claude "Complete the task in TASK.md using only the s
 | `/mcp` shows `sandswap` **failed** | `CLAUDE_CODE_SANDBOX_API_KEY` not exported in the shell that launched `claude`; or, on a TLS deploy, `NODE_EXTRA_CA_CERTS` unset (Node refuses the deployer's CA); or the URL scheme does not match the deployment (see Variants). |
 | Claude asks to approve the MCP server | launched from a directory other than `examples/claude-code` (settings not loaded) — `cd` there first. |
 | `Ignoring permissions… this workspace has not been trusted` | accept the trust dialog on the first interactive launch; project settings (including the MCP auto-approval) are ignored in an untrusted workspace. |
-| `execute` returns `unknown sandbox` / 404 | wrong `sandfs_id` — the tool schema's `sandfs_id` enum lists the agent's SandFS instances; `list_sandfs` is the source of truth. |
+| `execute` returns `404 sandfs not found` | wrong `sandfs_id` — the tool schema's `sandfs_id` enum lists the agent's SandFS instances; `list_sandfs` is the source of truth. |
 | `sandctl api execute` prints `HTTP 503`, or Claude's `execute` returns `SANDBOX_CLEANING` / `NO_AVAILABLE_SANDBOX` with `retryable: true` | the sandbox is mid-recycle (its previous unmount is still finishing, or the pool is handing over a VM) — a transient of a few ms, not a failure. Run the command again; Claude Code retries on `retryable: true` per the tool contract (the scripts' `sx_exec` already does). |
 | After a host reboot the pool shows 0 nodes / sandlot will not start | vsockguard is a BPF program and does not survive a reboot; the sandlot's attest step refuses to start (fail-closed). Re-run step 1 (the deployer re-attaches it), or by hand: `sudo bash security/vsockguard-attach.sh && sudo systemctl reset-failed sandswap-sandlot && sudo systemctl restart sandswap-sandlot`. |
 | `HTTP 401 invalid api key` from `sandctl --agent …`, yet the key is right | a `SANDSWAP_API_KEY` left in the shell by something else — sandctl prefers that env var over `--agent` for every call. `unset SANDSWAP_API_KEY` (this example never sets it; it uses `CLAUDE_CODE_SANDBOX_API_KEY`). |
 | the key is gone | it is shown once at creation; `cat run/agents.json` has the copy `sandctl` cached (pick the entry by `agent_id` — old agents accumulate there across reinstalls). Otherwise delete the agent and create a new one. |
 | `ubuntu:24.04` missing from `template list` | deployed with `--skip-build` before `output/rootfs-ubuntu` existed — `sudo bash build/build.sh ubuntu-rootfs` and redeploy, or register by hand ([Building Templates](../../docs/building/templates.md)). |
 | `git: ... dubious ownership` or commit refused | the sandbox runs as root and owns `/workspace`; the task passes `-c user.email/-c user.name` on commit. Add a global identity with `execute` if you prefer. |
+| `analyze_session.py` prints `exec floor: NOT MEASURED (…)` | the three exports are missing from this shell (`export` is per-terminal — export them again, or `source examples/claude-code/.env.sh` when `setup.sh` wrote it for this run) or no longer valid — the parentheses say which: `HTTP 401` once the run's agent was deleted, `HTTP 404` its sandbox. The tables are still printed; only Table 3's floor/command split is lost, the whole exec layer landing under `command`. |
 
 ## License
 

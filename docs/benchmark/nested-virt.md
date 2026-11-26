@@ -268,16 +268,16 @@ maxima (18.9 ms http single, 26.0 ms mcp single vs P95 7.9/8.3 ms).
 
 ```bash
 # HTTP latency (http mode, single-node and distributed)
-WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
-  sudo bash e2e/latency-benchmark-aiagent.sh http single
-WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
-  sudo bash e2e/latency-benchmark-aiagent.sh http distributed
+sudo env WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
+  bash e2e/latency-benchmark-aiagent.sh http single
+sudo env WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
+  bash e2e/latency-benchmark-aiagent.sh http distributed
 
 # MCP latency (needs an LLM API key)
-DEEPSEEK_API_KEY=sk-... WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
-  sudo bash e2e/latency-benchmark-aiagent.sh mcp single
-DEEPSEEK_API_KEY=sk-... WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
-  sudo bash e2e/latency-benchmark-aiagent.sh mcp distributed
+sudo env DEEPSEEK_API_KEY=sk-... WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
+  bash e2e/latency-benchmark-aiagent.sh mcp single
+sudo env DEEPSEEK_API_KEY=sk-... WARM_N=100 COLD_N=50 BENCH_VERBOSE=1 \
+  bash e2e/latency-benchmark-aiagent.sh mcp distributed
 
 # Unmount full-path latency
 sudo bash e2e/latency-benchmark-unmount.sh all

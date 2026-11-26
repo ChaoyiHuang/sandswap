@@ -168,7 +168,8 @@ func (g Global) getJSON(baseURL, path, bearer string, headers map[string]string)
 // truncated} envelope) and prints the items as one JSON array. Without
 // followAll it prints a single page (server default limit) and notes the
 // continuation cursor on stderr when truncated; with followAll it chases
-// cursors up to a 10k-page safety bound.
+// cursors up to a 10k-page safety bound. Under --dry-run it prints the first
+// page's request and returns: nothing is sent, so there is no page to decode.
 func (g Global) getPagedJSON(baseURL, path string, limit int, followAll bool, headers map[string]string) {
 	var merged []json.RawMessage
 	cursor := ""
@@ -188,6 +189,9 @@ func (g Global) getPagedJSON(baseURL, path string, limit int, followAll bool, he
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
+		}
+		if g.DryRun {
+			return // request() printed the request and sent nothing: no page to decode
 		}
 		if status >= 400 {
 			g.printResp(data, status)
