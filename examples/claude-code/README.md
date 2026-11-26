@@ -270,11 +270,71 @@ stays open):
 
 ```bash
 output/sandctl api execute --agent <agent id> --sandfs <sandfs id> \
-    --language shell --code 'cd /workspace && python3 -m unittest discover -s tests 2>&1 | tail -1 && git log --oneline'
+    --language shell --code 'cd /workspace && python3 -m unittest discover -s tests && git log --oneline'
 ```
 
 Expected: `OK`, and two commits — `fix calc` on top of `add failing calc
 suite`.
+
+### Repeatable headless validation (including a Mac client)
+
+`validate.py` runs the same task with the installed **Claude Code CLI** and a
+real model. Run `setup.sh` on the Linux SandSwap host first. Before each repeat,
+run `seed.sh` there: it resets the example's disposable `/workspace`.
+
+The CLI can stay on your Mac. Forward the Linux gateway through SSH, copy its
+CA certificate and the example's `.env.sh` into a private local directory, then
+source that environment. For example, from this directory on the Mac (replace
+`HOST`, `SSH_PORT`, and `REMOTE_REPO` with your deployment):
+
+```bash
+mkdir -p .work/connection
+chmod 700 .work/connection
+scp -P "$SSH_PORT" "root@$HOST:/etc/sandswap/certs/ca.crt" .work/connection/
+scp -P "$SSH_PORT" "root@$HOST:$REMOTE_REPO/examples/claude-code/.env.sh" .work/connection/
+chmod 600 .work/connection/.env.sh
+source .work/connection/.env.sh
+export CLAUDE_CODE_SANDBOX_MCP_URL=https://localhost:34443/mcp
+export NODE_EXTRA_CA_CERTS="$PWD/.work/connection/ca.crt"
+ssh -N -o ExitOnForwardFailure=yes -p "$SSH_PORT" \
+    -L 127.0.0.1:34443:127.0.0.1:3000 "root@$HOST"
+```
+
+Keep the tunnel open in that terminal. In another terminal, source the same
+environment and export the same MCP URL and CA path. Supply model credentials
+through `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`. For GLM, use the
+[official Claude-compatible endpoint](https://docs.bigmodel.cn/cn/coding-plan/tool/claude)
+and a key authorized for it:
+
+```bash
+export ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
+export ANTHROPIC_MODEL=glm-5.3-flash
+python3 validate.py --output-dir .work/validation-1
+```
+
+The validator creates an isolated Claude configuration, loads only this
+example's MCP configuration, disables built-in tools with `--tools ''`, and
+allows only `mcp__sandswap` in `dontAsk` mode. Personal settings are not loaded;
+no permission bypass is required. It supplies `TASK.md` as the prompt, so the
+model does not need local `Read`. See the official
+[headless](https://code.claude.com/docs/en/headless) and
+[CLI](https://code.claude.com/docs/en/cli-reference) documentation.
+
+PASS requires a connected MCP server, actual discovery/execute/read/write
+calls, matching tool results, no local tool calls or permission denials, and a
+successful CLI result. Independent MCP checks also require the initial 3/5
+failures to become 5/5 passes, an unchanged test file, the requested `fix calc`
+commit, and additional arithmetic/Fibonacci checks outside the seeded suite.
+
+Each output directory is new and private. It contains raw CLI stream output,
+the isolated session transcript, before/after checks, invocation metadata and
+`summary.json`. A nonzero exit is a failed validation. Review and redact logs
+before publishing them; model credentials and sandbox keys must never be
+committed. To check the validator's rejection paths without a model:
+
+```bash
+python3 -m unittest discover -s . -p 'test_validate.py' -v
+```
 
 ### See where the time went
 
