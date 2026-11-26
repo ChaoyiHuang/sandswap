@@ -37,6 +37,8 @@ import re
 import ssl
 import sys
 from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -47,7 +49,7 @@ TASK_MARKER = "TASK.md"   # the task prompt names this file; only such sessions 
 def first_user_text(path: str):
     """The first user-typed text of a transcript, or '' if there is none."""
     try:
-        for line in open(path):
+        for line in Path(path).read_text().splitlines():
             if not line.strip():
                 continue
             r = json.loads(line)
@@ -74,7 +76,8 @@ def newest_task_session(cwd: str) -> str:
     task, newest first.
     """
     key = cwd.replace("/", "-").replace(".", "-")
-    proj = os.path.expanduser("~/.claude/projects/" + key)
+    config = os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude"))
+    proj = os.path.join(config, "projects", key)
     if not os.path.isdir(proj):
         sys.exit(f"no Claude Code sessions recorded for {cwd} (looked in {proj})")
     sessions = [os.path.join(proj, f) for f in os.listdir(proj) if f.endswith(".jsonl")]
@@ -104,29 +107,38 @@ def measure_exec_floor() -> float:
     key = os.environ.get("CLAUDE_CODE_SANDBOX_API_KEY", "")
     if not (agent and sandfs and key):
         return 0.0
-    ctx = ssl.create_default_context(cafile="/etc/sandswap/certs/ca.crt")
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    url = urlsplit(os.environ.get("CLAUDE_CODE_SANDBOX_MCP_URL", "https://localhost:3000/mcp"))
+    if url.scheme not in ("http", "https") or not url.hostname:
+        return 0.0
     hdr = {"Authorization": f"Bearer {key}", "X-Sandswap-Api-Key": key,
            "Content-Type": "application/json"}
     try:
-        c = http.client.HTTPSConnection("localhost", 3000, context=ctx)
+        if url.scheme == "https":
+            ca = os.environ.get("NODE_EXTRA_CA_CERTS")
+            if not ca and os.path.isfile("/etc/sandswap/certs/ca.crt"):
+                ca = "/etc/sandswap/certs/ca.crt"
+            ctx = ssl.create_default_context(cafile=ca)
+            c = http.client.HTTPSConnection(url.hostname, url.port, context=ctx, timeout=10)
+        else:
+            c = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
         c.connect()
     except OSError:
         return 0.0
     xs = []
     for _ in range(30):
         try:
-            c.request("POST", "/agent/execute", headers=hdr,
+            path = url.path.removesuffix("/mcp").rstrip("/") + "/agent/execute"
+            c.request("POST", path, headers=hdr,
                       body=json.dumps({"sandfs_id": sandfs, "language": "shell", "code": ":"}))
             d = json.loads(c.getresponse().read())
-        except OSError:
+        except (OSError, ValueError, http.client.HTTPException):
             break
         if "exec_duration_ns" in d:
             xs.append(d["exec_duration_ns"] / 1e6)
         elif d.get("retryable"):
             import time
             time.sleep(d.get("retry_after_ms", 2000) / 1000)
+    c.close()
     return statistics.median(xs) if xs else 0.0
 
 
@@ -146,7 +158,7 @@ def main():
         path = sys.argv[1]
     else:
         path = newest_task_session(HERE)
-    rows = [json.loads(l) for l in open(path) if l.strip()]
+    rows = [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
     conv = [r for r in rows if r.get("type") in ("user", "assistant") and "timestamp" in r]
     if not conv:
         sys.exit("transcript has no conversational rows")
@@ -168,7 +180,7 @@ def main():
         content = r["message"].get("content")
         blocks = content if isinstance(content, list) else [{"type": "text", "text": content}]
         if r["type"] == "assistant":
-            ref = r.get("requestRef") or r["uuid"]
+            ref = r.get("requestRef") or r["message"].get("id") or r["uuid"]
             t = by_ref.get(ref)
             if t is None:
                 t = {"think_ms": 0, "t_start": ts(r), "t_end": ts(r), "text": "", "tools": [],
@@ -199,6 +211,8 @@ def main():
                     if isinstance(out, list):
                         out = " ".join(x.get("text", "") for x in out if isinstance(x, dict))
                     own = tool_owner.get(b.get("tool_use_id"))
+                    if own is None:
+                        continue
                     if own:
                         ti, pi = own
                         tool = turns[ti]["tools"][pi]
@@ -211,7 +225,7 @@ def main():
                     # result; keep them so a tool row can show every dimension
                     gw = {}
                     for k in ("exec_duration_ns", "sandlot_duration_ns", "gateway_duration_ns"):
-                        m = re.search(r'"%s":(\d+)' % k, out or "")
+                        m = re.search(r'"%s":\s*(\d+)' % k, out or "")
                         if m:
                             gw[k] = int(m.group(1)) / 1e6
                     tool["gw"] = gw
@@ -243,14 +257,16 @@ def main():
     #   Table 2  the LLM's time, split into its phases
     #   Table 3  tool execution, split into measured layers
     think_total = sum(t["think_ms"] for t in turns)
-    first_t0 = turns[0]["t_start"]
+    if not turns:
+        sys.exit("transcript has no assistant turns for this task")
+    first_t0 = prompt_at or turns[0]["t_start"]
     last = turns[-1]
     last_end = last.get("t_last_result", last["t_end"]) if last["tools"] else last["t_end"]
     span = (last_end - first_t0).total_seconds()
     wait_total = emit_total = 0.0
     llm_rows = []                  # (call, wait_s, emit_s, think_ms, tools)
     tool_rows = []                 # dicts: call, name, arg, ms, gw{}, err
-    prev_end = None
+    prev_end = prompt_at
     for i, t in enumerate(turns, 1):
         wait = (t["t_start"] - prev_end).total_seconds() if prev_end else None
         emit = (t["t_end"] - t["t_start"]).total_seconds()
@@ -267,18 +283,26 @@ def main():
                               "gw": tool.get("gw") or {}, "err": tool["err"]})
         prev_end = t.get("t_last_result", t["t_end"]) if t["tools"] else t["t_end"]
     tool_total = sum(r["ms"] for r in tool_rows)
+    # Parallel tools overlap. Their summed durations are useful per-call data,
+    # but the wall-time decomposition counts each round's result window once.
+    tool_wall = sum(max(0.0, (t.get("t_last_result", t["t_end"]) - t["t_end"]).total_seconds())
+                    for t in turns)
     n_tools = len(tool_rows)
     n_sw = sum(1 for r in tool_rows if r["sandswap"])
     floor = EXEC_FLOOR_MS or 0.0
     swap_own_total = command_total = 0.0
+    measured_execs = 0
     for r in tool_rows:
         if "gateway_duration_ns" in r["gw"]:
+            measured_execs += 1
             g = r["gw"]
             r["own"] = (g["gateway_duration_ns"] - g["sandlot_duration_ns"]) \
                 + (g["sandlot_duration_ns"] - g["exec_duration_ns"]) + min(floor, g["exec_duration_ns"])
             r["command"] = g["exec_duration_ns"] - min(floor, g["exec_duration_ns"])
         else:
-            r["own"], r["command"] = (r["ms"], 0.0) if r["sandswap"] else (0.0, 0.0)
+            # File/list tools do not report server layers. Their client-side
+            # duration includes transport and cannot be attributed to the server.
+            r["own"], r["command"] = 0.0, 0.0
         swap_own_total += r["own"]
         command_total += r["command"]
     sw_calls_total = sum(r["ms"] for r in tool_rows if r["sandswap"])
@@ -325,7 +349,8 @@ def main():
                 print(f"{'':>4}  {'':<5} {name} {arg[:38]:<38} {timecol}")
     rule()
     print(f"{'':>4}  {'LLM (all calls)':<52} {wait_total + emit_total:>8.2f} s")
-    print(f"{'':>4}  {'tools (all calls)':<52} {tool_total/1000:>8.2f} s")
+    print(f"{'':>4}  {'tools (wall time; parallel calls counted once)':<52} {tool_wall:>8.2f} s")
+    print(f"{'':>4}  {'tools (sum of individual durations)':<52} {tool_total/1000:>8.2f} s")
     print(f"{'':>4}  {'turn total':<52} {span:>8.2f} s")
 
     # ── Table 2: the LLM's time ───────────────────────────────────────────
@@ -338,14 +363,14 @@ def main():
     rule()
     print(f"{'':>4}  {wait_total:>17.2f} s {emit_total:>14.2f} s {think_total/1000:>17.2f} s")
     print()
-    print(f"  before first token  (prompt → first block: queueing + thinking)   {wait_total:>7.2f} s  {wait_total/span*100:5.1f}%")
+    print(f"  before first token  (includes the initial prompt wait)           {wait_total:>7.2f} s  {wait_total/span*100:5.1f}%")
     print(f"  emitting blocks     (thinking + text + tool_use reach the client) {emit_total:>7.2f} s  {emit_total/span*100:5.1f}%")
-    print(f"  tools               (Table 3)                                     {tool_total/1000:>7.2f} s  {tool_total/1000/span*100:5.1f}%")
+    print(f"  tools               (wall time, including parallel calls once)   {tool_wall:>7.2f} s  {tool_wall/span*100:5.1f}%")
     print(f"  {'sum':<70} {span:>7.2f} s  100.0%")
 
     # ── Table 3: tool execution ───────────────────────────────────────────
     head("Table 3  tool execution, by layer")
-    print(f"{'call':>4}  {'tool':<12} {'client':>9} {'http/tls':>9} {'gateway':>9} {'dispatch':>9} {'exec floor':>11} {'command':>9}")
+    print(f"{'call':>4}  {'tool':<12} {'client':>9} {'residual':>9} {'gateway':>9} {'dispatch':>9} {'exec floor':>11} {'command':>9}")
     rule()
     for r in tool_rows:
         if "gateway_duration_ns" in r["gw"]:
@@ -360,10 +385,15 @@ def main():
         else:
             print(f"{r['call']:>4}  {r['name']:<12} {r['ms']:>7.1f}ms  (local tool, not Sandswap)")
     rule()
-    print(f"  Sandswap calls ({n_sw}): {sw_calls_total/1000:.2f} s   of which Sandswap itself {swap_own_total/1000:.2f} s "
-          f"({swap_own_total/n_sw:.1f} ms per call), the commands {command_total/1000:.2f} s" if n_sw else "")
+    print(f"  Sandswap calls ({n_sw}): {sw_calls_total/1000:.2f} s (sum of client intervals)" if n_sw else "")
+    if measured_execs:
+        print(f"  Measured executes ({measured_execs}): estimated server overhead {swap_own_total/1000:.2f} s "
+              f"({swap_own_total/measured_execs:.1f} ms per execute), commands {command_total/1000:.2f} s")
+        print("  This estimate excludes file/list server overhead (not separately reported) and client residual.")
     if n_tools - n_sw:
         print(f"  non-Sandswap tools ({n_tools - n_sw}): {non_sw_total/1000:.2f} s")
+    print("  residual = client interval minus gateway time: client scheduling/serialization + transport;")
+    print("  it is not a direct HTTP/TLS measurement (an SSH tunnel also contributes when used).")
     if floor:
         print(f"  exec floor = median exec of `sh -c :` on this sandbox ({floor:.1f} ms): guest mount bookkeeping + fork/execve + shell start,")
         print(f"  charged to Sandswap; 'command' = exec − floor.")
