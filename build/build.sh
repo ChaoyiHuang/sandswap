@@ -530,15 +530,26 @@ build_rootfs_template() {
 build_ubuntu_rootfs() {
     # The Ubuntu template's package layer is a chroot install (root-only).
     # A complete existing template is kept when the build runs unprivileged;
-    # an absent/incomplete one (no python3 + git — the default package set's
-    # anchors) fails with the exact command instead of silently keeping a
-    # template without the coding toolchain.
+    # an absent/incomplete one fails with the exact command instead of
+    # silently keeping a template without the coding toolchain. The anchors
+    # follow UBUNTU_PACKAGES: with the default set they are python3 + git; a
+    # custom set without git must not fail the keep-check. (build-ubuntu-rootfs
+    # mirrors the same anchor rule when it verifies a fresh build.)
     if [[ "$(id -u)" -ne 0 ]]; then
-        if [[ -x "$ROOT/output/rootfs-ubuntu/usr/bin/python3" && -x "$ROOT/output/rootfs-ubuntu/usr/bin/git" ]]; then
+        local pkgs="${UBUNTU_PACKAGES:-python3,git}" anchor missing=""
+        if [[ ! -d "$ROOT/output/rootfs-ubuntu/bin" ]]; then
+            missing="(template directory)"
+        fi
+        for anchor in python3 git; do
+            if [[ ",$pkgs," == *",$anchor,"* ]] && [[ ! -x "$ROOT/output/rootfs-ubuntu/usr/bin/$anchor" ]]; then
+                missing="$missing $anchor"
+            fi
+        done
+        if [[ -z "$missing" ]]; then
             warn "Ubuntu rootfs template requires root to rebuild — keeping the existing complete template"
             return 0
         fi
-        err "Ubuntu rootfs template missing or incomplete (python3 + git) and requires root (chroot package install): sudo bash build/build.sh all"
+        err "Ubuntu rootfs template missing or incomplete (missing:$missing) and requires root (chroot package install): sudo bash build/build.sh all"
     fi
     log "Building Ubuntu rootfs template..."
     (cd "$ROOT/build" && bash build-ubuntu-rootfs.sh)

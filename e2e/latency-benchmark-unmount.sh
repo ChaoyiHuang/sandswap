@@ -18,7 +18,8 @@
 # benchmark drives unmounts under contrasting workloads and takes ALL
 # measurements from that existing collection — no log scraping, zero new
 # instrumentation in gateway/sandlot/warden.
-# Per iteration: exec returns → sticky lease (100ms) expires → the gateway's
+# Per iteration: exec returns → sticky lease (LEASE_MS; 1 ms by default in this
+# benchmark) expires → the gateway's
 # lease-expiry worker sends UnmountRootfs (8s ctx) → sandlot: warden unmount
 # (cgroup.kill + teardown mounts + umount + global drop_caches) + vmm set-fs
 # clear allowed_dirs → VM back to CLEAN. Iterations are serialized by polling

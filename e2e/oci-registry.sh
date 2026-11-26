@@ -52,6 +52,9 @@ IMPORT="$OUTPUT/template-tool"
 OCI_REGISTRY_DATA=""
 OCI_FAILS=0
 fail_() { OCI_FAILS=$((OCI_FAILS+1)); log_error "$1"; }
+# template-tool drives the import and the pull-side store audit below; fail
+# early with the build hint instead of at the first (unconditional) use.
+[[ -x "$IMPORT" ]] || { fail_ "missing $IMPORT (bash build/build.sh go)"; exit 1; }
 
 # ── Cleanup ──────────────────────────────────────────────────────
 cleanup() {

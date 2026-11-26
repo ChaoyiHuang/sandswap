@@ -310,6 +310,16 @@ a real userland; no restart), then runs the eino multi-agent acceptance:
 4 agents + 4 sandfs via the `/human` API, VM reuse and cross-agent
 isolation. No etcd, no Kubernetes. SKIPs loudly without a key.
 
+### 4.9 `sticky-default-window.sh` — the built-in sticky window
+
+Run `sudo bash e2e/sticky-default-window.sh` · KVM. The only warm-hit suite
+that leaves `LEASE_MS` UNSET, so the gateway runs its production default
+(3 ms), and drives the back-to-back execs in-process over one keep-alive
+HTTP connection (the other warm-hit suites pin 100 ms because a curl
+invocation costs more than 3 ms). A majority of the burst must return
+`X-Sandbox-Lease: hit`; a zero-hit run means the default no longer bridges
+back-to-back calls.
+
 ## 5. SandFS and template lifecycle
 
 ### 5.1 `template-lifecycle.sh` — template discovery without restart

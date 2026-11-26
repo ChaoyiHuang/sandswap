@@ -56,6 +56,32 @@ for fn in tc_ensure_volume_seed tc_cleanup_deployed_artifacts \
     fi
 done
 
+# ── 1b. Library namespace discipline (static) ─────────────────────────
+# e2e/common.sh is the tc_* layer over common/sh/runtime.sh (ss_*). A battery
+# script that does NOT source it (single-node-multi-agent.sh loads the
+# deploy-side deploy-lib.sh libraries instead) only sees the runtime's own
+# names, so a tc_* call there is "command not found" at runtime — which cost
+# a FAIL row. Static rule: in every non-library e2e script that does not
+# source e2e/common.sh, each tc_* token must be defined by the runtime alone.
+# Libraries (the matrix's class-F rows) are exempt: they are sourced by
+# scripts that already loaded the full layer.
+ns_libs=" $(grep -oE '"e2e/[^"]+\|F\|' "$ROOT/e2e/run-matrix.sh" | cut -d'"' -f2 | sed 's/|F|$//' | tr '\n' ' ')"
+ns_rt="$(bash -c 'source "$1/common/sh/runtime.sh" >/dev/null 2>&1; declare -F | awk "{print \$3}"' _ "$ROOT" | sort -u)"
+ns_bad=0
+for s in "$ROOT"/e2e/*.sh; do
+    rel="e2e/$(basename "$s")"
+    [[ "$ns_libs" == *" $rel "* ]] && continue
+    grep -q 'e2e/common\.sh' "$s" && continue
+    for tok in $(grep -oE '\btc_[a-z0-9_]+\b' "$s" | sort -u); do
+        grep -qx "$tok" <<<"$ns_rt" && continue
+        tc_fail "namespace: $rel calls $tok without sourcing e2e/common.sh (not defined by the deploy-side libraries)"
+        ns_bad=$((ns_bad + 1))
+    done
+done
+if (( ns_bad == 0 )); then
+    tc_pass "namespace: every tc_* call outside e2e/common.sh resolves in the runtime-only context"
+fi
+
 # ── 2. Wrappers stay wrappers (one implementation, not two) ───────────
 # The whole point of the refactor: the e2e/deploy names DELEGATE to the
 # shared ss_* implementation. A wrapper that grew its own body again is how

@@ -997,7 +997,15 @@ correlation ID, the slot itself is the correlation key). Heartbeat probes
 ride the pool's **idle** slots (one `OP_MEM_STATS` round trip per idle
 slot, each capped at 2s) and fall back to a fresh short-lived connection
 when the pool has none or every idle slot failed on the transport; the
-heartbeat yields to a parked acquirer. The
+heartbeat yields to a parked acquirer. One slot — the one the keepalive
+currently holds — can be unavailable to a racing business acquire for at
+most one `OP_MEM_STATS` round trip (sub-millisecond normally, bounded by the
+2 s heartbeat read timeout if the warden wedges); the `waiters` check makes
+the heartbeat yield before taking a slot a parked acquirer is waiting for,
+so the common case pays nothing. That bound is the price of keeping every
+idle slot inside the warden's 300 s window (without it the first business
+request after a quiet stretch would hit a peer-closed slot and the mount
+path would dirty-destroy the VM). The
 remaining blind spot: a pooled connection held by an in-flight request is
 not idle, so the heartbeat cannot probe it; if it wedges (written to, never
 answered) while the warden still accepts connections, heartbeats on the
