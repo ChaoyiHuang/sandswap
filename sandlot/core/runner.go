@@ -165,7 +165,11 @@ func RunNode(ctx context.Context, opts RunOptions) {
 	// NodeHello so the first business acquire dials fresh instead of failing
 	// the mount RPC on a dead slot and dirty-destroying a healthy VM. Only the
 	// stop paths set it: a short TOLERATING blip never stops the probe and
-	// keeps its live slots.
+	// keeps its live slots. The DONE-resume branch restarts the probe before
+	// BeforeHello runs, so the drain can race that loop's first sweep; that is
+	// safe — keepalive discards a slot whose MemStats fails on the transport,
+	// and a slot released back after the drain was just verified alive. The
+	// drain still closes idle slots the sweep did not visit.
 	probeStopped := false
 	if cleanupState.Phase != "" {
 		logger.Printf("resuming resilience phase %q (disconnected %s ago)",
@@ -326,6 +330,11 @@ func RunNode(ctx context.Context, opts RunOptions) {
 						// on a dead slot and dirty-destroying a healthy VM.
 						// Runs after ResetSurvivorsToClean so a connection
 						// returned by the re-adopt redial is included too.
+						// The probe loop may already be running again here (the
+						// DONE branch restarts it before this hook), so the drain
+						// can race the loop's first sweep; that is safe (keepalive
+						// discards a slot that fails on the transport, and a slot
+						// it returns after the drain was just verified alive).
 						if n := handler.DrainIdleWardenConns(); n > 0 {
 							logger.Printf("reconnect: closed %d idle warden connection(s) left over from the probe stop before announcing the node", n)
 						}

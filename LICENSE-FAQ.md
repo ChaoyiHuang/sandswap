@@ -10,7 +10,11 @@ general model.
 
 - **All Sandswap-original code** (gateway, sandlot, boxout, warden, dns,
   sandctl, common, build/deploy/e2e tooling, docs): **BSL 1.1**, Change
-  Date **November 30, 2028**, Change License **Apache-2.0**.
+  Date **November 30, 2028**, Change License **Apache-2.0** — except
+  **`examples/`** (the example agent integrations and the Claude Code
+  walkthrough), which is **Apache-2.0** (text: `examples/LICENSE`) so the
+  wiring can be copied into other projects. The Sandswap components the
+  examples call remain BSL 1.1.
 - **`network/vsockguard/`** (the vsockguard BPF LSM guard and its loader
   `vsockguardctl`): **GPL-2.0-only OR BUSL-1.1** — dual-licensed. The
   Linux kernel exposes the BPF helpers the guard needs (e.g.

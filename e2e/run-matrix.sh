@@ -126,6 +126,7 @@ MATRIX_SPEC=(
     "e2e/memory-identity-persistence.sh|A||-|"
     "e2e/warden-unit.sh|A||-|"
     "e2e/smoke.sh|A||-|"
+    "e2e/sticky-default-window.sh|A||-|built-in sticky window keeps in-process keep-alive calls warm"
     "e2e/file-api.sh|A||-|"
     "e2e/parallel-exec.sh|A||-|"
     "e2e/overlayfs-isolation.sh|A||-|"

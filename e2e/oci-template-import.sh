@@ -569,7 +569,6 @@ else
     fail "owner validate failed: $(head -c 300 "$WORK/grpown-root.log")"
 fi
 log_step "group grant: numeric/name/default settle, offline audit, store audit (layers + in-store trees + cross-host), scan root, non-owner audit"
-log_step "group grant: numeric/name/default settle, offline audit, store audit"
 
 # ══════════════════════════════════════════════════════════════════
 log_section "Phase 4: Start stack"

@@ -333,6 +333,13 @@ knobs:
 | `UBUNTU_PACKAGES` | `python3,python3-pip,python3-venv,git,make,curl,unzip,procps,ca-certificates,locales` | extra apt packages installed in the chroot pass |
 | `OUTPUT` | `output/rootfs-ubuntu/` | destination directory |
 
+`build.sh all` run unprivileged keeps an existing template only when it
+contains the anchors of the configured `UBUNTU_PACKAGES` (default:
+`python3` + `git`). A template that predates the coding-toolchain set, or
+does not contain the configured anchors, needs one
+`sudo bash build/build.sh ubuntu-rootfs` rebuild; the exact rebuild command
+is in the error message.
+
 `deploy/baremetal/deploy-single-node.sh` registers it as the flat template
 `ubuntu:<release>` (the version read from the tree's own `os-release`, so
 `ubuntu:24.04` for the default base) whenever `output/rootfs-ubuntu` is

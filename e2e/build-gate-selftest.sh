@@ -55,6 +55,8 @@ has "$UBUNTU" "base tarball SHA256 mismatch" "Ubuntu base tarball checksum misma
 has "$UBUNTU" "UBUNTU_MIRROR must be https" "Ubuntu apt mirror enforces HTTPS"
 hasnt "$UBUNTU" '^deb .*trusted=yes' "Ubuntu apt sources carry no trusted=yes"
 has "$UBUNTU" '^deb \$UBUNTU_MIRROR' "Ubuntu apt sources use the validated mirror variable"
+has "$ROOT/build/build.sh" 'pkgs="${UBUNTU_PACKAGES:-' \
+    "the unprivileged keep-check follows UBUNTU_PACKAGES (custom sets without git do not fail it)"
 
 RELEASE="$ROOT/build/package-release.sh"
 has "$RELEASE" "ALLOW_NO_IPV6_KERNEL is ignored" "release packager cannot skip the kernel gate via ALLOW_NO_IPV6_KERNEL"

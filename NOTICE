@@ -17,6 +17,13 @@ vsockguard  —  network/vsockguard/ (first-party exception)
   GPL-2.0-only. The files are dual-licensed; the BSL branch keeps their
   terms aligned with the rest of this repository.
 
+examples  —  examples/ (first-party exception)
+  License: Apache-2.0 (full text: examples/LICENSE)
+  The example agent integrations (the Claude Code walkthrough, OpenAI/Eino
+  drivers, MCP example, keepalive client and load driver) are permissively
+  licensed so their wiring can be copied into other projects. The Sandswap
+  components they call remain under the licenses stated in this file.
+
 This product includes code derived from the following upstream projects. Their
 original copyright notices and license terms are preserved in the respective
 files and directories.

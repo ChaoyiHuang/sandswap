@@ -39,12 +39,17 @@ for AI Agents:
 
 In bare-metal KVM benchmarks, a single tinyVM can be reused ideally up to
 183 times per second. An agent's reasoning takes seconds while commands
-run in milliseconds, so one tinyVM rotates across 50–100 agents —
-cutting sandbox cost by 50–100x.
+run in milliseconds ([measured on a real Claude Code
+run](examples/claude-code/README.md#see-where-the-time-went): 64.3 s of
+LLM time against 0.69 s of tool calls), so one tinyVM rotates across
+50–100 agents — cutting sandbox cost by 50–100x.
 
 Agents run commands over two surfaces with identical semantics — HTTPS
 and MCP(with zero code changes). Every path is engineered for ultra-low
-latency, and isolation security is never traded for speed. The same
+latency, and isolation security is never traded for speed. Sandswap makes
+each tinyVM's traffic identity unforgeable; egress credentials and network
+policy are implemented by a third-party enforcer through the
+[egress enabler contract](docs/how-it-works/egress-enabler.md). The same
 architecture extends to serverless scenarios as well.
 
 Refer to the [Load Benchmark Report](docs/benchmark/baremetal-load.md),

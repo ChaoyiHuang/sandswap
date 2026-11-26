@@ -1,4 +1,4 @@
-# claude-code — Claude Code runs its whole coding loop inside Sandswap
+# Claude Code runs its whole coding loop inside Sandswap
 
 Claude Code runs on **your** machine and connects to Sandswap's MCP server
 (`POST /mcp`). It does a real coding task — run a failing test suite, fix
@@ -33,7 +33,7 @@ this exact setup, at the end of [Step 8](#step-8--run-the-task).
 | File | Role |
 |------|------|
 | `README.md` | this walkthrough — every step is a copy-paste command |
-| `.mcp.json` | project MCP config: Streamable HTTP server `sandswap`, `${CLAUDE_CODE_SANDBOX_API_KEY}` in both auth headers |
+| `.mcp.json` | project MCP config: Streamable HTTP server `sandswap`, URL from `${CLAUDE_CODE_SANDBOX_MCP_URL}` (TLS localhost default) and `${CLAUDE_CODE_SANDBOX_API_KEY}` in both auth headers |
 | `.claude/settings.json` | auto-approves the project MCP server + its tools; denies local `Bash`/`Write`/`Edit`/`NotebookEdit` |
 | `TASK.md` | the coding task to give Claude Code, written to exercise the efficient pattern |
 | `seed.sh` | puts TASK.md's failing project into the sandbox's `/workspace` (step 6) |
@@ -456,8 +456,12 @@ cd examples/claude-code && claude "Complete the task in TASK.md using only the s
   naming the file).
 - **Looser**: keep local file editing and only route commands through the
   sandbox — `"deny": ["Bash"]`.
-- **`--no-tls` deployment**: edit `.mcp.json`'s `url` to
-  `http://localhost:3000/mcp` and skip `NODE_EXTRA_CA_CERTS`.
+- **`--no-tls` deployment**: no file edit needed — `setup.sh` detects the
+  plaintext listener and writes
+  `CLAUDE_CODE_SANDBOX_MCP_URL=http://localhost:3000/mcp` into `.env.sh`
+  (source it before launching). If you exported the values by hand instead,
+  `export CLAUDE_CODE_SANDBOX_MCP_URL=http://localhost:3000/mcp`; and skip
+  `NODE_EXTRA_CA_CERTS`.
 - **More packages**: the flat sandbox is a build environment —
   `apt-get install -y build-essential nodejs` through `execute`, then
   `output/sandctl api sandfs save-template "$CLAUDE_CODE_SANDFS_ID" --name coding --version v1`

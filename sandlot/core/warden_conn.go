@@ -61,7 +61,11 @@ func (h *Handler) acquireWarden(ctx context.Context, state *VMState) (*warden.Cl
 //
 // Must run while no new business traffic can arrive (BeforeHello); connections
 // held by an in-flight request are not in the idle queue and are returned
-// normally on release because the pool stays open. Returns the number of
+// normally on release because the pool stays open. The probe loop MAY be
+// running concurrently: the DONE-resume branch restarts it before BeforeHello
+// runs. That is tolerated — keepalive either discards a slot whose MemStats
+// fails on the transport or returns a slot it just verified alive, and this
+// drain still closes idle slots no sweep visited. Returns the number of
 // connections closed.
 func (h *Handler) DrainIdleWardenConns() (closed int) {
 	h.mu.RLock()

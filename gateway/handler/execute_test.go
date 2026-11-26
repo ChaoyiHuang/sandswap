@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	gwconfig "gateway/config"
 	"gateway/handler"
 	"gateway/identity"
 	"gateway/lease"
@@ -45,6 +46,14 @@ type testGateway struct {
 
 func setupTestGateway(t *testing.T) *testGateway {
 	t.Helper()
+	return setupTestGatewayWithLease(t, 100*time.Millisecond)
+}
+
+// setupTestGatewayWithLease is setupTestGateway with an explicit sync sticky
+// window, so a test can exercise the BUILT-IN default rather than the 100ms
+// the rest of the suite uses for deterministic curl-paced assertions.
+func setupTestGatewayWithLease(t *testing.T, sticky time.Duration) *testGateway {
+	t.Helper()
 
 	volRoot := t.TempDir()
 	reg := registry.New(volRoot)
@@ -60,7 +69,7 @@ func setupTestGateway(t *testing.T) *testGateway {
 	stubClient := pool.NewStubSandlotClient()
 	pm := pool.NewManager(stubClient, slog.New(slog.DiscardHandler))
 
-	lm := lease.New(100*time.Millisecond, 5*time.Second)
+	lm := lease.New(sticky, 5*time.Second)
 
 	pm.AddNode("localhost")
 	pm.UpdateNodeCapacity("localhost", []pool.SpecCapacity{{SpecID: "medium", Total: 3}})
@@ -318,6 +327,35 @@ func TestStickyLeaseReuse(t *testing.T) {
 	// Verify the sticky lease is still held (the sandfs is warm on a node).
 	if node := gw.lm.Acquire(sandfsID); node == "" {
 		t.Error("expected sticky lease to be held for the sandfs")
+	}
+}
+
+// TestStickyLeaseReuseDefaultWindow pins the documented default-window claim:
+// back-to-back calls from one client stay warm at the BUILT-IN sticky window.
+// The e2e suites that curl between calls pin LEASE_MS=100 for deterministic
+// warm assertions, so this is the test that exercises the production default
+// (3 ms). A majority-hit assertion tolerates a scheduler preemption between
+// two in-process calls without weakening the regression it guards: a zero (or
+// near-zero) hit rate means the default window no longer bridges back-to-back
+// calls.
+func TestStickyLeaseReuseDefaultWindow(t *testing.T) {
+	gw := setupTestGatewayWithLease(t, time.Duration(gwconfig.DefaultStickyMs)*time.Millisecond)
+	sandfsID := createTestSandFS(t, gw, "test-default-window")
+
+	// First call is cold by construction and arms the sticky window.
+	if r := doExecute(t, gw.execHandler, gw.agentAPIKey, sandfsID, "shell", "true"); r.Header().Get("X-Sandbox-Lease") == "hit" {
+		t.Fatal("first call reported a lease hit")
+	}
+
+	const calls = 10
+	hits := 0
+	for i := 0; i < calls; i++ {
+		if r := doExecute(t, gw.execHandler, gw.agentAPIKey, sandfsID, "shell", "true"); r.Header().Get("X-Sandbox-Lease") == "hit" {
+			hits++
+		}
+	}
+	if hits < calls/2 {
+		t.Fatalf("default sticky window (%d ms) kept only %d/%d back-to-back calls warm; the documented warm path is not bridged at the built-in default", gwconfig.DefaultStickyMs, hits, calls)
 	}
 }
 
