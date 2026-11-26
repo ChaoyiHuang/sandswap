@@ -36,10 +36,10 @@
 #define SYS_mount_setattr 442
 #endif
 #ifndef SYS_statmount
-#define SYS_statmount 454
+#define SYS_statmount 457
 #endif
 #ifndef SYS_listmount
-#define SYS_listmount 455
+#define SYS_listmount 458
 #endif
 #ifndef SYS_pidfd_open
 #define SYS_pidfd_open 434
