@@ -1,0 +1,112 @@
+[1;34m[sandswap][0m [0/8] Preclean + preflight...
+[1;34m[sandswap][0m Preclean: stopping existing services + killing leftovers...
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+[1;33m[!][0m container runtime active: stopping docker.service (e2e/deploy prelude — SANDSWAP_KEEP_CONTAINER_RUNTIME=1 keeps it)
+[1;33m[!][0m container runtime active: stopping docker.socket (e2e/deploy prelude — SANDSWAP_KEEP_CONTAINER_RUNTIME=1 keeps it)
+[1;33m[!][0m container runtime active: stopping containerd (e2e/deploy prelude — SANDSWAP_KEEP_CONTAINER_RUNTIME=1 keeps it)
+[0;32m[✓][0m container runtime stopped — host at the bare e2e baseline
+[1;34m[sandswap][0m Preclean done
+[1;34m[sandswap][0m Preflight (all blockers reported before any mutation)
+  Host:   test-host  Kernel: 6.8.0-149-generic
+  Mode:   baremetal single-node (systemd gateway+sandlot, MemoryStore)
+[1;34m[sandswap][0m   [ok]    /dev/kvm present
+[1;34m[sandswap][0m   [ok]    /dev/vhost-vsock present
+[1;34m[sandswap][0m   [ok]    /dev/net/tun present
+[1;34m[sandswap][0m   [ok]    BPF LSM active, no stale vsockguard pin
+[1;34m[sandswap][0m   [ok]    disk: 403308MB free on /var/lib
+[1;34m[sandswap][0m   [ok]    memory: 367939MB MemAvailable
+[1;34m[sandswap][0m Preflight passed
+[1;34m[sandswap][0m [1/8] Skipping build (--skip-build)
+[0;32m[✓][0m kernel artifact version 7.2.8 matches the pinned 7.2.8
+[1;34m[sandswap][0m [2/8] Preparing host...
+[1;34m[sandswap][0m Setting up host for role: all
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[1;34m[sandswap][0m Directories created: /etc/sandswap, /var/lib/sandswap, /run/sandswap
+[1;34m[sandswap][0m Sysctls installed: /etc/sysctl.d/99-sandswap.conf
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[1;34m[sandswap][0m udev vsock lockdown installed (vhost-vsock sandvmm 0600, vsock sandlot 0600)
+[1;34m[sandswap][0m var/lib/sandswap bind-remounted nosuid,nodev (fstab entry added — survives reboots)
+[1;34m[sandswap][0m tmpfiles.d entry installed (/run/sandswap → root:sandlot 3770, sticky)
+[1;34m[sandswap][0m KVM available: /dev/kvm
+[1;34m[sandswap][0m vhost_vsock module loaded (persistent via /etc/modules-load.d/)
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/16)
+  subnet : 10.188.0.0/16
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+done. VMs on 10.188.0.0/16 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap
+[1;34m[sandswap][0m Bridge + NAT ready: br-sandswap (10.188.0.0/16, gw=10.188.0.1)
+[1;34m[sandswap][0m Network persistence unit enabled (bridge + NAT re-created at boot)
+[1;34m[sandswap][0m vsock re-tune unit enabled (device ownership repaired at boot)
+[1;34m[sandswap][0m vsockguard attest helper installed
+Attaching vsockguard (allowed uid=985)...
+libbpf: failed to find valid kernel BTF
+libbpf: Error loading vmlinux BTF: -3
+libbpf: failed to load object '/opt/sandswap-pr38/src/output/vsockguard.bpf.o'
+vsockguard: load failed: No such process
+[1;33m[warn][0m vsockguard attach failed (non-fatal)
+[1;34m[sandswap][0m vsockguard BPF attached (UID=985, sandlot)
+[1;34m[sandswap][0m udev rules installed (tun → 0660 root:sandlot; kvm/vhost-vsock via kvm group)
+[1;34m[sandswap][0m Provision host setup complete (identities + shared dirs only: no KVM/vsock/bridge duty)
+[1;34m[sandswap][0m Gateway host setup complete (no extra steps needed)
+[1;34m[sandswap][0m Host setup complete for role: all
+[1;34m[sandswap][0m [3/8] Generating TLS certificates (stream mTLS is mandatory)...
+Generating Sandswap bare-metal TLS certificates (validity: 365 days)...
+  Output: /opt/sandswap-pr38/src/output/baremetal-certs/
+  [1/7] CA...
+  [2/7] etcd server cert...
+  [3/7] etcd client cert...
+  [4/7] gateway stream server cert...
+  [5/7] gateway MCP server cert...
+  [6/7] gateway human server cert...
+  [7/7] sandlot client cert (CN=test-host)...
+
+  Certificates generated in /opt/sandswap-pr38/src/output/baremetal-certs/
+total 60
+drwx------  2 root root 4096 Nov 26 14:49 .
+drwxr-xr-x 10 root root 4096 Nov 26 14:49 ..
+lrwxrwxrwx  1 root root    9 Nov 26 14:49 admin.crt -> human.crt
+lrwxrwxrwx  1 root root    9 Nov 26 14:49 admin.key -> human.key
+-rw-r--r--  1 root root 1196 Nov 26 14:49 ca.crt
+-rw-r--r--  1 root root 1188 Nov 26 14:49 etcd-client.crt
+-rw-------  1 root root 1704 Nov 26 14:49 etcd-client.key
+-rw-r--r--  1 root root 1224 Nov 26 14:49 etcd-server.crt
+-rw-------  1 root root 1704 Nov 26 14:49 etcd-server.key
+-rw-r--r--  1 root root 1229 Nov 26 14:49 human.crt
+-rw-------  1 root root 1704 Nov 26 14:49 human.key
+-rw-r--r--  1 root root 1224 Nov 26 14:49 mcp.crt
+-rw-------  1 root root 1704 Nov 26 14:49 mcp.key
+-rw-r--r--  1 root root 1277 Nov 26 14:49 sandlot.crt
+-rw-------  1 root root 1704 Nov 26 14:49 sandlot.key
+-rw-r--r--  1 root root 1229 Nov 26 14:49 stream.crt
+-rw-------  1 root root 1704 Nov 26 14:49 stream.key
+
+  Files:
+    ca.crt                       — CA certificate (the private key is removed)
+    etcd-server.crt, .key        — etcd server (TLS)
+    etcd-client.crt, .key        — etcd client (mTLS)
+    stream.crt, .key             — gateway gRPC stream server (mTLS)
+    mcp.crt, .key                — gateway MCP/agent HTTP server (TLS)
+    human.crt, .key              — gateway human HTTP server (TLS)
+    admin.crt, .key              — symlink → human.* (backward compat)
+    sandlot.crt, .key            — sandlot gRPC stream client (mTLS), CN=test-host
+[1;34m[sandswap][0m Stream client cert verified: sandlot.crt CN='test-host' == node id
+[1;34m[sandswap][0m [4/8] Installing gateway...
+[1;34m[sandswap][0m Installed: sandswap-gateway → /usr/local/bin/sandswap-gateway
+[1;34m[sandswap][0m Busybox rootfs template staged (rootfs:v1)
+[1;34m[sandswap][0m Ubuntu rootfs template staged (ubuntu:24.04, 245M)
+template-tool: /var/lib/sandswap/flat-templates normalized (2 entries changed)
+[1;34m[sandswap][0m Gateway config generated: /etc/sandswap/gateway.yaml (mode=single-node)
+[1;34m[sandswap][0m Systemd unit installed: sandswap-gateway.service
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-gateway.service → /etc/systemd/system/sandswap-gateway.service.
+[1;34m[sandswap][0m Service enabled: sandswap-gateway
+[1;34m[sandswap][0m [5/8] Waiting for gateway to start...
+[1;34m[sandswap][0m Waiting for gateway health at https://localhost:3000/health (max 30s)...
+[1;31m[error][0m Gateway did not become healthy within 30s

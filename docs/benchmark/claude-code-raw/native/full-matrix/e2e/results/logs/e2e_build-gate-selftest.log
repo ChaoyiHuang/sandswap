@@ -1,0 +1,22 @@
+═══ build-gate-selftest ═══
+  ✓ install-deps checksum gate: unpinned version and mismatch refused
+  ✓ Ubuntu base tarball enforces HTTPS
+  ✓ Ubuntu base tarball requires a pinned SHA256
+  ✓ Ubuntu base tarball checksum mismatch is refused
+  ✓ Ubuntu apt mirror enforces HTTPS
+  ✓ Ubuntu apt sources carry no trusted=yes
+  ✓ Ubuntu apt sources use the validated mirror variable
+  ✓ the unprivileged keep-check follows UBUNTU_PACKAGES (custom sets without git do not fail it)
+  ✓ release packager cannot skip the kernel gate via ALLOW_NO_IPV6_KERNEL
+  ✓ release packager runs build.sh check
+  ✓ release packager gates on the seccomp census
+  ✓ release packager gates on kernel/build.sh check
+  ✓ seccomp census uses the vendored pinned universe
+  ✓ pinned universe contains mseal
+  ✓ pinned universe contains open_tree_attr
+  ✓ pinned universe contains listns
+  ✓ pinned universe contains rseq_slice_yield
+  ✓ build freshness uses sed instead of head (no SIGPIPE)
+  PASS: 18
+  FAIL: 0
+[OK] build-gate-selftest passed

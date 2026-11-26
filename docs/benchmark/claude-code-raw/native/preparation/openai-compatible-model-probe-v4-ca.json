@@ -1,0 +1,7 @@
+{
+  "http_status": 400,
+  "error": {
+    "code": "1210",
+    "message": "\u8be5\u6a21\u578b\u59cb\u7ec8\u601d\u8003\uff0c\u4e0d\u652f\u6301\u5173\u95ed\u601d\u8003\uff1b\u8bf7\u4f7f\u7528 low\u3001high \u6216 max\u3002"
+  }
+}

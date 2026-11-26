@@ -1,0 +1,7 @@
+═══ vsockguard-verify safe refusal modes ═══
+  ✓ no pin + default mode refuses (no implicit attach)
+  ✓ production pin + --self-test refuses (never replaces it)
+  ✓ no pin + --self-test without artifacts refuses
+  PASS: 3
+  FAIL: 0
+[OK] vsockguard-verify-modes passed

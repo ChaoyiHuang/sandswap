@@ -1,0 +1,7 @@
+[gen-certs] wrote CA + gateway + sandlot certs to /opt/sandswap-pr38/src/output/certs:
+ca.crt
+ca.key
+gateway.crt
+gateway.key
+sandlot.crt
+sandlot.key

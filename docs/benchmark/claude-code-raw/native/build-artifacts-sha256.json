@@ -1,0 +1,14 @@
+{
+  "vmlinux.bin": "cf03ffa4134e31be0d367ee2666765f07a986502f3624066f498b07ff1e572d7",
+  "initramfs.cpio.gz": "b203bd66040a1601844958c7d6165ffea93fd19e5bcf3ba0e2ba93bcf962bb9d",
+  "sandvmm": "ae4635bd34d04d803f3863567d90f09e39767647fb0eda05a8c474dfda45e105",
+  "warden": "042472ab484c353d4504cbab3f5bcabe2f476edd699da4480b6d59066e364926",
+  "gateway": "e4626957a93394a6afdfcebdfbb9c9338570a1feba6b93d95a9858d4a2f0e91b",
+  "sandlot": "d357485850ee9f7bb787de32ca5e99401fb6884988d26ddd05f9aedc580fbd60",
+  "boxout": "ddb5c2d928e29f4bb0fab8272faea6db4d7bff27201fea57d504dc91ee515511",
+  "sandns": "bb0e4a59db6a1c915256ddd4da82fbde32d1514e63becaf6a01daa9bdfd49321",
+  "sandctl": "ca97a9b647b3c0b189b4a1b710cbdeaa8d4a08536e222e0037cbee2ea82886b1",
+  "vsockguard.bpf.o": "95ec4ff83e8692bdf83f291993f40c5505f6be19128ef0e7ca5804bb7edbfbe8",
+  "vsockguardctl": "1401b324b5a25db98df71179c42695cba6c6e7af873d4a7ccedf5d33a8bd220e",
+  "eino-sandswap": "fbd5be8f3a32989e84b2e5ee860540b1bb5064c8d9570f415a6ebcfbd4ea7e78"
+}

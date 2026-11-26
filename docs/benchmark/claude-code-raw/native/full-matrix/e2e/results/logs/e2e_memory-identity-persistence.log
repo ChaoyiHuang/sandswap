@@ -1,0 +1,69 @@
+
+[0;32m═══ Phase 0: Pre-flight & Deploy ═══[0m
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /tmp/sandswap-memident-vol-TBYQ
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+
+[0;32m═══ Phase 1: First boot — create identity ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2587943)
+[0;32m[✓][0m agent + sandfs created (agent-136c9608 / sandfs-5965fabd)
+
+[0;32m═══ Phase 2: Snapshot on disk ═══[0m
+[0;32m[✓][0m snapshot exists at the default path
+[0;32m[✓][0m snapshot mode is 0600
+[0;32m[✓][0m no plaintext api key in snapshot
+[0;32m[✓][0m api key hash present in snapshot
+[0;32m[✓][0m snapshot version stamped
+
+[0;32m═══ Phase 3: Restart — old identity works ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2588194)
+[0;32m[✓][0m old key lists the old sandfs
+[0;32m[✓][0m volume data intact after restart
+[0;32m[✓][0m execute reached the scheduler (http 503, error_code=NO_COMPUTE_NODES)
+[0;32m[✓][0m bogus key still 401
+
+[0;32m═══ Phase 4: Second gateway locked out by flock ═══[0m
+[0;32m[✓][0m second gateway refused by the state lock (rc=1)
+
+[0;32m═══ Phase 5: Corrupt snapshot refuses to start ═══[0m
+[0;32m[✓][0m corrupt snapshot refused to start (rc=1)
+
+[0;32m═══ Phase 6: Deletions persist (no identity resurrection) ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2588310)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2588352)
+[0;32m[✓][0m deleted agent's key is 401 after restart
+
+[0;32m═══ Phase 7: Persistence cannot be disabled (-identity-store=) ═══[0m
+[0;32m[✓][0m explicit empty -identity-store refuses to start (rc=1)
+
+[0;32m═══ Phase 8: node identity is BOUND to the stream certificate ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2588424)
+[0;32m[✓][0m stream identity binding: a certificate for node memident-prov was refused under node-id impersonated-node
+
+[0;32m═══ Results ═══[0m
+
+  ┌──────────────────────────────────────────────────┐
+  │     Memory Identity Persistence E2E Results                 │
+  ├──────────────────────────────────────────────────┤
+  │ Tests: 15 passed   0 failed                         │
+  └──────────────────────────────────────────────────┘
+
+[0;32m[✓][0m All 15 tests passed

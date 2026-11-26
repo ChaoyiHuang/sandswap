@@ -1,0 +1,23 @@
+[0;32m[==][0m Verifying artifact freshness (output vs source)...
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/gateway
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/sandlot
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/boxout
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/sandns
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/sandctl
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/openai-sandswap
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/eino-sandswap
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/keepalive-sandswap
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/loadgen
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/sandvmm
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/vmlinux.bin (kernel probes: version + features)
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/bindregdump
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/warden-probe
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/template-tool
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/scalepopulator
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/initramfs.cpio.gz
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/warden/target/x86_64-unknown-linux-musl/release/warden
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/rootfs-template
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/rootfs-ubuntu
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/vsockguard.bpf.o
+  [0;32m[FRESH][0m   /opt/sandswap-pr38/src/output/vsockguardctl
+[0;32m[==][0m All artifacts are fresh (newer than their sources).

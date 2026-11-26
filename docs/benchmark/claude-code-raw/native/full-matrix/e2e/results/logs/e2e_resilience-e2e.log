@@ -1,0 +1,85 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Resilience E2E (real KVM deployment) ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2657268)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2657304)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m agent created (api_key present, agent_id=agent-15089ce6)
+
+[0;32m═══ Scenario A: concurrent cold mount (MountLock, #2) ═══[0m
+[0;32m[✓][0m concurrent mount: at least one succeeded (200/200)
+[0;32m[✓][0m no IN_USE leak after concurrent mount
+
+[0;32m═══ Scenario B: bg exec + sync exec concurrent (#3) ═══[0m
+[0;32m[✓][0m bg exec started (exec_id=bg-1-48490af0d484fd7b)
+[0;32m[✓][0m sync exec during bg exec hit sticky lease (warm path)
+
+[0;32m═══ Scenario E: multi-sandfs concurrent exec (#3b) ═══[0m
+[0;32m[✓][0m multi-sandfs concurrent exec both succeeded
+
+[0;32m═══ Scenario F: execute body size limit (#25) ═══[0m
+[0;32m[✓][0m oversized body rejected (413)
+
+[0;32m═══ Scenario C: bg exec lost after sandlot crash (#8) ═══[0m
+[0;32m[✓][0m bg exec running before crash
+[0;32m[→][0m Restarting sandlot...
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2657881)
+[0;32m[✓][0m sandlot restarted, pool repopulated (CLEAN=3, PID 2657881)
+[0;32m[✓][0m bg exec lost after sandlot crash (status=expired)
+
+[0;32m═══ Scenario D: sandlot disconnect mid-exec -> recover (#4) ═══[0m
+[0;32m[✓][0m in-flight exec failed while sandlot was down (evidence: {"error":"node temporarily unreachable, retry","error_code":"NODE_UNAVAILABLE","retry_after_ms":500,)
+[0;32m[→][0m Restarting sandlot...
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2658020)
+[0;32m[✓][0m sandlot restarted, pool repopulated (CLEAN=3, PID 2658020)
+[0;32m[✓][0m recovery: exec succeeds after sandlot reconnect (200)
+
+[0;32m═══ Scenario G: stale mount released after sandlot death ═══[0m
+[0;32m[✓][0m sandfs mounted (VM IN_USE) before sandlot disconnect
+    sandlot killed; restarting (re-adopt clears the stale mount)...
+[0;32m[→][0m Restarting sandlot...
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2658253)
+[0;32m[✓][0m sandlot restarted, pool repopulated (CLEAN=3, PID 2658253)
+[0;32m[✓][0m re-adopt preserved every pre-kill VM (no dirty destroy): before=[pool-small-0 pool-small-1 pool-small-2 ] after=[pool-small-0 pool-small-1 pool-small-2 ]
+[0;32m[✓][0m exec succeeds after sandlot death + re-adopt (200)
+
+[0;32m═══ Resilience E2E Summary ═══[0m
+  PASS: 13
+  FAIL: 0
+[0;32mResilience E2E PASSED[0m
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

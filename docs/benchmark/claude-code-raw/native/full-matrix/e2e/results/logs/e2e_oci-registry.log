@@ -1,0 +1,154 @@
+
+[0;32m═══ Phase 0: Pre-flight & Download OCI Registry ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m OCI registry binary cached
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+
+[0;32m═══ Phase 1: Start Local OCI Registry ═══[0m
+[0;32m[→][0m Starting OCI registry on port 15000...
+[0;32m[✓][0m OCI registry running (PID 2671571, port 15000, htpasswd auth)
+[0;32m[✓][0m Registry rejects unauthenticated access (401 on /v2/ and manifest path)
+
+[0;32m═══ Phase 2: Prepare Flat Template Directory ═══[0m
+    ss_prepare_shared_dir[/tmp/sandswap-flat-templates-vQuumX]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-flat-templates-vQuumX]: created root:sandlot 2770
+    ss_prepare_shared_dir[/tmp/sandswap-overlay-templates-3u0jhM]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-overlay-templates-3u0jhM]: created root:sandlot 2770
+[0;32m[✓][0m Flat template prepared: /tmp/sandswap-flat-templates-vQuumX/busybox/v1/
+
+[0;32m═══ Phase 3: Start Gateway & Sandlot ═══[0m
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Starting gateway (no storage: template ops relay to the prov role)...
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2671727)
+[0;32m[→][0m Starting sandlot (merged exec,prov — template store + flat scan + credentialed registry)...
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2671761)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+    Registered templates: [{"name":"busybox","version":"v1","description":"","mode":"flat","cached":true}]
+    - busybox:v1 (cached: True)
+
+[0;32m═══ Phase 4: Create Flat SandFS & Modify ═══[0m
+    Agent created: agent-d05e7af7
+[0;32m[✓][0m Flat SandFS created: sandfs-84d16167
+[0;32m[✓][0m Flat template marker found in SandFS
+[0;32m[✓][0m Wrote test file to flat SandFS
+
+[0;32m═══ Phase 5: SaveAsTemplate → PushTemplate ═══[0m
+[0;32m[✓][0m SaveAsTemplate succeeded: myapp:v1
+[0;32m[✓][0m myapp:v1 in ListTemplates
+[0;32m[✓][0m PushTemplate succeeded: digest=sha256:21d45d5360b0e8b272686527ea6df61a5dcf6259726607ce3d88bf19eccf9033
+
+[0;32m═══ Phase 6: Delete Local Cache & PullTemplate ═══[0m
+[0;32m[→][0m Deleting local overlay template cache...
+[0;32m[✓][0m Local cache cleared (was present, now removed)
+[0;32m[✓][0m PullTemplate succeeded: myapp:v1
+[0;32m[✓][0m layers/ carries the setgid bit (2750) — the group-propagating chain the pull relies on
+[0;32m[✓][0m Re-materialized layer carries the store root's group (gid 985; setgid chain, tar uid/gid ignored)
+[0;32m[✓][0m check-store clean over the live store after the pull (group audit included)
+
+[0;32m═══ Phase 7: Create Overlay SandFS from Pulled Template ═══[0m
+[0;32m[✓][0m Overlay SandFS created: sandfs-d221e975
+[0;32m[✓][0m Saved file found in overlay SandFS from pulled template
+[0;32m[✓][0m rootfs /tmp marker correctly masked by overlay tmpfs
+
+[0;32m═══ Phase 8: Flat Template Push → Pull → Flat SandFS from OCI ═══[0m
+[0;32m[✓][0m PushTemplate (flat) succeeded: digest=sha256:6be3642292e353dbd5d60f3f86bceadf46fc87d734713d285d7b714883384c56
+[0;32m[✓][0m Local flat ref cleared
+[0;32m[✓][0m PullTemplate (flat) succeeded
+[0;32m[✓][0m Flat ref records oci_layers (digests pinned, no local cache)
+[0;32m[✓][0m Flat pull extracted nothing into layers/ (1 dirs, unchanged)
+[0;32m[✓][0m Flat SandFS created from OCI template: sandfs-3d46d7bb
+[0;32m[✓][0m OCI flat SandFS has template content and is writable
+[0;32m[✓][0m OCI flat materialized file is group-writable (0664)
+[0;32m[✓][0m OCI flat materialized dir is setgid+group-writable (2775; other-write cleared by the contract)
+
+[0;32m═══ Phase 9: Flat Auto-Pull ON CREATE (no explicit pull) ═══[0m
+[0;32m[✓][0m Local flat ref cleared (registry is now the only source)
+[0;32m[✓][0m Local flat template dir stashed out of the scan root
+[0;32m[✓][0m Flat SandFS created from a registry-only ref: sandfs-4c19c403
+[0;32m[✓][0m pull_status = pulled (create auto-pulled the manifest)
+[0;32m[✓][0m Recreated ref is OCI-origin (digests pinned, no local layer)
+[0;32m[✓][0m Auto-pulled flat SandFS has the registry content
+[0;32m[✓][0m Flat auto-pull extracted nothing into layers/ (manifest-only)
+[0;32m[✓][0m second create from the now-local ref reports pull_status = cached
+
+[0;32m═══ Phase 10: Overlay Auto-Pull ON CREATE (registry-only ref) ═══[0m
+[0;32m[✓][0m SaveAsTemplate succeeded: autopull:v1
+[0;32m[✓][0m PushTemplate succeeded: autopull:v1
+[0;32m[✓][0m Local ref + layer cleared (registry is now the only source)
+[0;32m[✓][0m Overlay SandFS created from a registry-only ref: sandfs-de3eb61e
+[0;32m[✓][0m pull_status = pulled (create downloaded + extracted the template)
+[0;32m[✓][0m Overlay auto-pull extracted layers into the shared cache (1 → 2)
+[0;32m[✓][0m Auto-pulled overlay SandFS serves the downloaded template content
+[0;32m[✓][0m second overlay create reports pull_status = cached
+
+[0;32m═══ Phase 11: Imported image template → push → pull (the offline-converter path) ═══[0m
+[0;32m[✓][0m template-tool import published /tmp/sandswap-overlay-templates-3u0jhM/imported/v1
+[0;32m[✓][0m scan registered imported:v1 (absolute-path overlay ref)
+[0;32m[✓][0m PushTemplate over the imported tree succeeded: digest=sha256:cbeb29a556fd00232b7404c71cf7eb3303f541a17150e5cbe6a2029e98cd3ecc
+[0;32m[✓][0m local imported tree + ref cleared
+[0;32m[✓][0m PullTemplate (imported:v1) succeeded
+[0;32m[✓][0m overlay SandFS created from the pulled imported:v1
+[0;32m[✓][0m exec on the pulled imported template works
+[0;32m[✓][0m standalone --push (env credentials) published imported-v2 straight to the registry (no gateway)
+[0;32m[✓][0m push-only run left no local v2 ref
+[0;32m[✓][0m PullTemplate (imported:v2, standalone-pushed) succeeded
+[0;32m[✓][0m overlay SandFS from the standalone-pushed template execs
+[0;32m[✓][0m combined --out + --push published locally and pushed imported-v3
+[0;32m[✓][0m combined run left the validated local tree
+[0;32m[✓][0m PullTemplate (imported:v3, combined run) succeeded
+[0;32m[✓][0m wrong-password push failed as expected
+[0;32m[✓][0m failed push kept the validated local template
+[0;32m[✓][0m failed push left no imported-v4 tag in the registry
+
+[0;32m═══ Results ═══[0m
+
+[0;32m═══ OCI Registry Integration Test ═══[0m
+  [0;32m✓[0m htpasswd-authenticated registry (401 enforced without creds)
+  [0;32m✓[0m Flat template scan & SandFS creation
+  [0;32m✓[0m SaveAsTemplate (flat → overlay mode)
+  [0;32m✓[0m PushTemplate to OCI registry
+  [0;32m✓[0m PullTemplate from OCI registry
+  [0;32m✓[0m Overlay SandFS from pulled template
+  [0;32m✓[0m Flat push → pull (digests pinned, no cache) → flat SandFS from OCI
+  [0;32m✓[0m Auto-pull ON CREATE, flat + overlay (pull_status pulled → cached)
+  [0;32m✓[0m Imported image template (template-tool import) → push → pull → overlay SandFS
+  [0;32m✓[0m Standalone --push (env credentials), combined --out+--push, failed push keeps the local tree
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

@@ -1,0 +1,210 @@
+
+[0;32m═══ Phase 0: Pre-flight Checks ═══[0m
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[✓][0m rootfs-template present
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+
+[0;32m═══ Phase 1: Clean Environment ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+    ss_prepare_shared_dir[/tmp/sandswap-templates]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-templates]: created root:sandlot 2770
+
+[0;32m═══ Phase 2: Prepare Local Template ═══[0m
+[0;32m[→][0m Creating isolation template (versioned: isolation:v1)...
+[0;32m[✓][0m Isolation template ready: /tmp/sandswap-templates/isolation/v1/
+[0;32m[→][0m Creating evil-test template (registered clean, tampered before mount)...
+[0;32m[✓][0m Evil-test template ready: /tmp/sandswap-templates/evil/v1/
+
+[0;32m═══ Phase 3: Deploy and Start Services ═══[0m
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (sticky-ms=1000, OverlayFS mode)...
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2597689)
+[0;32m[✓][0m Gateway started (OverlayFS mode via -overlayfs-templates)
+  Registered templates: []
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2597728)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 2, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 2 CLEAN VM(s)
+
+[0;32m═══ Phase 4: Bind Mount Mode — Basic /workspace Test ═══[0m
+[0;32m[→][0m Creating flat SandFS (template=rootfs:v1, mode=flat)...
+[0;32m[✓][0m Bind-mount SandFS created: sandfs-4703e853
+    Volume: /var/lib/sandswap-e2e/volumes/sf-zsrxol4iuyj76cikscfglkvw2a
+[0;32m[→][0m 4.1: VM write and read file in /workspace...
+[0;32m[✓][0m 4.1: Bind-mount VM can write and read /workspace
+[0;32m[→][0m 4.2: VM list /workspace...
+[0;32m[✓][0m 4.2: Bind-mount VM can see test.txt in /workspace
+[0;32m[→][0m 4.3: flat .sandfs-id stamp is masked...
+[0;32m[✓][0m 4.3: .sandfs-id is covered (0 bytes visible)
+
+[0;32m═══ Phase 5: Template Mode — Read-Only Overlay + Writable Workspace/Home Isolation ═══[0m
+[0;32m[→][0m Creating template SandFS (template=isolation:v1)...
+    mode not specified — resolved template 'isolation:v1' to mode=overlay
+[0;32m[✓][0m Template SandFS created: sandfs-0e4629a4
+    Volume: /var/lib/sandswap-e2e/volumes/sf-q2fc3katwlxbpypxwrg4gvef2u
+[0;32m[→][0m Verifying SandFS directory structure...
+[0;32m[✓][0m workspace/ directory exists
+[0;32m[✓][0m home/ directory exists
+[0;32m[✓][0m .template marker = isolation:v1
+    rootfs/ does not exist yet (lazy mount model — expected)
+
+[0;32m═══ Phase 5a: Cold Execute — Trigger Overlay Mount ═══[0m
+[0;32m[→][0m Triggering cold execute to mount read-only overlay...
+[0;32m[✓][0m 5a: Cold execute succeeded
+[0;32m[✓][0m Read-only overlay mounted at /var/lib/sandswap-e2e/volumes/sf-q2fc3katwlxbpypxwrg4gvef2u/rootfs
+[0;32m[✓][0m Overlay is read-only (no upperdir in mount options)
+[0;32m[✓][0m Overlay has no workdir (read-only overlay confirmed)
+[0;32m[✓][0m Lowerdir points to isolation/v1 template (/tmp/sandswap-templates/isolation/v1:/tmp/sandswap-templates/.empty-layer)
+
+[0;32m═══ Phase 5b: /workspace — Writable Bind Mount ═══[0m
+[1;33m[!][0m Testing CRITICAL property: /workspace is writable via the workspace bind mount
+[0;32m[→][0m 5b.1: VM write to /workspace...
+[0;32m[✓][0m 5b.1: VM can write and read /workspace (writable bind mount)
+[0;32m[→][0m 5b.2: /workspace persistence (warm exec)...
+[0;32m[✓][0m 5b.2: /workspace data persists across warm exec
+[0;32m[→][0m 5b.3: VM create subdirectory in /workspace...
+[0;32m[✓][0m 5b.3: VM can create subdirectories in /workspace
+
+[0;32m═══ Phase 5c: /home/agent — Writable Bind Mount ═══[0m
+[1;33m[!][0m Testing CRITICAL property: /home/agent is writable via the home bind mount
+[0;32m[→][0m 5c.1: VM write to /home/agent...
+[0;32m[✓][0m 5c.1: VM can write and read /home/agent (writable bind mount)
+[0;32m[→][0m 5c.2: VM create /home/agent/.local/bin...
+[0;32m[✓][0m 5c.2: VM can create /home/agent/.local/bin
+
+[0;32m═══ Phase 5d: Read-Only Rootfs — Write Must Fail ═══[0m
+[1;33m[!][0m Testing CRITICAL security property: VM CANNOT write to read-only rootfs
+[0;32m[→][0m 5d.1: VM try to write to /usr (read-only rootfs)...
+[0;32m[✓][0m 5d.1: VM CANNOT write to /usr (read-only rootfs — SECURITY: PASS)
+[0;32m[→][0m 5d.2: VM try to write to /bin (read-only rootfs)...
+[0;32m[✓][0m 5d.2: VM CANNOT write to /bin (read-only rootfs — SECURITY: PASS)
+[0;32m[→][0m 5d.3: VM try to write to /etc (read-only rootfs)...
+[0;32m[✓][0m 5d.3: VM CANNOT write to /etc (read-only rootfs — SECURITY: PASS)
+
+[0;32m═══ Phase 5e: virtio-fs Basename Filtering ═══[0m
+[1;33m[!][0m Testing CRITICAL security property: virtio-fs basename filtering
+[0;32m[→][0m 5e.1: VM can access its own sandfs workspace...
+[0;32m[✓][0m 5e.1: VM can access its own sandfs workspace (virtio-fs working)
+[0;32m[→][0m 5e.2: exec context cannot reach the raw virtio-fs share...
+[0;32m[✓][0m 5e.2: raw share + sibling directory unreachable from the exec context (chroot containment)
+[0;32m[→][0m 5e.3: no share listing reachable from the exec context...
+[0;32m[✓][0m 5e.3: no share/volumes listing reachable from the exec context
+[0;32m[→][0m 5e.4: Check if .template marker is visible (informational)...
+    5e.4: .template marker not accessible (acceptable)
+[0;32m[→][0m 5e.5: Non-UTF-8 workspace lookup returns ENOENT (no VMM crash)...
+[0;32m[✓][0m 5e.5: Non-UTF-8 workspace lookup denied with ENOENT
+[0;32m[→][0m 5e.5b: VMM still alive after non-UTF-8 lookup...
+[0;32m[✓][0m 5e.5b: VMM alive after non-UTF-8 root lookup (no panic/poison)
+
+[0;32m═══ Phase 5f: /tmp — tmpfs (Local, Not Shared) ═══[0m
+    Testing /tmp: writable tmpfs, local to this VM
+[0;32m[→][0m 5f.1: VM write to /tmp...
+[0;32m[✓][0m 5f.1: VM can write and read /tmp (tmpfs)
+[0;32m[→][0m 5f.2: Verify /tmp is tmpfs (not a bind mount from rootfs)...
+[0;32m[✓][0m 5f.2: /tmp is tmpfs (local, not shared storage)
+[0;32m[→][0m 5f.3: /tmp is local (not shared across VM switches)...
+      Pre-switch: before-switch
+      Switch to bind SandFS: on-bind-sandfs
+[0;32m[✓][0m 5f.3: /tmp is local — contents cleared on agent switch
+
+[0;32m═══ Phase 5g: Environment Variables ═══[0m
+    Testing environment variables for home-directory package installation
+[0;32m[→][0m 5g.1: HOME environment variable...
+[0;32m[✓][0m 5g.1: HOME=/home/agent
+[0;32m[→][0m 5g.2: PATH includes /home/agent/.local/bin...
+[0;32m[✓][0m 5g.2: PATH includes /home/agent/.local/bin
+[0;32m[→][0m 5g.3: PATH includes /home/agent/.npm-global/bin...
+[0;32m[✓][0m 5g.3: PATH includes /home/agent/.npm-global/bin
+[0;32m[→][0m 5g.4: PYTHONUSERBASE environment variable...
+[0;32m[✓][0m 5g.4: PYTHONUSERBASE=/home/agent/.local
+[0;32m[→][0m 5g.5: npm_config_prefix environment variable...
+[0;32m[✓][0m 5g.5: npm_config_prefix=/home/agent/.npm-global
+[0;32m[→][0m 5g.6: CARGO_HOME environment variable...
+[0;32m[✓][0m 5g.6: CARGO_HOME=/home/agent/.cargo
+[0;32m[→][0m 5g.7: GOPATH environment variable...
+[0;32m[✓][0m 5g.7: GOPATH=/home/agent/go
+
+[0;32m═══ Phase 6: Cross-Agent Isolation (Template vs Bind Mount) ═══[0m
+    Verifying cross-agent isolation between template and bind-mount SandFS
+[0;32m[→][0m 6.1: Template SandFS data isolated from bind-mount SandFS...
+[0;32m[✓][0m 6.1: Bind-mount SandFS CANNOT see template SandFS /workspace data
+[0;32m[→][0m 6.2: Bind-mount SandFS data isolated from template SandFS...
+[0;32m[✓][0m 6.2: Template SandFS CANNOT see bind-mount SandFS /workspace data
+
+[0;32m═══ Phase 7: Overlay Stateless — Cross-Node Migration ═══[0m
+    Verifying read-only overlay is stateless (no per-node cleanup needed)
+[0;32m[→][0m 7.1: No upperdir directory exists...
+[0;32m[✓][0m 7.1: No upperdir (rw/) directory — read-only overlay confirmed
+[0;32m[→][0m 7.2: No workdir directory exists...
+[0;32m[✓][0m 7.2: No workdir (work/) directory — read-only overlay confirmed
+[0;32m[→][0m 7.3: Template not modified by /workspace writes...
+[0;32m[✓][0m 7.3: Template not modified by agent writes to /workspace
+
+[0;32m═══ Phase 8: Layer-ID Trust Boundary — Hostile refs File Refused ═══[0m
+[0;32m[→][0m 8.0: Gateway wrote the ref with the legal absolute-path layer...
+[0;32m[✓][0m 8.0: ref file exists with an absolute layer INSIDE the templates dir (legal format)
+[0;32m[→][0m 8.1: Tampering refs file to layers:["/etc"] (host-path injection)...
+    mode not specified — resolved template 'evil:v1' to mode=overlay
+[0;32m[✓][0m 8.1: exec refused with a hostile refs file (no guest ever ran against /etc)
+[0;32m[✓][0m 8.1: gateway logged the layer-validation refusal from sandlot
+[0;32m[✓][0m 8.1: no /etc lowerdir in mountinfo
+[0;32m[→][0m 8.2: Restoring the legal ref — the SAME template must now mount...
+[0;32m[✓][0m 8.2: exec succeeds once the ref is legal (failure above was the validation, not a broken template)
+
+[0;32m═══ Phase 9: Planted .template Marker — No Host Read, No Hang ═══[0m
+[0;32m[→][0m 9.1: plant a SYMLINK at /.template (flat volume root = chroot root)...
+[0;32m[✓][0m 9.1: symlink planted at the host volume's .template path
+[0;32m[✓][0m 9.1: cold mount with a planted symlink marker succeeds (marker not followed)
+[0;32m[→][0m 9.2: plant a FIFO at /.template (host side — guest mknod is seccomp-denied)...
+[0;32m[✓][0m 9.2: FIFO planted at the host volume's .template path
+[0;32m[✓][0m 9.2: cold mount with a planted FIFO marker completes (no read-forever hang)
+[0;32m[→][0m 9.3: plant a REGULAR .template file (junk ref) — the mode gate must keep it flat...
+[0;32m[✓][0m 9.3: regular .template file planted at the host volume's marker path
+[0;32m[✓][0m 9.3: cold mount with a planted regular marker stays FLAT (flat record ignores markers)
+[0;32m[✓][0m 9: sandlot logged the planted markers as ignored (flat record never honors a marker)
+
+[0;32m═══ Results Summary ═══[0m
+
+  ┌──────────────────────────────────────────────────────────┐
+  │  Read-Only Overlay + Writable Workspace/Home Isolation   │
+  ├──────────────────────────────────────────────────────────┤
+  │  Tests: 53  passed   0   failed                       │
+  ├──────────────────────────────────────────────────────────┤
+  │  Status: ALL TESTS PASSED                               │
+  ├──────────────────────────────────────────────────────────┤
+  │  Architecture verified:                                  │
+  │    Read-only overlay (lowerdir only, no upperdir/workdir)│
+  │    /workspace  → writable bind mount (read-write)        │
+  │    /home/agent → writable bind mount (read-write)        │
+  │    /tmp        → tmpfs (local, not shared)               │
+  │    virtio-fs allowed_dirs → basename filtering           │
+  │    No CleanupOverlay RPC, no overlay reaper needed       │
+  └──────────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m All tests passed
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 4 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

@@ -1,0 +1,20 @@
+WARNING: -allow-insecure-volumes set — guest-planted setuid bits and device nodes on the volumes tree are LIVE (invariant 8 violated). Dev/test only.
+2026/11/26 15:14:23 vsockguard: running as root — pin check skipped (root is a trust root and the BPF hook admits root)
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] WARNING: -allow-colocated-instances — co-existing with node "mi-a" (roles [exec,prov]); permitted for the one-machine exec+prov pair and simulations
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] roles: [exec]
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] gc pacing: GOGC=200 applied (previous 100)
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] guest TCB hash check skipped: /opt/sandswap-pr38/src/output/vmlinux.bin is outside /usr/local/lib/sandswap/guest (dev/e2e path; the pair is unverified)
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] guest TCB hash check skipped: /opt/sandswap-pr38/src/output/initramfs.cpio.gz is outside /usr/local/lib/sandswap/guest (dev/e2e path; the pair is unverified)
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] network backend: none (offline)
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] egress identity binding: off
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] WARNING: egress identity is NOT bound on this node (neither Carrier A binding-backend nor Carrier B routed-ipv6+iid-template is configured) — a third-party enforcer cannot attribute guest traffic to an agent; dev/test posture only
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] re-adopt complete: 0 VM(s) live
+{"time":"2026-11-26T15:14:23.810560228+08:00","level":"INFO","msg":"config hot-reload watcher started","path":"/tmp/sandswap-logs/sandlot-rolelock-probe.yaml"}
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] connecting to gateway at 127.0.0.1:1 (0 live VM(s))
+2026/11/26 15:14:23 [sandlot/rl-probe-probe] connect failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:1: connect: connection refused"; retry in 1s
+2026/11/26 15:14:24 [sandlot/rl-probe-probe] connecting to gateway at 127.0.0.1:1 (0 live VM(s))
+2026/11/26 15:14:24 [sandlot/rl-probe-probe] connect failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:1: connect: connection refused"; retry in 2s
+2026/11/26 15:14:26 [sandlot/rl-probe-probe] connecting to gateway at 127.0.0.1:1 (0 live VM(s))
+2026/11/26 15:14:26 [sandlot/rl-probe-probe] connect failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:1: connect: connection refused"; retry in 4s
+2026/11/26 15:14:26 [sandlot/rl-probe-probe] received signal terminated, closing stream (tinyVMs left alive for re-adopt)
+2026/11/26 15:14:26 [sandlot/rl-probe-probe] sandlot exiting; 0 tinyVM(s) left alive for re-adopt

@@ -1,0 +1,8 @@
+=== kernel config gate unit test ===
+  [PASS] policy-compliant config accepted
+  [PASS] missing INIT_ON_FREE refused and named
+  [PASS] re-enabled CONFIG_USER_NS rejected and named
+  [PASS] =m spelling of CONFIG_PACKET rejected and named
+  [PASS] missing required CONFIG_VIRTIO_FS rejected and named
+=== summary: 5 pass, 0 fail ===
+[OK] kernel config gate unit test PASSED

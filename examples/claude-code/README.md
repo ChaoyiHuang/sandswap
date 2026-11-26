@@ -278,9 +278,10 @@ suite`.
 
 ### Repeatable headless validation (including a Mac client)
 
-`validate.py` runs the same task with the installed **Claude Code CLI** and a
-real model. Run `setup.sh` on the Linux SandSwap host first. Before each repeat,
-run `seed.sh` there: it resets the example's disposable `/workspace`.
+`validate.py` runs the same task with the installed **Claude Code CLI**, Python
+3.9 or newer, and a real model. Run `setup.sh` on the Linux SandSwap host first.
+Before each repeat, run `seed.sh` there: it resets the example's disposable
+`/workspace`.
 
 The CLI can stay on your Mac. Forward the Linux gateway through SSH, copy its
 CA certificate and the example's `.env.sh` into a private local directory, then
@@ -336,6 +337,9 @@ committed. To check the validator's rejection paths without a model:
 python3 -m unittest discover -s . -p 'test_validate.py' -v
 ```
 
+See the measured [Mac + GLM validation report](../../docs/benchmark/claude-code.md)
+for real coding runs, raw evidence, and the full repository test round.
+
 ### See where the time went
 
 Claude Code records every session under `~/.claude/projects/`: each LLM
@@ -353,7 +357,11 @@ It picks the newest transcript for this directory whose first prompt is the
 pass a `.jsonl` path to choose one) and prints the turn as the loop it is:
 every round's **thinking, what it said, how long it thought, then the tool
 it called and how long that took — each `execute` split into its measured
-layers**. A real interactive run:
+layers**. The tables below are an older interactive snapshot. The current
+analyzer includes the initial prompt wait, groups provider message IDs, counts
+parallel tool waits once, and labels unmeasured transport/client overhead as a
+residual. See the linked Mac + GLM report for output from this corrected
+accounting. The historical interactive run:
 
 **Table 1 — the loop, in time order.** Each LLM call, then the tools it
 called, with every `execute`'s command spelled out one `&&`-step per line.

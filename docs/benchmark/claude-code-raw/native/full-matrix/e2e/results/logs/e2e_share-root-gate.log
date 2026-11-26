@@ -1,0 +1,95 @@
+
+[0;32m═══ Phase 0: Pre-flight ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3 python3
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Stack up (gateway + sandlot + sandvmm + warden, one VM) ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2622817)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2622851)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m agents A/B created (A=sandfs-5db406dc mounted, B=sandfs-f16621c0 sibling)
+[0;32m[✓][0m agent A mounted and executing in the real guest
+
+[0;32m═══ Phase 2: escape matrix — the share root must be unreachable ═══[0m
+[0;32m[✓][0m escape matrix: mnt_volumes_absent
+[0;32m[✓][0m escape matrix: procroot_denied
+[0;32m[✓][0m escape matrix: procroot_link_denied
+[0;32m[✓][0m escape matrix: dotdot_confined
+[0;32m[✓][0m escape matrix: mountinfo_clean
+[0;32m[✓][0m escape matrix: mountinfo_name_free
+[0;32m[✓][0m escape matrix: stamp_masked
+[0;32m[✓][0m escape matrix: sibling_invisible
+[0;32m[✓][0m share root unreachable from the agent by every probed route (layer 2 is the remaining barrier)
+
+[0;32m═══ Phase 3: positive control + root-level residue ═══[0m
+[0;32m[✓][0m mkdir/write/rename/rmdir inside the agent's own tree still work (gate is root-scoped)
+[0;32m[✓][0m the share root's entry set is unchanged by a full agent workload
+[0;32m[✓][0m the sibling volume's sentinel is untouched
+
+[0;32m═══ Phase 4: the VMM API surface cannot widen the share (vm.add-fs is gone) ═══[0m
+[0;32m[✓][0m vm.add-fs is not routable on the running VMM (404) — no second share can be attached
+[0;32m[✓][0m vm.add-net is not routable on the running VMM (404) — no NIC can be attached at runtime
+[0;32m[✓][0m vm.set-fs stays routable and applied (HTTP 204, re-filter of the one share)
+[0;32m[✓][0m agent A still executes after the API-surface probe (mount intact)
+
+[0;32m═══ Phase 5: virtiofsd dispatch gate (real FUSE requests, real PassthroughFs) ═══[0m
+
+running 26 tests
+..........................
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 73 filtered out; finished in 0.10s
+[0;32m[✓][0m  dispatch pin green (26 tests: root mutations denied ENOENT,../ name escapes denied, tree unchanged, in-tree ops still work)
+
+[0;32m═══ Phase 6: the share root is read-only for the daemon identity (kernel-enforced) ═══[0m
+[0;32m[✓][0m the sandvmm identity cannot create an entry at the share root (2710 sandlot:sandlot) — kernel EACCES
+[0;32m[✓][0m the sandvmm identity cannot list the share root (traverse-only, kernel EACCES)
+[0;32m[✓][0m the sandvmm identity cannot write the template store (2750 sandlot:sandlot)
+[0;32m[✓][0m …and still traverses + reads its own volume (guest read/write untouched)
+[0;32m[✓][0m the provision identity can still create/remove entries at the root (volume lifecycle intact)
+
+[0;32m═══ share-root-gate Summary ═══[0m
+  PASS: 24
+  FAIL: 0
+[0;32m[✓][0m share-root-gate PASSED (24 checks)
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

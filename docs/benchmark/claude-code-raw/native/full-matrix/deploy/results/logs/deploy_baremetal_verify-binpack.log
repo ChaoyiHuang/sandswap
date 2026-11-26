@@ -1,0 +1,66 @@
+[1;34m[sandswap][0m Preflight (all blockers reported before any mutation)
+  Host:   test-host  Kernel: 6.8.0-149-generic
+  Mode:   baremetal
+[1;34m[sandswap][0m   [ok]    /dev/kvm present
+[1;34m[sandswap][0m   [ok]    /dev/vhost-vsock present
+[1;34m[sandswap][0m   [ok]    /dev/net/tun present
+[1;34m[sandswap][0m   [ok]    BPF LSM active, no stale vsockguard pin
+[1;34m[sandswap][0m   [ok]    disk: 402592MB free on /var/lib
+[1;34m[sandswap][0m   [ok]    memory: 367900MB MemAvailable
+[1;34m[sandswap][0m Preflight passed
+[1;34m[sandswap][0m [1/10] Artifacts fresh (build.sh check green) — skipping rebuild
+[1;34m[sandswap][0m [2/10] Generating certs (127.0.0.1, 127.0.0.2 + wildcard, one pair per node id)...
+[1;34m[sandswap][0m Stream client cert verified: sandlot.crt CN='bp-prod1-prod1' == node id
+[1;34m[sandswap][0m Stream client cert verified: sandlot-bp-prod2-prod2.crt CN='bp-prod2-prod2' == node id
+[1;34m[sandswap][0m Stream client cert verified: sandlot-bp-prov.crt CN='bp-prov' == node id
+[1;34m[sandswap][0m [3/10] Starting etcd...
+[1;34m[sandswap][0m [4/10] Installing binaries + flat template...
+template-tool: /var/lib/sandswap/flat-templates/rootfs normalized (0 entries changed)
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[1;34m[sandswap][0m [5/10] Starting exec1 (127.0.0.1:3000), exec2 (127.0.0.2:3000), human (3100)...
+[1;34m[sandswap][0m   3 gateways healthy
+[1;34m[sandswap][0m [6/10] Starting sandns (policy=binpack)...
+[1;34m[sandswap][0m   dns resolves sandswap-stream.local -> 127.0.0.1 (binpack policy active)
+[1;34m[sandswap][0m [7/10] Starting 2 sandlots (small:3 each, pinned to their gateway)...
+    volume-name seed minted: /etc/sandswap/volume-seed (KEEP — every volume name derives from it)
+[1;34m[sandswap][0m Provision host prepared: templates=/var/lib/sandswap/templates (sandprov-owned, shared-group r-x), prov TLS key ready (from sandlot-bp-prov.key)
+[1;34m[sandswap][0m [8/10] Waiting for both sandlots to connect...
+[1;34m[sandswap][0m   prod1->exec1, prod2->exec2 (both node_count=1)
+[1;34m[sandswap][0m   waiting for clean VMs to publish...
+[1;34m[sandswap][0m   clean_vms: exec1=3 exec2=3
+[1;34m[sandswap][0m   waiting for the storage plane (provisioners)...
+[1;34m[sandswap][0m   storage plane ready (provisioners >= 1)
+[1;34m[sandswap][0m [9/10] Creating 3 agents + 3 sandfs (load, A, B) via human gateway...
+[1;34m[sandswap][0m   load=sandfs-d3aced8c  A=sandfs-67f1f669  B=sandfs-a5fe788d
+[1;34m[sandswap][0m   etcd watch synced (API key resolves on https://127.0.0.1:3000, attempt 1)
+[1;34m[sandswap][0m   pre-loading exec1 (sustained sync exec on load sandfs -> exec1)...
+[1;34m[sandswap][0m   waiting for exec1 duty > exec2 duty (binpack signal)...
+[1;34m[sandswap][0m   duty: exec1=0.026651861790225957 exec2=0 (ok=1)
+[1;34m[sandswap][0m   building eino example binary...
+[1;34m[sandswap][0m   launching 2 eino instances (concurrent)...
+[1;34m[sandswap][0m   eino-A: DNS binpack resolved sandfs-67f1f669.sandfs.sandswap.local -> 127.0.0.1
+[1;34m[sandswap][0m   eino-B: DNS binpack resolved sandfs-a5fe788d.sandfs.sandswap.local -> 127.0.0.1
+[1;34m[sandswap][0m [10/10] Verifying binpack concentration...
+  eino-A DNS -> 127.0.0.1 ; exec marker present=1 ; owner=exec1
+  eino-B DNS -> 127.0.0.1 ; exec marker present=1 ; owner=exec1
+  [PASS] eino-A: DNS binpack resolved sandfs-A to exec1 (127.0.0.1)
+  [PASS] eino-B: DNS binpack resolved sandfs-B to exec1 (127.0.0.1)
+  [PASS] eino-A: exec succeeded on its gateway (marker in log)
+  [PASS] eino-B: exec succeeded on its gateway (marker in log)
+  [PASS] binpack: sandfs-A owned by exec1
+  [PASS] binpack: sandfs-B owned by exec1
+  [PASS] binpack: BOTH eino instances concentrated on ONE gateway (exec1)
+
+[1;34m[sandswap][0m ================================================================
+[1;34m[sandswap][0m   BINPACK E2E PASSED: 2 eino instances concentrated on exec1
+[1;34m[sandswap][0m   (DNS binpack + ownership both on one gateway)
+[1;34m[sandswap][0m ================================================================
+[1;34m[sandswap][0m cleanup...
+  killed leftover pid 2844159 (unit-cgroup)
+  killed leftover pid 2843821 (unit-cgroup)
+  killed leftover pid 2844092 (unit-cgroup)
+  killed leftover pid 2843889 (unit-cgroup)
+  killed leftover pid 2844050 (unit-cgroup)
+  killed leftover pid 2844144 (unit-cgroup)
+[1;34m[sandswap][0m cleanup done

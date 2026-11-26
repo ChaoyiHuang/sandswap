@@ -1,0 +1,85 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ VM Crash Recovery E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2611254)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2611288)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 2, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 2 CLEAN VM(s)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+{"sandfs_id": "sandfs-e24b7ea5", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-ff726896", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-y56mbad4v2tfuiledvbppdqrlu"}
+[0;32m[✓][0m agent=agent-ff726896 sandfs=sandfs-e24b7ea5
+
+[0;32m═══ VmmCrashDetect: sandvmm process crash -> self-heal ═══[0m
+[0;32m[✓][0m exec works before crash
+[0;32m[✓][0m VM logs present before crash: console.log + serial.log in /run/sandswap/vm/pool-small-0
+    Killing sandvmm pid 2611461 (SIGKILL)...
+[0;32m[✓][0m sandlot log shows crash handling
+[0;32m[✓][0m pool self-healed after VMM crash in 90s (victim 2611461 replaced by: 2611503 2612369)
+[0;32m[✓][0m crash teardown removed the victim sandbox dir (serial+console logs gone): /run/sandswap/vm/pool-small-0
+[0;32m[✓][0m replacement VM has its own console.log (2 replacement log(s))
+[0;32m[✓][0m exec works after VMM crash + replacement
+
+[0;32m═══ WardenHangSelfheal: frozen VM (SIGSTOP) -> probe teardown -> self-heal ═══[0m
+    Freezing sandvmm pid 2611503 (SIGSTOP — warden goes silent, VMM API dead)...
+[0;32m[✓][0m probe loop declared the frozen VM hung (log evidence)
+[0;32m[✓][0m frozen VM torn down + pool self-healed in 59s (victim 2611503 replaced by: 2612369 2614611)
+[0;32m[✓][0m exec works after warden-hang self-heal
+
+[0;32m═══ RecycleCleanup: scale-down destroys the sandvmm PROCESS ═══[0m
+[0;32m[→][0m Restarting sandlot with pool small:1 (was small:2) — scale-down must destroy one VM
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2615067)
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+[0;32m[✓][0m scale-down destroyed the excess sandvmm process (2 → 1)
+[0;32m[✓][0m no stale state residue after scale-down (state.json count = 1)
+[0;32m[✓][0m destroy removed the excess VM's logs (1 console.log + 1 serial.log remain)
+
+[0;32m═══ OrphanSweep: orphan sandvmm sweep on restart ═══[0m
+[0;32m[→][0m Simulating lost-state orphan: stop sandlot, drop one state.json...
+    orphan candidate: pid=2614611 sock=/run/sandswap/vm/pool-small-3/sandvmm.sock (state.json removed)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2615236)
+    Waiting for sandlot pool pre-creation (target: 2, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 2 CLEAN VM(s)
+[0;32m[✓][0m orphan sandvmm pid 2614611 was swept (killed) on startup
+[0;32m[✓][0m log confirms orphan cleanup (2614611)
+[1;33m[!][0m sandbox dir still present: /run/sandswap/vm/pool-small-3 (may be re-created for new VM)
+[0;32m[✓][0m exec works after orphan sweep
+
+[0;32m═══ Crash Recovery Summary ═══[0m
+  PASS: 16
+  FAIL: 0
+[OK] VM Crash Recovery E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

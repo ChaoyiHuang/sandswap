@@ -1,0 +1,61 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Multi-instance orphan sweep safety E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2617742)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2617776)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 2, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 2 CLEAN VM(s)
+
+[0;32m═══ Role lock: one sandlot per host ═══[0m
+[0;31m[✗][0m role-lock: second instance refused without the hatch — probe still running, lock NOT enforced
+[0;31m[✗][0m role-lock: duplicate node_id refused even with the hatch — probe still running, lock NOT enforced
+[0;32m[✓][0m role-lock: -allow-colocated-instances admits a DISTINCT node id (simulation hatch works)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+{"sandfs_id": "sandfs-cd82b9b9", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-9e002bd1", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-3hl47rqx34cc34mbet3saanp3a"}
+[0;32m[✓][0m agent=agent-9e002bd1 sandfs=sandfs-cd82b9b9
+[0;32m[✓][0m instance A exec works before instance B starts
+    instance A VM pids: 2618060 2618080
+
+[0;32m═══ Start instance B (same host, own sandbox root + CID range) ═══[0m
+[0;32m[✓][0m instance B config written to /tmp/sandswap-logs/sandlot-ib.yaml
+[0;32m[✓][0m instance B starting (pid 2618567)
+[0;32m[✓][0m instance B bootstrapped its own VM (pid 2618575) with A's fleet untouched
+[0;32m[✓][0m instance B's node stream is accepted and visible in /stats (per-node CN matches the effective id)
+
+[0;32m═══ Instance A fleet survival ═══[0m
+[0;32m[✓][0m all 2 instance-A sandvmm survived instance B's startup sweep
+[0;32m[✓][0m instance B log shows foreign sandvmm skipped (scope evidence)
+[0;32m[✓][0m instance A exec still works after instance B startup
+[FAIL] multi-instance-orphan-safety E2E FAILED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 4 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

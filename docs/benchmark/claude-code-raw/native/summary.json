@@ -1,0 +1,75 @@
+{
+  "original_source": "1e5cf6e95e6be8a37dc831f8e8a52e3ecfea265c",
+  "command": "bash run-round.sh",
+  "fast": false,
+  "trees": {
+    "e2e": {
+      "report": "full-matrix/e2e/script-matrix-e2e-20261126T074912Z.json",
+      "counts": {
+        "FAIL": 2,
+        "PASS": 67
+      },
+      "rows": 69,
+      "non_pass_rows": {
+        "e2e/multi-instance-orphan-safety.sh": {
+          "artifacts": "1a650372251c66e4",
+          "at": "2026-11-26T07:14:30Z",
+          "boot_id": "6ab23126-f8e3-4a02-8990-fad0d34b5c5e",
+          "class": "A",
+          "closure": "79d2360edad48c22",
+          "finding_id": "",
+          "head": "1e5cf6e95e6be8a37dc831f8e8a52e3ecfea265c",
+          "log": "/var/tmp/r3-matrix/e2e/results/logs/e2e_multi-instance-orphan-safety.log",
+          "rc": 1,
+          "reason": "rc=1",
+          "seconds": 11,
+          "source": "matrix",
+          "verdict": "FAIL"
+        },
+        "e2e/seccomp.sh": {
+          "artifacts": "1a650372251c66e4",
+          "at": "2026-11-26T07:15:08Z",
+          "boot_id": "6ab23126-f8e3-4a02-8990-fad0d34b5c5e",
+          "class": "A",
+          "closure": "d8cb8f88d49ee805",
+          "finding_id": "",
+          "head": "1e5cf6e95e6be8a37dc831f8e8a52e3ecfea265c",
+          "log": "/var/tmp/r3-matrix/e2e/results/logs/e2e_seccomp.log",
+          "rc": 1,
+          "reason": "rc=1",
+          "seconds": 9,
+          "source": "matrix",
+          "verdict": "FAIL"
+        }
+      }
+    },
+    "deploy": {
+      "report": "full-matrix/deploy/script-matrix-deploy-20261126T082122Z.json",
+      "counts": {
+        "BLOCKED-PRODUCT": 1,
+        "PASS": 35
+      },
+      "rows": 36,
+      "non_pass_rows": {
+        "deploy/k8s/k8s-host-setup.sh": {
+          "artifacts": "1a650372251c66e4",
+          "at": "2026-11-26T07:56:19Z",
+          "boot_id": "6ab23126-f8e3-4a02-8990-fad0d34b5c5e",
+          "class": "C",
+          "closure": "66da593821614e4a",
+          "finding_id": "",
+          "head": "1e5cf6e95e6be8a37dc831f8e8a52e3ecfea265c",
+          "log": "/var/tmp/r3-matrix/deploy/results/logs/deploy_k8s_k8s-host-setup.log",
+          "rc": 1,
+          "reason": "expected-refusal: boxout uid pin: host sandlot uid=985 != 65536 (combined dev host; k8s legs unaffected)",
+          "seconds": 0,
+          "source": "matrix",
+          "verdict": "BLOCKED-PRODUCT"
+        }
+      }
+    }
+  },
+  "original_round_exit": 1,
+  "targeted_exit": 0,
+  "targeted_invocation": "commit=6126eb89787ba84a9162ee452c76e78d862fa683\nstart=2026-11-26T08:21:25Z\ncommands=bash e2e/run-matrix.sh --only e2e/multi-instance-orphan-safety.sh --force; bash e2e/run-matrix.sh --only e2e/seccomp.sh --force\nend=2026-11-26T08:21:56Z\n"
+}

@@ -1,0 +1,18 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+  [flags] flags: 173 registered flags checked against 3 config pages
+  [keys] keys: YAML key paths checked against the two config pages
+  [routes] routes: 36 registered routes checked
+  [errors] errors: 28 emitted error codes checked
+  [env] env: 21 code-read env vars checked
+  [mcp] mcp: 12 tool names checked
+  [metrics] metrics: 27 metric names checked
+  [terms] terms: 9 deny-list rules over the docs tree
+
+docs-truth: clean (8 checks, both directions)
+[0;32m[✓][0m code<->docs truth checks green

@@ -1,0 +1,59 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Re-adopt restart ID uniqueness E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2616255)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2616289)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+{"sandfs_id": "sandfs-9caa37b6", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-195ef657", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-akzct5k6kzcvxdeidq2eg3g2wu"}
+[0;32m[✓][0m agent=agent-195ef657 sandfs=sandfs-9caa37b6
+[0;32m[✓][0m exec works before restart
+
+[0;32m═══ Create survivor seq hole (delete pool-small-1 state.json) ═══[0m
+    deleted /run/sandswap-state/default/pool-small-1/state.json (pool-small-1's sandvmm keeps running → orphan-dir cleanup)
+
+[0;32m═══ Restart sandlot (re-adopt {0,2}, pre-create 1) ═══[0m
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2616746)
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m exactly 3 VMs after restart (enumerated=3, host sandvmm=3) — no ID collision, no leaked process
+[0;32m[✓][0m all VM IDs unique
+[0;32m[✓][0m duplicate-ID guard never fired
+[0;32m[✓][0m no pre-create ID collides with any re-adopted survivor
+[0;32m[✓][0m re-adopted exactly 2 survivors (seq hole honored)
+[0;32m[✓][0m exec works after restart (survivors re-adopted CLEAN before hello)
+[OK] readopt-restart-id-unique E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 8 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

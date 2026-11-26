@@ -1,0 +1,49 @@
+{
+  "at_utc": "2026-11-26T08:23:39.474299+00:00",
+  "docker_config_restored": true,
+  "temporary_docker_proxy_exists": false,
+  "resolv_symlink": "../run/systemd/resolve/stub-resolv.conf",
+  "ephemeral_ports": {
+    "exit_code": 0,
+    "stdout": "10000\t19999",
+    "stderr": ""
+  },
+  "temporary_port_override_exists": false,
+  "active_test_units": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "vsockguard_pin_exists": false,
+  "test_bridge": {
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "Device \"br-sandswap\" does not exist."
+  },
+  "test_network_table": {
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "Error: No such file or directory\nlist table inet sandswap\n                ^^^^^^^^"
+  },
+  "nft_tables": {
+    "exit_code": 0,
+    "stdout": "table ip mangle\ntable ip raw\ntable ip filter\ntable ip nat\ntable ip6 mangle\ntable ip6 filter\ntable ip6 nat",
+    "stderr": ""
+  },
+  "k3s_binary_exists": false,
+  "task_proxy_listener": {
+    "exit_code": 0,
+    "stdout": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess",
+    "stderr": ""
+  },
+  "exit_codes": {
+    "round.exit": 1,
+    "targeted.exit": 0,
+    "targeted-multi-instance-orphan-safety.exit": 0,
+    "targeted-seccomp.exit": 0
+  },
+  "preexisting_service_count": 12,
+  "preexisting_services_active": 12,
+  "preexisting_service_names_omitted": true,
+  "source_sha256": "ef7612db412b88a3872ebf634ccf69ef15c5560cd5f7edfd81c3e697ca2b2c4b"
+}

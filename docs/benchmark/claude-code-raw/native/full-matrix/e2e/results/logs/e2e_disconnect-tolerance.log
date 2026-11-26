@@ -1,0 +1,117 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Stream Resilience E2E [FAST(10/5/12)] ═══[0m
+[0;32m[✓][0m Required tools: curl python3 iptables ss
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2653395)
+
+[0;32m═══ FlashDisconnect: blip (stream cut, recovery < T_tolerance) ═══[0m
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2653428)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+{"sandfs_id": "sandfs-2bf92f5a", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-b36de30e", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-2i7gcu2qo2dmaw7snkh46fygzm"}
+[0;32m[✓][0m FlashDisconnect: exec OK before flash-cut
+Netid Recv-Q Send-Q      Local Address:Port        Peer Address:Port Process
+tcp   0      121             127.0.0.1:56028          127.0.0.1:9998        
+tcp   0      0      [::ffff:127.0.0.1]:9998  [::ffff:127.0.0.1]:56034       
+[0;32m[✓][0m FlashDisconnect: sandlot entered TOLERATING after stream cut
+[0;32m[✓][0m FlashDisconnect: recovered in 0s of retrying (< T_tolerance=10s), same gateway reconnected
+[0;32m[✓][0m FlashDisconnect: no cleanup triggered by flash disconnect (tolerance-first)
+
+[0;32m═══ PartitionCleanup: cleanup after partition timeout (TOLERATING → CLEANING → DONE) ═══[0m
+[0;32m[✓][0m PartitionCleanup: marker written before partition
+    stream blocked at t=0 (iptables DROP :9998); T_tolerance=10s
+[0;32m[✓][0m PartitionCleanup: entered CLEANING after ToleranceSec expired
+[0;32m[✓][0m PartitionCleanup: cleanup completed within budget (entered DONE)
+    cleanup-state.json: {"phase":"","disconnect_time":"0001-01-01T00:00:00Z"}
+    stream unblocked; waiting ≤6+60s isolation & reconnect...
+[0;32m[✓][0m PartitionCleanup: reconnected after isolation; agent data persisted across cleanup
+
+[0;32m═══ WardenCountdown: warden countdown backstop (T_warden=12s) ═══[0m
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2653985)
+[0;32m[✓][0m WardenCountdown: bg exec started (bg-1-0775f47d5c8b149a), mount+lease held open
+[0;32m[✓][0m WardenCountdown: bg exec running (cgroup live => warden 'mounted' true)
+    Reverse invariant: heartbeats held for 16s (> T_warden=12s); asserting bg exec still running...
+[0;32m[✓][0m WardenCountdown: heartbeat reset keeps warden alive beyond T_warden (bg exec still running after 16s > 12s)
+    WardenCountdown: target VM log=/run/sandswap/vm/pool-small-1/console.log sandvmm pid=2653926
+e2e/disconnect-tolerance.sh: line 402: 2653985 Killed                  ss_service_exec sandlot -- "$sandlot_bin" -gateway-addr "localhost$STREAM_ADDR" -node-id "${TC_NODE_ID:-test-node-1}" -kernel "${TC_KERNEL:-$DEPLOY_DIR/vmlinux.bin}" -initramfs "${TC_INITRAMFS:-$DEPLOY_DIR/initramfs.cpio.gz}" -vmm-binary "${TC_VMM_BINARY:-$DEPLOY_DIR/sandvmm}" -volumes-dir "$VOL_ROOT" -allow-insecure-volumes -allow-missing-vsockguard -roles "${TC_SANDLOT_ROLES:-exec,prov}" -flat-templates "${TC_FLAT_TEMPLATES:-$DEPLOY_DIR/flat-templates}" -volume-seed-file "${TC_VOLUME_SEED_FILE:-$DEPLOY_DIR/volume-seed}" -default-vcpus "${TC_VCPUS:-2}" -default-memory "$VM_MEMORY_MB" -pool "$SANDLOT_POOL" -network-backend "$NETWORK_BACKEND" $([[ "$NETWORK_BACKEND" == "bridge" ]] && echo                 -network-bridge "$NETWORK_BRIDGE"                 -network-subnet "$NETWORK_SUBNET"                 -network-gateway "$NETWORK_GATEWAY"                 -network-dns "$NETWORK_DNS") -tls-cert "$(tc_node_cert "${TC_NODE_ID:-test-node-1}" "${TC_SANDLOT_ROLES:-exec,prov}").crt" -tls-key "$(tc_node_cert "${TC_NODE_ID:-test-node-1}" "${TC_SANDLOT_ROLES:-exec,prov}").key" -tls-ca "$CERT_DIR/ca.crt" ${TC_SANDLOT_EXTRA_FLAGS:-} "${extra_flags[@]}" > "$LOG_DIR/sandlot.log" 2>&1
+[0;32m[✓][0m WardenCountdown: sandvmm exited at +12s after POWER_OFF (window 6-42s, T_warden=12s)
+[0;32m[✓][0m WardenCountdown: console/serial logs confirm warden countdown fired before exit
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2654183)
+[0;32m[✓][0m WardenCountdown: system self-heals after warden backstop (pool rebuilt, exec OK)
+
+[0;32m═══ CountdownNoopOnCleanVM: unmounted CLEAN VM survives heartbeat silence > T_warden ═══[0m
+[0;32m[✓][0m CountdownNoopOnCleanVM: sync exec OK (will auto-unmount back to CLEAN)
+[0;32m[✓][0m CountdownNoopOnCleanVM: VM unmounted back to CLEAN (mount_active=false)
+    CountdownNoopOnCleanVM: CLEAN sandvmm pids=[2654312 ] (count=1)
+    CountdownNoopOnCleanVM: heartbeat silence 18s (> T_warden=12s); asserting CLEAN VMs still alive...
+e2e/disconnect-tolerance.sh: line 528: 2654183 Killed                  ss_service_exec sandlot -- "$sandlot_bin" -gateway-addr "localhost$STREAM_ADDR" -node-id "${TC_NODE_ID:-test-node-1}" -kernel "${TC_KERNEL:-$DEPLOY_DIR/vmlinux.bin}" -initramfs "${TC_INITRAMFS:-$DEPLOY_DIR/initramfs.cpio.gz}" -vmm-binary "${TC_VMM_BINARY:-$DEPLOY_DIR/sandvmm}" -volumes-dir "$VOL_ROOT" -allow-insecure-volumes -allow-missing-vsockguard -roles "${TC_SANDLOT_ROLES:-exec,prov}" -flat-templates "${TC_FLAT_TEMPLATES:-$DEPLOY_DIR/flat-templates}" -volume-seed-file "${TC_VOLUME_SEED_FILE:-$DEPLOY_DIR/volume-seed}" -default-vcpus "${TC_VCPUS:-2}" -default-memory "$VM_MEMORY_MB" -pool "$SANDLOT_POOL" -network-backend "$NETWORK_BACKEND" $([[ "$NETWORK_BACKEND" == "bridge" ]] && echo                 -network-bridge "$NETWORK_BRIDGE"                 -network-subnet "$NETWORK_SUBNET"                 -network-gateway "$NETWORK_GATEWAY"                 -network-dns "$NETWORK_DNS") -tls-cert "$(tc_node_cert "${TC_NODE_ID:-test-node-1}" "${TC_SANDLOT_ROLES:-exec,prov}").crt" -tls-key "$(tc_node_cert "${TC_NODE_ID:-test-node-1}" "${TC_SANDLOT_ROLES:-exec,prov}").key" -tls-ca "$CERT_DIR/ca.crt" ${TC_SANDLOT_EXTRA_FLAGS:-} "${extra_flags[@]}" > "$LOG_DIR/sandlot.log" 2>&1
+[0;32m[✓][0m CountdownNoopOnCleanVM: all 1/1 CLEAN VMs still alive after 18s of heartbeat silence (> T_warden=12s)
+[0;32m[✓][0m CountdownNoopOnCleanVM: surviving VMs' console/serial logs show no new countdown traces (mount_active=false makes the countdown a no-op)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2654460)
+
+[0;32m═══ GatewayIPDNSEviction: TOLERATING dials the remembered IP ═══[0m
+[0;32m[✓][0m GatewayIPDNSEviction: sandlot connected (exec OK), preferredIP=127.0.0.1
+[0;32m[✓][0m GatewayIPDNSEviction: localhost no longer resolves to 127.0.0.1 (DNS eviction in effect)
+Netid Recv-Q Send-Q      Local Address:Port        Peer Address:Port Process
+tcp   0      120             127.0.0.1:42694          127.0.0.1:9998        
+tcp   0      0      [::ffff:127.0.0.1]:9998  [::ffff:127.0.0.1]:42708       
+[0;32m[✓][0m GatewayIPDNSEviction: entered TOLERATING after the stream was cut (localhost no longer resolves to 127.0.0.1)
+[0;32m[✓][0m GatewayIPDNSEviction: with preferredIP absent from the DNS answer, TOLERATING still dials the remembered IP 127.0.0.1 to reconnect
+[0;32m[✓][0m GatewayIPDNSEviction: no 'preferred gateway not in DNS' dial-refusal log (fix effective)
+[0;32m[✓][0m GatewayIPDNSEviction: did not enter CLEANING (dials the remembered IP and recovers within seconds; tolerance-first)
+
+[0;32m═══ SaturationDetect: disconnect detection under a full cmdSem is not delayed by long commands ═══[0m
+[0;32m[→][0m A: kill sandlot + sandvmm, rebuild with explicit flags (fresh VM, no warden-max-exec clamp)...
+[1;33m[!][0m A: sandvmm did not exit within 15s; escalating to SIGKILL
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2655950)
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m A: sandlot cmdline self-check (-max-concurrent-commands 2, no warden-max-exec clamp)
+[0;32m[✓][0m A: all 3 pool VMs relaunched without the 5s clamp (3 launch lines with warden_countdown_sec=300)
+[0;32m[✓][0m B: exec works after the rate-limited restart (including the settle retry)
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m B: the three placeholder commands hang simultaneously — 2 slots held + the 3rd parked; the cmdSem-parking premise holds
+    C: gateway SIGKILL at t=0 (deterministic EOF cut)
+[0;32m[✓][0m C: under full load (2/2 slots + the 3rd parked), entered TOLERATING within 258ms (< 15s; the old blocking implementation waited for sleep-60 to end ≈ 50s+ after the cut)
+
+[0;32m═══ Stream Resilience Summary [FAST(10/5/12)] ═══[0m
+  PASS: 29
+  FAIL: 0
+[OK] Stream Resilience E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

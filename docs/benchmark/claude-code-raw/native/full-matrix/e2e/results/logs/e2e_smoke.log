@@ -1,0 +1,154 @@
+
+[0;32m═══ Phase 0: Pre-flight Checks ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3 python3
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Deploy ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+
+[0;32m═══ Phase 2: Start Gateway (gRPC stream + HTTP) ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2590903)
+
+[0;32m═══ Phase 3: Start Sandlot (Real KVM) ═══[0m
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2590951)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+    Pool ready: {"gateways":[{"gateway_id":"single-test-host","healthy":true,"gateway_url":"","stream_addr":"","node_count":1,"clean_vms":3,"total_vms":3,"agg_duty_long":0,"self_cpu_pct":0,"self_mem_pct":0,"self_inflight":0,"self_pressured":false,"stale_sec":0,"nodes":[{"node_id":"test-node-1","duty_long":0,"duty_short":0,"duty_daily":0,"duty_var":0,"host_cpu_pct":0,"host_mem_avail_mb":0,"active_sandfs":0,"clean_vms":3,"total_vms":3,"peak_concurrent_execs":0,"slot_wait_ms":0,"slot_wait_events":0,"recycle_triggers":0,"stranded_reservations_mb":0,"stranded_cids":0}]}],"totals":{"clean_vms":3,"total_vms":3,"in_use_vms":0,"node_count":1,"gateway_count":1},"maintenance":{"refusing":false},"rotation":{"refusing":false},"prov_seeds":[{"node_id":"test-node-1","generation":"0d05378c","age_sec":0}],"egress_bindings":[{"node_id":"test-node-1","binding":"none"}]}
+[0;32m[✓][0m /metrics scrapeable and consistent with /stats (clean_vms=3)
+
+[0;32m═══ Phase 4: Create Agents ═══[0m
+[0;32m[→][0m Creating Agent A (writer)...
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m Agent A created: sandfs-505472a9
+    Vol: /var/lib/sandswap-e2e/volumes/sf-wdkb45aoc3dpegl2yioirs2ham
+[0;32m[→][0m Creating Agent B (isolated)...
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m Agent B created: sandfs-6cc39011
+
+[0;32m═══ Phase 4.5: Outbound Networking Check ═══[0m
+    Probing outbound HTTP from inside a tinyVM (busybox wget example.com)...
+[0;32m[✓][0m Outbound HTTP works — guest fetched example.com
+[0;32m[✓][0m No per-VM network daemon in this stack's process tree (dnsmasq/passt) — kernel NAT only
+
+[0;32m═══ Phase 5: Agent A — Shell File I/O (Real KVM) ═══[0m
+    Agent A: writing files into its sandbox volume (chroot /mnt/rootfs)...
+  write greeting.txt                       {'exit_code': 0, 'status': 'done', 'exec_duration_ns': 1909627, 'sandlot_duration_ns': 2233490, 'gateway_duration_ns': 2454560}
+  write marker.txt                         {'exit_code': 0, 'status': 'done', 'exec_duration_ns': 1328352, 'sandlot_duration_ns': 1456276, 'gateway_duration_ns': 1704968}
+  read greeting.txt                        hello-from-warden 
+  read marker.txt                          SANDSWAP_AGENT_A_1795676847 
+  append + count lines                     2 
+  loop write 5 lines                       5 
+  read back head                           line1 line2 
+[0;32m[✓][0m Agent A: greeting persisted
+[0;32m[✓][0m Agent A: marker persisted
+
+[0;32m═══ Phase 6: Agent B — Isolation Test ═══[0m
+    Agent B: verifying it CANNOT see Agent A's files (fresh volume)...
+  B write own file                         {'exit_code': 0, 'status': 'done', 'exec_duration_ns': 2166946, 'sandlot_duration_ns': 2591859, 'gateway_duration_ns': 2886097}
+  B read own file                          SANDSWAP_AGENT_B_1795676847 
+[0;32m[✓][0m Agent B: cannot read A's greeting
+[0;32m[✓][0m Agent B: cannot read A's marker
+[0;32m[✓][0m Agent B: cannot see A's loops file
+[0;32m[✓][0m Agent B: own marker correct
+
+[0;32m═══ Phase 7: Sticky Lease (function, via response header) ═══[0m
+    Testing sticky lease: 10 rapid same-agent calls (headers, not logs)...
+    Lease hit headers: 10 / 10 calls
+[0;32m[✓][0m Sticky lease works (X-Sandbox-Lease: hit on 10/10 rapid calls)
+
+[0;32m═══ Phase 8: Cross-Agent Switching (functional) ═══[0m
+    Exercising 10 A↔B switch rounds (persistence precondition)...
+[0;32m[✓][0m 20 cross-agent calls completed (10 A↔B rounds)
+
+[0;32m═══ Phase 9: Persistence Across Switches ═══[0m
+    After 10 A↔B switches, re-verifying Agent A data is intact...
+[0;32m[✓][0m Persistence: greeting intact
+[0;32m[✓][0m Persistence: marker intact
+[0;32m[✓][0m Persistence: loops file intact
+    Checking Agent B data after switches...
+[0;32m[✓][0m Persistence: Agent B own file intact
+
+[0;32m═══ Phase 10: Pool & System Status ═══[0m
+[0;32m[✓][0m console hygiene: zero per-mount warden::mount WARN lines across all mounts this run
+[0;32m[✓][0m busybox hot-bind source is read-only in every VM (3 boot lines, no fallback warns)
+[0;32m[✓][0m virtio-console: warden userspace is on hvc0 (console.log), not the UART
+[0;32m[✓][0m earlyprintk: serial.log present for 3 VM(s)
+[0;32m[✓][0m guest cmdline carries console=hvc0 earlyprintk=ttyS0 (host-side state)
+    Waiting for lease expiry and cleanup...
+    Pool final: {"gateways":[{"gateway_id":"single-test-host","healthy":true,"gateway_url":"","stream_addr":"","node_count":1,"clean_vms":3,"total_vms":3,"agg_duty_long":0,"self_cpu_pct":0,"self_mem_pct":0,"self_inflight":0,"self_pressured":false,"stale_sec":0,"nodes":[{"node_id":"test-node-1","duty_long":0,"duty_short":0,"duty_daily":0,"duty_var":0,"host_cpu_pct":0,"host_mem_avail_mb":0,"active_sandfs":0,"clean_vms":3,"total_vms":3,"peak_concurrent_execs":0,"slot_wait_ms":0,"slot_wait_events":0,"recycle_triggers":0,"stranded_reservations_mb":0,"stranded_cids":0}],"unmount_stats":[{"node_id":"test-node-1","mount_count":6,"unmount_count":6,"unmount_success":6,"unmount_fail":0,"under_5ms":6,"under_10ms":6,"top_slow":[{"sandfs_id":"sandfs-505472a9","gateway_ms":2.792,"sandlot_ms":2.487,"warden_ms":2.188,"command":"cat /etc/resolv.conf; echo ──route; ip route; echo ──dns; nslookup example.com 2>&1 | tail -3; echo ──wget; ...","reason":"lease-expiry","timestamp":"2026-11-26T07:07:27Z"},{"sandfs_id":"sandfs-505472a9","gateway_ms":2.461,"sandlot_ms":2.282,"warden_ms":1.92,"command":"echo warmup
+","reason":"lease-expiry","timestamp":"2026-11-26T07:07:28Z"},{"sandfs_id":"sandfs-6cc39011","gateway_ms":2.425,"sandlot_ms":2.272,"warden_ms":2.02,"command":"echo 'SANDSWAP_AGENT_B_1795676847' > /workspace/bonly.txt
+","reason":"lease-expiry","timestamp":"2026-11-26T07:07:28Z"},{"sandfs_id":"sandfs-505472a9","gateway_ms":2.27,"sandlot_ms":2.085,"warden_ms":1.845,"command":"echo hello-from-warden > /workspace/greeting.txt
+","reason":"lease-expiry","timestamp":"2026-11-26T07:07:28Z"},{"sandfs_id":"sandfs-6cc39011","gateway_ms":2.116,"sandlot_ms":1.936,"warden_ms":1.731,"command":"cat /workspace/bonly.txt
+","reason":"lease-expiry","timestamp":"2026-11-26T07:07:28Z"},{"sandfs_id":"sandfs-6cc39011","gateway_ms":1.917,"sandlot_ms":1.761,"warden_ms":1.56,"command":"echo b","reason":"lease-expiry","timestamp":"2026-11-26T07:07:28Z"}],"recent":{"n":6,"p50_ms":2.425,"p95_ms":2.792,"p99_ms":2.792,"max_ms":2.792},"recent_warden":{"n":6,"p50_ms":1.92,"p95_ms":2.188,"p99_ms":2.188,"max_ms":2.188},"lease_fire":{"total":6,"under_1ms":6,"under_2ms":6,"max_ms":0.881,"p50_ms":0.401,"p95_ms":0.881}}]}],"totals":{"clean_vms":3,"total_vms":3,"in_use_vms":0,"node_count":1,"gateway_count":1},"maintenance":{"refusing":false},"rotation":{"refusing":false},"prov_seeds":[{"node_id":"test-node-1","generation":"0d05378c","age_sec":16}],"egress_bindings":[{"node_id":"test-node-1","binding":"none"}]}
+    Health:    {"status":"ok"}
+[0;32m[✓][0m /stats per-node metrics present (stranded_*, slot_wait_*, recycle_triggers)
+    Sandlot errors/warnings: 39
+    Gateway errors: 0
+[0;32m[✓][0m No VMM crashes detected
+
+[0;32m═══ Results Summary ═══[0m
+
+  ┌──────────────────────────────────────────────────┐
+  │        Sandswap Smoke Test Results               │
+  ├──────────────────────────────────────────────────┤
+  │ Mode:        REAL KVM (kvm_intel   )            │
+  │ Gateway:     http://localhost:3001                 │
+  │ Volumes:     /var/lib/sandswap-e2e/volumes         │
+  ├──────────────────────────────────────────────────┤
+  │ Agent A: sandfs-505472a9                           │
+  │   shell file I/O: greeting, marker, loops       │
+  │ Agent B: sandfs-6cc39011                           │
+  │   isolated volume: own marker only              │
+  ├──────────────────────────────────────────────────┤
+  │ Sticky lease: 10/10 header hits                  │
+  ├──────────────────────────────────────────────────┤
+  │ Outbound:     VERIFIED (guest → internet)       │
+  │ Isolation:    VERIFIED                          │
+  │ Persistence:  VERIFIED                          │
+  ├──────────────────────────────────────────────────┤
+  │ Tests: 24 passed   0 failed                         │
+  └──────────────────────────────────────────────────┘
+
+[0;32m[→][0m Killing all sandswap processes after test completion...
+    [post-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [post-test] no sandswap processes running
+[0;32m[✓][0m All sandswap processes cleaned up — environment clean
+[0;32m[✓][0m All 24 tests passed
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

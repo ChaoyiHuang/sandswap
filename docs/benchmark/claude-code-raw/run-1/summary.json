@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "errors": [],
+  "tool_calls": [
+    "mcp__sandswap__list_sandfs",
+    "mcp__sandswap__execute",
+    "mcp__sandswap__file_read",
+    "mcp__sandswap__file_read",
+    "mcp__sandswap__file_write",
+    "mcp__sandswap__execute"
+  ],
+  "claude_result": {
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 42628,
+    "duration_api_ms": 41614,
+    "num_turns": 7,
+    "usage": {
+      "input_tokens": 8226,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 35456,
+      "output_tokens": 1009,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "glm-5.3-flash": {
+        "inputTokens": 8226,
+        "outputTokens": 1009,
+        "cacheReadInputTokens": 35456,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.084083,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000
+      }
+    },
+    "permission_denials": []
+  },
+  "wall_ms": 43957.098833,
+  "process_returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,217 @@
+    ss_prepare_shared_dir[/tmp/sandswap-flat-templates]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-flat-templates]: created root:sandlot 2770
+    ss_prepare_shared_dir[/tmp/sandswap-templates]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-templates]: created root:sandlot 2770
+
+[0;32m═══ Phase 0: Build & Pre-flight ═══[0m
+[0;32m[✓][0m Running as root
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[✓][0m Required tools: sqlite3 python3
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Prepare Versioned Local Templates ═══[0m
+[0;32m[→][0m Creating SQLite template (versioned: sqlite:v1)...
+[0;32m[✓][0m SQLite template ready: /tmp/sandswap-templates/sqlite/v1/
+[0;32m[→][0m Creating Python template (versioned: python:v1)...
+[0;32m[✓][0m Python template ready: /tmp/sandswap-templates/python/v1/
+
+  ┌──────────────────────────────────────────────────┐
+  │  Versioned Local Templates (distributed FS ready)│
+  │                                                  │
+  │  sqlite/v1/  ← busybox + sqlite3                │
+  │  python/v1/  ← busybox + python3                │
+  │                                                  │
+  │  Template refs: "sqlite:v1"  "python:v1"        │
+  │  Multi-host dedup via shared distributed FS      │
+  └──────────────────────────────────────────────────┘
+
+[0;32m═══ Phase 2: Deploy & Start ═══[0m
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (sticky-ms=100, read-only overlay + writable workspace/home mode)...
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2606973)
+[0;32m[✓][0m Gateway started (read-only overlay + writable workspace/home mode via -overlayfs-templates)
+  Registered templates: []
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2607011)
+[0;32m[✓][0m versioned template refs registered (scan complete)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+
+[0;32m═══ Phase 3: Create SandFS with Read-Only Overlay (versioned templates) ═══[0m
+[0;32m[→][0m Creating Agent A SandFS with template='sqlite:v1'...
+    mode not specified — resolved template 'sqlite:v1' to mode=overlay
+  Response: {"sandfs_id": "sandfs-136b96d7", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-daff6f44", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-2xramgsijtcqg3hwijwwl4vksa"}
+[0;32m[✓][0m Agent A created: sandfs-136b96d7 (template=sqlite:v1)
+[0;32m[✓][0m OverlayFS dirs confirmed: workspace/ home/
+[0;32m[✓][0m .template marker found
+[0;32m[→][0m Triggering cold execute to mount read-only overlay (lazy mount model)...
+
+[0;34m─── Cold execute to mount read-only overlay ───[0m
+  POST http://localhost:3001/agent/execute  Bearer [SANDBOX_KEY_REDACTED]...  Code: 20B
+[0;34m─── Response (33ms) ───[0m
+  Exit: 0  Status: done
+  │ overlay-mounted
+[0;32m[✓][0m Cold execute to mount read-only overlay
+{"stdout":"overlay-mounted\n","exit_code":0,"status":"done","exec_duration_ns":2841724,"sandlot_duration_ns":6976487,"gateway_duration_ns":7690863}
+[0;32m[✓][0m Read-only overlay mount active after cold execute
+[0;32m[✓][0m Lowerdir → sqlite/v1: /tmp/sandswap-templates/sqlite/v1:/tmp/sandswap-templates/.empty-layer
+Pre-loaded 20 records
+[0;32m[✓][0m SQLite data prepared (20 records, in workspace/, 0664)
+[0;32m[✓][0m Data in workspace/
+[0;32m[✓][0m Template lowerdir clean
+[0;32m[→][0m Creating Agent B SandFS with template='python:v1'...
+    mode not specified — resolved template 'python:v1' to mode=overlay
+  Response: {"sandfs_id": "sandfs-a1c383b3", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-2a8277dc", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-are65u5ei3yd3ouha5mrpy4gyu"}
+[0;32m[✓][0m Agent B created: sandfs-a1c383b3 (template=python:v1)
+[0;32m[✓][0m Lowerdir → python/v1: /tmp/sandswap-templates/python/v1:/tmp/sandswap-templates/.empty-layer
+[0;32m[✓][0m Python data prepared
+[0;32m[→][0m Creating Agent C SandFS with template='sqlite:v1' (same template as A → dedup)...
+    mode not specified — resolved template 'sqlite:v1' to mode=overlay
+  Response: {"sandfs_id": "sandfs-b7b215ca", "api_key": "[SANDBOX_KEY_REDACTED]", "agent_id": "agent-95f51420", "rootfs_path": "/var/lib/sandswap-e2e/volumes/sf-5fkw24s7fytsmdjadgcw5d6xsu"}
+[0;32m[✓][0m Agent C created: sandfs-b7b215ca (template=sqlite:v1)
+[0;32m[✓][0m DEDUP CONFIRMED: Agent A and C share template: sqlite:v1 (same lowerdir)
+
+  ┌────────────────────────────────────────────────────────────┐
+  │  Read-Only Overlay + Writable Workspace/Home Multi-Agent   │
+  │  Agent A (SQLite)      template=sqlite:v1  ID: sandfs-136b96d7│
+  │  Agent B (Python)      template=python:v1  ID: sandfs-a1c383b3│
+  │  Agent C (SQLite-rdr)  template=sqlite:v1  ID: sandfs-b7b215ca│
+  │  A & C share lowerdir → dedup ✓                          │
+  │  Each agent has own workspace/ + home/ → isolation       │
+  └────────────────────────────────────────────────────────────┘
+
+[0;32m═══ Phase 4: Agent A — Cold Start + SQLite Queries ═══[0m
+    Read-only overlay: warden mounts rootfs/ (read-only merged view of lowerdir)
+    Writable paths: /workspace (writable bind mount), /home/agent (writable bind mount), /tmp (tmpfs)
+[0;32m[→][0m A1: Cold start — first query (triggers tinyVM boot + read-only overlay mount)...
+[0;32m[✓][0m A1: tinyVM kernel running (release: 7.2.8+)
+[0;32m[✓][0m A1: 20 pre-loaded records found
+[0;32m[→][0m A2: Warm query (sticky lease)...
+[0;32m[✓][0m A2: category data returned
+[0;32m[→][0m A3: Warm insert 5 records...
+[0;32m[✓][0m A3: 25 records after insert
+
+[0;32m═══ Phase 5: Agent B — Cross-Agent Switch + Python ═══[0m
+[0;32m[→][0m B1: Cross-agent switch to Python (set-fs + unmount + mount)...
+[0;32m[✓][0m B1: Python works
+[0;32m[✓][0m B1: Agent A data isolated
+[0;32m[→][0m B2: Warm Python analysis (10K data points)...
+[0;32m[✓][0m B2: analysis output
+[0;32m[→][0m B3: CSV processing...
+[0;32m[✓][0m B3: 10 CSV records
+
+[0;32m═══ Phase 6: Agent C — Same-Template Dedup Verification ═══[0m
+    Agent C uses the SAME template as A (sqlite:v1) — verifies workspace/home isolation
+    Both agents share the same read-only lowerdir, but have separate workspace/ directories
+[0;32m[→][0m C1: Agent C cannot see Agent A's inserted data...
+[0;32m[✓][0m Agent C read-only overlay mount active (lowerdir: /tmp/sandswap-templates/sqlite/v1:/tmp/sandswap-templates/.empty-layer)
+[0;32m[✓][0m C1: Agent C has no test.db (workspace isolation from Agent A)
+[0;32m[→][0m C2: Agent C can write its own data (independent workspace/)...
+[0;32m[✓][0m C2: Agent C writes successfully
+
+[0;32m═══ Phase 7: Agent A — Switch Back + Persistence Verify ═══[0m
+[0;32m[→][0m A4: Switch back to Agent A — data persistence after B and C ran...
+[0;32m[✓][0m A4: 25 records persist
+[0;32m[→][0m A5: Verify Agent C's data not visible to Agent A...
+[0;32m[✓][0m A5: Agent A/C isolated
+
+[0;32m═══ Phase 8: SaveAsTemplate — Promote flat SandFS to sqlite:v2 ═══[0m
+    SaveAsTemplate requires flat SandFS — creating a flat SandFS for this test.
+[0;32m[→][0m Creating flat SandFS for SaveAsTemplate test...
+[0;32m[✓][0m Flat SandFS created: sandfs-0dd440b4
+[0;32m[→][0m Writing data to flat SandFS...
+[0;32m[✓][0m Data written to flat SandFS
+[0;32m[→][0m Saving flat SandFS state as template sqlite:v2...
+  Response: {"template_ref":"sqlite:v2","path":"/tmp/sandswap-templates/layers/local-sqlite-v2","size_kb":2139}
+[0;32m[✓][0m Template sqlite:v2 saved at /tmp/sandswap-templates/layers/local-sqlite-v2 (2139 KB)
+[0;32m[✓][0m sqlite:v2 registered in template list
+
+[0;32m═══ Phase 9: Sticky Lease (functional sanity, client wall clock) ═══[0m
+    10 rapid same-agent calls must stay fast (sticky lease, not remount)...
+  Sticky lease: P50=1.1ms  (n=10, client wall clock, budget 2000ms)
+[0;32m[✓][0m Sticky lease fast
+
+[0;32m═══ Phase 10: Read-Only Overlay Isolation & Dedup Verification ═══[0m
+    Verifying read-only overlay + writable workspace/home isolation and dedup properties...
+[0;32m[→][0m Checking workspace isolation...
+[0;32m[✓][0m Agent A workspace/ has test.db
+[0;32m[✓][0m Agent A and C have separate workspace/ dirs (inode A=1594515 vs C=1594531)
+[0;32m[→][0m Checking lowerdir dedup...
+[0;32m[✓][0m Agents A & C share template/lowerdir (dedup): sqlite:v1
+[0;32m[✓][0m Agents A & B have different templates (different lowerdirs)
+[0;32m[✓][0m Agents A & C mounted the SAME read-only overlay lowerdir (real mount table): /tmp/sandswap-templates/sqlite/v1
+[0;32m[→][0m Checking template integrity (lowerdir not modified)...
+[0;32m[✓][0m sqlite:v1 template not modified by Agent A writes
+[0;32m[✓][0m python:v1 template not modified by Agent B writes
+[0;32m[→][0m Checking space efficiency...
+      sqlite:v1 template: 7772KB (shared by A & C)
+      python:v1 template: 52891KB (shared by B)
+      Agent A workspace/: 20KB
+      Agent B workspace/: 4KB
+      Agent C workspace/: 4KB
+      Total with read-only overlay mode: 60692KB
+      Without overlay (full copies):       68436KB
+      Space saved by dedup:               7743KB (11%)
+      space bookkeeping: overlay=62149531 copies=70079247 saved=7743KB (informational)
+[0;32m[→][0m Checking SaveAsTemplate result...
+[0;32m[✓][0m sqlite:v2 contains flat SandFS data (workspace/ captured)
+      sqlite:v2 template: 2211KB (includes Agent A's modifications)
+      Available to all hosts via distributed FS at /tmp/sandswap-templates/layers/local-sqlite-v2
+
+[0;32m═══ Results Summary ═══[0m
+
+  ┌──────────────────────────────────────────────────────────┐
+  │   Sandswap Read-Only Overlay Multi-Agent Test            │
+  ├──────────────────────────────────────────────────────────┤
+  │  Sandlot pool: medium:1   (forced VM reuse)            │
+  │                                                          │
+  │  Stack tested:                                           │
+  │    Gateway → gRPC → Sandlot → sandvmm → warden          │
+  │                     └─ set-fs (virtio-fs swap)           │
+  │                     └─ vsock (raw protocol)              │
+  │                                                          │
+  │  Read-only overlay + writable-path features tested:     │
+  │    ✓ Versioned templates (sqlite:v1, python:v1)          │
+  │    ✓ lowerdir = template (shared, read-only)             │
+  │    ✓ workspace/ = per-agent dir (writable)               │
+  │    ✓ home/ = per-agent dir (writable)                    │
+  │    ✓ Same-template dedup (A & C share sqlite:v1)         │
+  │    ✓ Cross-template isolation (A vs B)                   │
+  │    ✓ Same-template workspace isolation (A vs C)          │
+  │    ✓ Template not modified by agent writes               │
+  │    ✓ SaveAsTemplate (A → sqlite:v2, from workspace/)    │
+  │    ✓ Cold mount + warm exec + cross-agent switch         │
+  │    ✓ Data persistence after agent switch                 │
+  │    ✓ Distributed FS dedup ready (versioned layout)       │
+  │                                                          │
+  │  Sticky lease:  P50=1.1   ms (client wall clock)        │
+  │                                                          │
+  │  Tests: 38 passed   0 failed                              │
+  └──────────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m All tests passed
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

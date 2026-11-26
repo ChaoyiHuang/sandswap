@@ -1,0 +1,68 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Warden Log Isolation E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2619304)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2619340)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+
+[0;32m═══ FlatMode: flat mode bg-exec log isolation ═══[0m
+    flat sandfs volume dir: /var/lib/sandswap-e2e/volumes/sf-2eszudhlinsqwxbnwkgvv75esi
+[0;32m[✓][0m FlatMode: bg exec started (bg-1-a4fe8e85785765db)
+[0;32m[✓][0m FlatMode: bg exec log captured via status tail (warden-side log works)
+[0;32m[✓][0m FlatMode: volume dir exists (/var/lib/sandswap-e2e/volumes/sf-2eszudhlinsqwxbnwkgvv75esi) — leak assertions are meaningful
+[0;32m[✓][0m FlatMode: no .sandswap-bg-*.log leaked into flat SandFS volume
+[0;32m[✓][0m FlatMode: no warden-dbg.log in flat SandFS volume
+[0;32m[✓][0m FlatMode: old chrooted /tmp leak path absent
+[0;32m[✓][0m pool CLEAN again after bg-exec kill (1s)
+
+[0;32m═══ SharedVolumesRoot: no warden-dbg.log in shared volumes root ═══[0m
+[0;32m[✓][0m SharedVolumesRoot: no warden-dbg.log in shared volumes root after countdown activity
+[0;32m[✓][0m SharedVolumesRoot: flat SandFS volume still clean of bg logs after unmount
+
+[0;32m═══ OverlayMode: overlay mode bg-exec log isolation (best-effort) ═══[0m
+[1;33m[!][0m OverlayMode: no overlay template registered — SKIPPED (flat coverage from FlatMode/SharedVolumesRoot only)
+
+[0;32m═══ BGLogBound: flood bounded; large agent file untouched ═══[0m
+[0;32m[✓][0m BGLogBound: the tail keeps the LAST line after a yes-flood
+[0;32m[✓][0m BGLogBound: status tail bounded (8191 bytes, cap 8192 + envelope)
+[0;32m[✓][0m BGLogBound: VM still serves sync execs after the flood
+[0;32m[✓][0m BGLogBound: an 8 MiB agent file is uncut (no RLIMIT_FSIZE)
+
+[0;32m═══ Warden Log Isolation Summary ═══[0m
+  PASS: 12
+  FAIL: 0
+  SKIP: 1
+[OK] Warden Log Isolation E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

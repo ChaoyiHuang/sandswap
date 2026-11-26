@@ -1,0 +1,249 @@
+[1;34m[sandswap][0m Role auto-detected: all
+[1;34m[sandswap][0m Cluster Simple Deployment
+[1;34m[sandswap][0m   Gateway host: 127.0.0.1 (exec :3000/:9998 + human :3100, EtcdStore)
+[1;34m[sandswap][0m   etcd: co-located single-node on 127.0.0.1 (mTLS)
+[1;34m[sandswap][0m   Shared storage: nfs at /mnt/sandswap
+[1;34m[sandswap][0m   Role: all (dry-run 0)
+[1;34m[sandswap][0m   Stage: /opt/sandswap-pr38/src/output/baremetal-onegw
+[1;34m[sandswap][0m   Dry run: 0
+[1;34m[sandswap][0m [gateway] Installing on THIS host (127.0.0.1): etcd + exec :3000/:9998 + human :3100 + prov
+[1;34m[sandswap][0m Setting up host for role: gateway
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[1;34m[sandswap][0m Directories created: /etc/sandswap, /var/lib/sandswap, /run/sandswap
+[1;34m[sandswap][0m Sysctls installed: /etc/sysctl.d/99-sandswap.conf
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[1;34m[sandswap][0m udev vsock lockdown installed (vhost-vsock sandvmm 0600, vsock sandlot 0600)
+[1;34m[sandswap][0m var/lib/sandswap bind-remounted nosuid,nodev (fstab entry added — survives reboots)
+[1;34m[sandswap][0m tmpfiles.d entry installed (/run/sandswap → root:sandlot 3770, sticky)
+[1;34m[sandswap][0m Gateway host setup complete (no extra steps needed)
+[1;34m[sandswap][0m Host setup complete for role: gateway
+[1;34m[sandswap][0m Stream client cert verified: sandlot-sandlot-prov.crt CN='sandlot-prov' == node id
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-etcd.service → /etc/systemd/system/sandswap-etcd.service.
+[1;34m[sandswap][0m Systemd unit installed: sandswap-gateway@.service
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-vsock-retune.service → /etc/systemd/system/sandswap-vsock-retune.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-gateway@exec.service → /etc/systemd/system/sandswap-gateway@.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-gateway@human.service → /etc/systemd/system/sandswap-gateway@.service.
+[1;34m[sandswap][0m   colocated-instances admission applied to sandswap-sandlot-prov.service (single-host rehearsal)
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-sandlot-prov.service → /etc/systemd/system/sandswap-sandlot-prov.service.
+[1;34m[sandswap][0m [sandlot] Installing on THIS host: node=sandlot-1 pool=small:2 subnet=10.188.0.0/24
+[1;34m[sandswap][0m Setting up host for role: sandlot
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[1;34m[sandswap][0m Directories created: /etc/sandswap, /var/lib/sandswap, /run/sandswap
+[1;34m[sandswap][0m Sysctls installed: /etc/sysctl.d/99-sandswap.conf
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[1;34m[sandswap][0m udev vsock lockdown installed (vhost-vsock sandvmm 0600, vsock sandlot 0600)
+[1;34m[sandswap][0m var/lib/sandswap already nosuid (bind or dedicated fs)
+[1;34m[sandswap][0m tmpfiles.d entry installed (/run/sandswap → root:sandlot 3770, sticky)
+[1;34m[sandswap][0m KVM available: /dev/kvm
+[1;34m[sandswap][0m vhost_vsock module loaded (persistent via /etc/modules-load.d/)
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/24)
+  subnet : 10.188.0.0/24
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/24, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/24 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/24 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/24)
+done. VMs on 10.188.0.0/24 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap
+[1;34m[sandswap][0m Bridge + NAT ready: br-sandswap (10.188.0.0/24, gw=10.188.0.1)
+[1;34m[sandswap][0m Network persistence unit enabled (bridge + NAT re-created at boot)
+[1;34m[sandswap][0m vsock re-tune unit enabled (device ownership repaired at boot)
+[1;34m[sandswap][0m vsockguard attest helper installed
+Attaching vsockguard (allowed uid=985)...
+vsockguard: attached (allowed_uid=985); pins:
+  /sys/fs/bpf/vsockguard/prog
+  /sys/fs/bpf/vsockguard/link
+  /sys/fs/bpf/vsockguard/allowed_uid
+vsockguard attestation written: /run/sandswap/vsockguard.allowed_uid (allowed_uid=985)
+[1;34m[sandswap][0m vsockguard BPF attached (UID=985, sandlot)
+[1;34m[sandswap][0m udev rules installed (tun → 0660 root:sandlot; kvm/vhost-vsock via kvm group)
+[1;34m[sandswap][0m Host setup complete for role: sandlot
+[1;34m[sandswap][0m Guest TCB installed: /usr/local/lib/sandswap/guest (root:root 0755, SHA256SUMS pinned)
+[1;34m[sandswap][0m Stream client cert verified: sandlot.crt CN='sandlot-1' == node id
+[1;34m[sandswap][0m   colocated-instances admission applied to sandswap-sandlot.service (single-host rehearsal)
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-sandlot.service → /etc/systemd/system/sandswap-sandlot.service.
+[1;34m[sandswap][0m [verify] Cluster verification (local)...
+active
+active
+active
+active
+{
+    "gateways": [
+        {
+            "gateway_id": "gw-exec-1",
+            "healthy": true,
+            "gateway_url": "https://127.0.0.1:3000",
+            "stream_addr": "127.0.0.1:9998",
+            "node_count": 1,
+            "clean_vms": 2,
+            "total_vms": 2,
+            "agg_duty_long": 0,
+            "self_cpu_pct": 0.00033590123270847114,
+            "self_mem_pct": 0,
+            "self_inflight": 0,
+            "self_pressured": false,
+            "last_healthy_ts": "2026-11-26T16:20:37+08:00",
+            "stale_sec": 2,
+            "nodes": [
+                {
+                    "node_id": "sandlot-1",
+                    "duty_long": 0,
+                    "duty_short": 0,
+                    "duty_daily": 0,
+                    "duty_var": 0,
+                    "host_cpu_pct": 0,
+                    "host_mem_avail_mb": 0,
+                    "active_sandfs": 0,
+                    "clean_vms": 2,
+                    "total_vms": 2,
+                    "peak_concurrent_execs": 0,
+                    "slot_wait_ms": 0,
+                    "slot_wait_events": 0,
+                    "recycle_triggers": 0,
+                    "stranded_reservations_mb": 0,
+                    "stranded_cids": 0
+                }
+            ]
+        },
+        {
+            "gateway_id": "human-test-host",
+            "healthy": true,
+            "gateway_url": "",
+            "stream_addr": "",
+            "node_count": 0,
+            "clean_vms": 0,
+            "total_vms": 0,
+            "agg_duty_long": 0,
+            "self_cpu_pct": 0,
+            "self_mem_pct": 0,
+            "self_inflight": 0,
+            "self_pressured": false,
+            "last_healthy_ts": "2026-11-26T16:20:37+08:00",
+            "stale_sec": 2
+        }
+    ],
+    "totals": {
+        "clean_vms": 2,
+        "total_vms": 2,
+        "in_use_vms": 0,
+        "node_count": 1,
+        "gateway_count": 2
+    },
+    "maintenance": {
+        "refusing": false
+    },
+    "rotation": {
+        "refusing": false
+    },
+    "prov_seeds": [
+        {
+            "node_id": "sandlot-prov",
+            "generation": "5f1b2a7e",
+            "age_sec": 6
+        }
+    ],
+    "egress_bindings": [
+        {
+            "node_id": "sandlot-prov",
+            "binding": "none"
+        }
+    ]
+}
+[1;34m[sandswap][0m   Provision plane ready (>=1 prov instance connected)
+[1;34m[sandswap][0m   Sandlot connected (node_count=1)
+[1;34m[sandswap][0m ============================================
+[1;34m[sandswap][0m   Small cluster deployment complete!  (role: all)
+[1;34m[sandswap][0m ============================================
+═══ Sandswap Bare-Metal Uninstall ═══
+  Host: test-host
+  Keep data: no
+
+[1/11] Systemd services
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+  ✓ Systemd services stopped
+[1b/11] Side-effect ledger replay
+  ✓ EPHEMERAL entries reversed (ledger retained as .done)
+[2/11] Processes
+  ✓ No leftover processes
+[3/11] vsockguard BPF
+vsockguard: detached; removed pins /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/allowed_uid
+  ✓ vsockguard detached
+[4/11] TAP devices + bridge
+  ✓ br-sandswap removed
+  ✓ Network cleanup done (0 TAP removed)
+[5/11] Overlay mounts
+  ✓ Unmounted 0 overlay(s) + shared storage
+[6/11] Config files
+  ✓ /etc/sandswap removed
+[7/11] Binaries
+  ✓ Binaries removed
+[8/11] Runtime state
+  ✓ /var/lib/sandswap removed
+[9/11] Systemd units
+  ✓ co-located etcd data removed (host etcd binary left in place)
+  ✓ Systemd units removed
+  ⚠ k8s-managed host detected: keeping the udev vsock rule + device modes (k8s-cleanup owns them)
+[10/11] udev rules + sysctl
+ ⚠ k8s-managed host: leaving /dev/vsock + /dev/net/tun modes as k8s set them 
+* Applying /etc/sysctl.d/10-console-messages.conf ...
+kernel.printk = 4 4 1 7
+* Applying /etc/sysctl.d/10-ipv6-privacy.conf ...
+net.ipv6.conf.all.use_tempaddr = 2
+net.ipv6.conf.default.use_tempaddr = 2
+* Applying /etc/sysctl.d/10-kernel-hardening.conf ...
+kernel.kptr_restrict = 1
+* Applying /etc/sysctl.d/10-magic-sysrq.conf ...
+kernel.sysrq = 176
+* Applying /etc/sysctl.d/10-network-security.conf ...
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.all.rp_filter = 2
+* Applying /etc/sysctl.d/10-ptrace.conf ...
+kernel.yama.ptrace_scope = 1
+* Applying /etc/sysctl.d/10-zeropage.conf ...
+vm.mmap_min_addr = 65536
+* Applying /usr/lib/sysctl.d/50-default.conf ...
+kernel.core_uses_pid = 1
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.default.promote_secondaries = 1
+net.ipv4.ping_group_range = 0 2147483647
+net.core.default_qdisc = fq_codel
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+fs.protected_regular = 1
+fs.protected_fifos = 1
+* Applying /usr/lib/sysctl.d/50-pid-max.conf ...
+kernel.pid_max = 4194304
+* Applying /usr/lib/sysctl.d/99-protect-links.conf ...
+fs.protected_fifos = 1
+fs.protected_hardlinks = 1
+fs.protected_regular = 2
+fs.protected_symlinks = 1
+* Applying /etc/sysctl.d/99-sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+* Applying /etc/sysctl.d/zz-sandswap-claude-ports.conf ...
+net.ipv4.ip_local_port_range = 32768 60999
+* Applying /etc/sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+  ✓ restored net.ipv4.ip_forward=0 (no other sysctl file sets it)
+  ✓ udev + sysctl + tmpfiles cleaned
+[11/11] Etcd data
+  ✓ Removed 0 etcd data dir(s)
+
+═══ Uninstall Complete ═══
+
+  Verification:
+    Remaining processes: 0
+    Port 3000/3001/3100/9998/9997 in use: 0
+    Remaining unit files / drop-in dirs: 0
+    Loaded sandswap slices: 0
+    Remaining installed-lib artifacts (guest TCB / runtime helpers): 0
+    Remaining sandswap mounts: 0
+
+  ✓ Environment is clean

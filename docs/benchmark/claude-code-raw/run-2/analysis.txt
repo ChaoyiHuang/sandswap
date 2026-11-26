@@ -1,0 +1,72 @@
+session: 3c2d7553-71e0-40a6-892b-07ac73a192d5.jsonl
+prompt : Complete this TASK.md using only sandswap MCP tools. # Sandbox coding
+exec floor on this sandbox (sh -c :, median of 30): 4.2 ms
+
+Table 1  the loop, in time order   (turn: 32.72 s, 6 LLM calls, 5 tool calls)
+--------------------------------------------------------------------
+call  LLM call / tool                                            time
+--------------------------------------------------------------------
+   1  call  Let me start with list_sandfs, then survey.        5.41 s
+            list_sandfs                                            223.0 ms
+   2  call  (no reasoning text)                                6.10 s
+            execute                                                384.0 ms
+                           cd /workspace
+                           git log --oneline
+                           echo ---
+                           ls -R calc tests
+                           echo ---
+                           python3 -m unittest discover -s tests -v 2>&1 | tail -15
+   3  call  (no reasoning text)                                2.37 s
+            file_read    core.py                                   140.0 ms
+   4  call  Bugs: add uses a - b instead of a + b. fib: fo     7.83 s
+            file_write   core.py                                   243.0 ms
+   5  call  (no reasoning text)                                2.98 s
+            execute                                                221.0 ms
+                           cd /workspace
+                           python3 -m unittest discover -s tests
+                           git add -A
+                           git -c user.email=agent@sandswap -c user.name=agent commit
+                           -qm "fix calc"
+                           git log --oneline
+   6  call  Done. Summary: 1. Survey (1 exec): 5 tests, 3      6.82 s
+--------------------------------------------------------------------
+      LLM (all calls)                                         31.50 s
+      tools (wall time; parallel calls counted once)           1.21 s
+      tools (sum of individual durations)                      1.21 s
+      turn total                                              32.72 s
+
+Table 2  where the LLM's time goes
+--------------------------------------------------------------------
+call   before first token  emitting blocks   of which thinking  what it decided
+--------------------------------------------------------------------
+   1               5.41 s           0.00 s              0.00 s  Let me start with list_sandfs, the
+   2               6.10 s           0.00 s              0.00 s  (no reasoning text)
+   3               2.37 s           0.00 s              0.00 s  (no reasoning text)
+   4               5.12 s           2.71 s              0.00 s  Bugs: add uses a - b instead of a 
+   5               2.98 s           0.00 s              0.00 s  (no reasoning text)
+   6               6.82 s           0.00 s              0.00 s  Done. Summary: 1. Survey (1 exec):
+--------------------------------------------------------------------
+                  28.79 s           2.71 s              0.00 s
+
+  before first token  (includes the initial prompt wait)             28.79 s   88.0%
+  emitting blocks     (thinking + text + tool_use reach the client)    2.71 s    8.3%
+  tools               (wall time, including parallel calls once)      1.21 s    3.7%
+  sum                                                                      32.72 s  100.0%
+
+Table 3  tool execution, by layer
+--------------------------------------------------------------------
+call  tool            client  residual   gateway  dispatch  exec floor   command
+--------------------------------------------------------------------
+   1  list_sandfs    223.0ms                               (no command)          
+   2  execute        384.0ms   285.7ms     0.3ms     0.3ms       4.2ms    93.5ms
+   3  file_read      140.0ms                               (no command)          
+   4  file_write     243.0ms                               (no command)          
+   5  execute        221.0ms    65.3ms     0.4ms     0.3ms       4.2ms   150.8ms
+--------------------------------------------------------------------
+  Sandswap calls (5): 1.21 s (sum of client intervals)
+  Measured executes (2): estimated server overhead 0.01 s (4.8 ms per execute), commands 0.24 s
+  This estimate excludes file/list server overhead (not separately reported) and client residual.
+  residual = client interval minus gateway time: client scheduling/serialization + transport;
+  it is not a direct HTTP/TLS measurement (an SSH tunnel also contributes when used).
+  exec floor = median exec of `sh -c :` on this sandbox (4.2 ms): guest mount bookkeeping + fork/execve + shell start,
+  charged to Sandswap; 'command' = exec − floor.

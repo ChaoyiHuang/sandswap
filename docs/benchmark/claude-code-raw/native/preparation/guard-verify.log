@@ -1,0 +1,15 @@
+=== 1. check bpf LSM active ===
+  OK: lockdown,capability,landlock,yama,apparmor,bpf
+=== 2. using existing pin (allowed_uid=985); no attach/detach ===
+=== 3. build AF_VSOCK connect probe ===
+=== 4. probe as allowed uid (985) → expect NOT denied ===
+  allowed: connect_errno=19 name=OTHER denied=0
+=== 5. probe as nobody (uid 65534, denied) → expect EPERM/EACCES ===
+  nobody:  connect_errno=1 name=EPERM denied=1
+=== 5b. probe as sandvmm (the VMM identity, denied) → must NEVER reach the warden port ===
+  sandvmm: connect_errno=1 name=EPERM denied=1
+
+=== RESULT ===
+  (read-only check of the existing production pin; nothing was attached/detached)
+✅ PASS: allowed uid (985) NOT denied, non-allowed uids DENIED with EPERM.
+   vsockguard is enforcing.

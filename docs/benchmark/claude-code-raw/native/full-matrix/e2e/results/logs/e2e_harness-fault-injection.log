@@ -1,0 +1,35 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+
+[0;32m═══ FI-C: verdict primitives ═══[0m
+[0;32m[✓][0m eq ok
+[0;32m[✓][0m FI-C: green suite exits 0
+[0;31m[✗][0m eq broken (expected: 'world', got: 'hello')
+[0;32m[✓][0m FI-C: red suite exits non-zero (assert → FAIL_COUNT → exit 1)
+[0;32m[✓][0m FI-C: tc_skip_suite leaves the battery marker + exits 0
+
+[0;32m═══ FI-B: harness tooling ═══[0m
+[0;32m[✓][0m FI-B: check-docs-links went red on an injected broken link
+[0;32m[✓][0m FI-B: code<->docs truth checker clean
+[0;32m[✓][0m FI-B: check-docs-truth went red on an injected retired term
+[0;32m[✓][0m FI-B: warden path-safety scan clean
+[0;32m[✓][0m FI-B: warden path-safety scan went red on injected .exists()/fs::write/unanchored-mount signatures
+[0;32m[✓][0m FI-B: nil-wrap scan clean (no flipped-nil-check signatures)
+[0;32m[✓][0m FI-B: deploy-shape hardcode scan clean
+[0;32m[✓][0m FI-B: shape-hardcode scan went red on an injected literal
+[0;32m[✓][0m FI-B: hand-rolled-prelude scan clean
+[0;32m[✓][0m FI-B: hand-rolled-prelude scan went red on an injected seed mint
+
+[0;32m═══ FI-A: go suites go red under token sabotage ═══[0m
+[0;32m[✓][0m FI-A: handler Rule-1 matrix red under sabotage
+[0;32m[✓][0m FI-A: identity hot-wire pin red under sabotage
+[0;32m[✓][0m FI-A: warden INSTALL_CAPS pin red under sabotage
+
+[0;32m═══ Summary ═══[0m
+  pass=16 fail=0
+[0;32m[✓][0m Harness fault-injection: every gate proven able to fail

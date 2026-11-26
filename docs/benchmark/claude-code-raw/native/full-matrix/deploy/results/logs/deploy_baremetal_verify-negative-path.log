@@ -1,0 +1,18 @@
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m stack up, prov active
+
+[0;32m═══ N1: prov plane down → named 503 (not silent, not 500) ═══[0m
+[0;32m[✓][0m sandfs create = named 503 (storage plane): {"error":"storage plane unavailable: no provision instance connected — retry shortly or ch
+[0;32m[✓][0m health stays 200 with the plane down
+
+[0;32m═══ N2: plane restored → the retryable 503 told the truth ═══[0m
+[0;32m[✓][0m create succeeds after restore (sandfs-1a895381)
+
+[0;32m═══ N3: unknown template → loud refusal, no half-state ═══[0m
+[0;32m[✓][0m unknown template refused (422): {"error":"template not found","error_code":"TEMPLATE_NOT_FOUND"}
+
+[0;32m═══ N4: deleting sandfs → exec gate 409 ═══[0m
+[0;32m[✓][0m exec after delete completed = 404 (gate held past the drain; timing-accepted)
+
+[0;32m═══ Summary ═══[0m
+[0;32m[✓][0m negative-path gates: plane-down named 503 · restore truth · unknown-template loud · lifecycle 409

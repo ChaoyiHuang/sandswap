@@ -1,0 +1,21 @@
+[0;32m[✓][0m host tools present (battery tools + functional bpftool)
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m All artifacts fresh (newer than their sources)
+
+[0;32m═══ PHASE A (e2e) — battery (per-row) ═══[0m
+
+[0;32m═══ PHASE A (e2e) ═══[0m
+
+[0;32m═══ RUN [A] e2e/multi-instance-orphan-safety.sh (timeout 2700s) ═══[0m
+[0;32m[✓][0m e2e/multi-instance-orphan-safety.sh PASS (13s)
+
+[0;32m═══ PHASE C (e2e) ═══[0m
+    library row: e2e/common.sh — PASS (library — validated through e2e/smoke.sh)
+    library row: e2e/run-matrix.sh — PASS (library — validated through e2e/framework-unit.sh)
+    library row: e2e/pin.sh — PASS (library — validated through e2e/latency-benchmark-aiagent.sh)
+wrote /var/tmp/r3-matrix/e2e/script-matrix-e2e-20261126T082143Z.json
+wrote /var/tmp/r3-matrix/e2e/script-matrix-e2e-20261126T082143Z.md
+rows=69 {'PASS': 68, 'FAIL': 1}

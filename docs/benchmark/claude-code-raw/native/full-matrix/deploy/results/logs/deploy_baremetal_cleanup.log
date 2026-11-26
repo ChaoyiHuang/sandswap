@@ -1,0 +1,41 @@
+═══ Sandswap Bare-Metal Cleanup ═══
+  Host: test-host
+
+[0/9] Systemd services
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+[1/9] Processes
+  ✓ No sandswap processes running
+[1b/9] /etc/hosts pins
+  ✓ no /etc/hosts pins
+[2/9] vsockguard BPF
+  ✓ vsockguard not attached (already clean)
+[3/9] TAP devices + network bridge
+  ✓ No TAP devices to remove
+  ✓ br-sandswap not present
+  ✓ shm binding region removed
+  ✓ bpf binding pin removed
+[4/9] Overlay mounts
+  ✓ No overlay mounts to remove
+[5/9] Runtime state
+  ✓ /run/sandswap + /var/lib/sandswap + logs removed
+  ⚠ k8s-managed host detected: keeping the udev vsock rule + device modes (k8s-cleanup owns them)
+[6/9] Stale udev rules
+  ✓ No stale udev rules
+[7/9] Sysctl file
+  ✓ No sysctl file to remove
+[8/9] Etcd data
+  ✓ No etcd data to remove
+
+═══ Cleanup Complete ═══
+  Processes:       killed
+  vsockguard:      detached
+  TAP devices:     removed
+  br-sandswap:     removed
+  Overlay mounts:  unmounted
+  /run/sandswap:   removed
+  /var/lib/sandswap: removed
+  udev rules:      cleaned
+  sysctl file:     removed
+  etcd data:       removed
+

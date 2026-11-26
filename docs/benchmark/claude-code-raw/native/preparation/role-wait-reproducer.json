@@ -1,0 +1,71 @@
+{
+  "original": [
+    {
+      "delay_s": 0,
+      "expected": 0,
+      "measured": -1,
+      "parent_wait": 0,
+      "alive_at_return": "no",
+      "passed": false
+    },
+    {
+      "delay_s": 0,
+      "expected": 7,
+      "measured": -1,
+      "parent_wait": 7,
+      "alive_at_return": "no",
+      "passed": false
+    },
+    {
+      "delay_s": 0.05,
+      "expected": 7,
+      "measured": -1,
+      "parent_wait": 7,
+      "alive_at_return": "no",
+      "passed": false
+    },
+    {
+      "delay_s": 3,
+      "expected": -1,
+      "measured": -1,
+      "parent_wait": 143,
+      "alive_at_return": "yes",
+      "passed": true
+    }
+  ],
+  "fixed": [
+    {
+      "delay_s": 0,
+      "expected": 0,
+      "measured": 0,
+      "parent_wait": 0,
+      "alive_at_return": "no",
+      "passed": true
+    },
+    {
+      "delay_s": 0,
+      "expected": 7,
+      "measured": 7,
+      "parent_wait": 7,
+      "alive_at_return": "no",
+      "passed": true
+    },
+    {
+      "delay_s": 0.05,
+      "expected": 7,
+      "measured": 7,
+      "parent_wait": 7,
+      "alive_at_return": "no",
+      "passed": true
+    },
+    {
+      "delay_s": 3,
+      "expected": -1,
+      "measured": -1,
+      "parent_wait": 143,
+      "alive_at_return": "yes",
+      "passed": true
+    }
+  ],
+  "bash": "GNU bash, version 5.1.16(1)-release (x86_64-pc-linux-gnu)"
+}

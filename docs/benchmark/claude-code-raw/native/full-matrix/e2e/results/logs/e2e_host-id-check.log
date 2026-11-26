@@ -1,0 +1,12 @@
+═══ host-id-check: four-value uid/gid parser ═══
+  ✓ all four uid/gid values match
+  ✓ the expected identity is the configured one, not a hard-coded 987
+  ✓ a clean 4242 process is not accepted for a 987 sandvmm
+  ✓ saved-uid 0 is refused
+  ✓ saved-gid 0 is refused
+  ✓ fs-gid mismatch is refused
+  ✓ a truncated uid line is refused
+  ✓ a missing status file is refused
+  PASS: 8
+  FAIL: 0
+[OK] host-id-check passed

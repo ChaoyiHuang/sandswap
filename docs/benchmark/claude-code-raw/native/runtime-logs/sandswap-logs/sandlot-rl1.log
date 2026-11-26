@@ -1,0 +1,5 @@
+WARNING: -allow-insecure-volumes set — guest-planted setuid bits and device nodes on the volumes tree are LIVE (invariant 8 violated). Dev/test only.
+2026/11/26 15:14:23 vsockguard: running as root — pin check skipped (root is a trust root and the BPF hook admits root)
+2026/11/26 15:14:23 role-lock: this host already runs a sandlot instance (node "mi-a", roles [exec,prov]) — at most ONE sandlot process per host.
+  The blessed shapes: exec-only (compute host) | prov-only (provision host) | merged via -roles exec,prov (single-node).
+  Multi-process-per-host requires the explicit -allow-colocated-instances admission (the simulation scripts and the one-machine-etcd deploy's exec+prov pair use it; nothing else), with distinct node ids.

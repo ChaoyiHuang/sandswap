@@ -1,0 +1,56 @@
+[0;32m[==][0m === Sandswap Build ===
+[0;32m[==][0m Building PVH kernel...
+=== Kernel already current — skipping the custom rebuild ===
+Version:  7.2.8 (pinned: ch-release-v7.2.8-20261009)
+Features: CONFIG_IPV6 + CONFIG_INET_DIAG_DESTROY + CONFIG_VIRTIO_CONSOLE + CONFIG_EARLY_PRINTK present in the artifact
+Identity: config-rev kernel-7.2.8-minimize-userns-tun-kvm-debugfs-modules-ikconfig-netfilter-kmalloc-partition-kexec-ftrace-umip-legacyvsys-none-connector-audit-modifyldt-unixdiag-no-afalg-rng-hardening + patchset b9397604d18be382b719bbc9075de5d3168295abfadebb274155881eab72763c
+Force:    KERNEL_FORCE_BUILD=1 bash build.sh custom
+-rwxr-xr-x 1 root root 44M Nov 20 21:20 /opt/sandswap-pr38/src/output/vmlinux.bin
+[0;32m[==][0m Kernel → output/vmlinux.bin
+[0;32m[==][0m Building warden...
+[0;32m[==][0m Generated src/version.rs (version=0.0.0-dev, commit=baa4e8f2348ee975b647a0408b3cd221d7f4ffd9)
+[0;32m[==][0m Running unit tests (host target)...
+
+running 39 tests
+.......................................
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.62s
+
+
+running 304 tests
+...............................i..iiii..............ii................................. 87/304
+.....iii.........................i..i.......ii..ii.iii..i.............................. 174/304
+.......i...i.......i.............................................................i..... 261/304
+...........................................
+test result: ok. 280 passed; 0 failed; 24 ignored; 0 measured; 0 filtered out; finished in 8.68s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[0;32m[==][0m Running root-gated tests (#[ignore])...
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+
+
+running 24 tests
+.......... 10/24
+seccomp::tests::filter_denies_unshare_under_root --- FAILED
+.............
+failures:
+
+---- seccomp::tests::filter_denies_unshare_under_root stdout ----
+
+thread 'seccomp::tests::filter_denies_unshare_under_root' (2444703) panicked at src/seccomp.rs:1076:14:
+spawn control sh: Os { code: 10, kind: Uncategorized, message: "No child processes" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    seccomp::tests::filter_denies_unshare_under_root
+
+test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 280 filtered out; finished in 3.80s
+
+error: test failed, to rerun pass `--bin warden`

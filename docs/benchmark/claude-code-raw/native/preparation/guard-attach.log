@@ -1,0 +1,5 @@
+Attaching vsockguard (allowed uid=985)...
+libbpf: failed to find valid kernel BTF
+libbpf: Error loading vmlinux BTF: -3
+libbpf: failed to load object '/opt/sandswap-pr38/src/output/vsockguard.bpf.o'
+vsockguard: load failed: No such process

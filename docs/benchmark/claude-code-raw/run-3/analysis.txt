@@ -1,0 +1,74 @@
+session: 7329089b-7cde-498b-8564-1b691f898ec4.jsonl
+prompt : Complete this TASK.md using only sandswap MCP tools. # Sandbox coding
+exec floor on this sandbox (sh -c :, median of 30): 3.7 ms
+
+Table 1  the loop, in time order   (turn: 45.87 s, 6 LLM calls, 6 tool calls)
+--------------------------------------------------------------------
+call  LLM call / tool                                            time
+--------------------------------------------------------------------
+   1  call  I'll start by listing the SandFS instances and     5.30 s
+            list_sandfs                                            306.0 ms
+   2  call  Found the sandbox: sandfs-be075fe1. Now survey     4.21 s
+            execute                                                275.0 ms
+                           cd /workspace
+                           git log --oneline
+                           echo ---
+                           ls -R calc tests
+                           echo ---
+                           python3 -m unittest discover -s tests -v 2>&1 | tail -15
+   3  call  3 failures out of 5. Read core.py and the test     4.65 s
+            file_read    core.py                                   207.0 ms
+            file_read    test_calc.py                              274.0 ms
+   4  call  Bugs: 1. add returns a - b instead of a + b →     13.08 s
+            file_write   core.py                                   229.0 ms
+   5  call  Now re-run the suite and commit in one execute     6.33 s
+            execute                                                335.0 ms
+                           cd /workspace
+                           python3 -m unittest discover -s tests
+                           git add -A
+                           git -c user.email=agent@sandswap -c user.name=agent commit
+                           -qm "fix calc"
+                           git log --oneline
+   6  call  Done. All 5 tests pass and the fix is committe    10.87 s
+--------------------------------------------------------------------
+      LLM (all calls)                                         44.45 s
+      tools (wall time; parallel calls counted once)           1.42 s
+      tools (sum of individual durations)                      1.63 s
+      turn total                                              45.87 s
+
+Table 2  where the LLM's time goes
+--------------------------------------------------------------------
+call   before first token  emitting blocks   of which thinking  what it decided
+--------------------------------------------------------------------
+   1               5.30 s           0.00 s              0.00 s  I'll start by listing the SandFS i
+   2               2.66 s           1.55 s              0.00 s  Found the sandbox: sandfs-be075fe1
+   3               3.22 s           1.43 s              0.00 s  3 failures out of 5. Read core.py 
+   4              10.01 s           3.07 s              0.00 s  Bugs: 1. add returns a - b instead
+   5               5.41 s           0.93 s              0.00 s  Now re-run the suite and commit in
+   6              10.87 s           0.00 s              0.00 s  Done. All 5 tests pass and the fix
+--------------------------------------------------------------------
+                  37.47 s           6.98 s              0.00 s
+
+  before first token  (includes the initial prompt wait)             37.47 s   81.7%
+  emitting blocks     (thinking + text + tool_use reach the client)    6.98 s   15.2%
+  tools               (wall time, including parallel calls once)      1.42 s    3.1%
+  sum                                                                      45.87 s  100.0%
+
+Table 3  tool execution, by layer
+--------------------------------------------------------------------
+call  tool            client  residual   gateway  dispatch  exec floor   command
+--------------------------------------------------------------------
+   1  list_sandfs    306.0ms                               (no command)          
+   2  execute        275.0ms   184.5ms     0.3ms     0.3ms       3.7ms    86.1ms
+   3  file_read      207.0ms                               (no command)          
+   3  file_read      274.0ms                               (no command)          
+   4  file_write     229.0ms                               (no command)          
+   5  execute        335.0ms   216.9ms     0.2ms     0.3ms       3.7ms   113.8ms
+--------------------------------------------------------------------
+  Sandswap calls (6): 1.63 s (sum of client intervals)
+  Measured executes (2): estimated server overhead 0.01 s (4.3 ms per execute), commands 0.20 s
+  This estimate excludes file/list server overhead (not separately reported) and client residual.
+  residual = client interval minus gateway time: client scheduling/serialization + transport;
+  it is not a direct HTTP/TLS measurement (an SSH tunnel also contributes when used).
+  exec floor = median exec of `sh -c :` on this sandbox (3.7 ms): guest mount bookkeeping + fork/execve + shell start,
+  charged to Sandswap; 'command' = exec − floor.

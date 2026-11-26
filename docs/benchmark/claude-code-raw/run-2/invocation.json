@@ -1,0 +1,33 @@
+{
+  "claude_version": "2.1.77 (Claude Code)",
+  "platform": "macOS-26.3.1-arm64-arm-64bit",
+  "command": [
+    "claude",
+    "-p",
+    "--tools",
+    "",
+    "--allowedTools",
+    "mcp__sandswap",
+    "--permission-mode",
+    "dontAsk",
+    "--setting-sources",
+    "",
+    "--disable-slash-commands",
+    "--no-chrome",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "<client-checkout>/examples/claude-code/.mcp.json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--session-id",
+    "3c2d7553-71e0-40a6-892b-07ac73a192d5",
+    "--model",
+    "glm-5.3-flash"
+  ],
+  "session_id": "3c2d7553-71e0-40a6-892b-07ac73a192d5",
+  "model": "glm-5.3-flash",
+  "mcp_url": "https://localhost:34443/mcp",
+  "prompt_sha256": "e63ec0b7baa65583eac1fafd40527e57eb3cf49290d5957f69e4ab538901083d",
+  "started_utc": "2026-11-26T06:59:16Z"
+}

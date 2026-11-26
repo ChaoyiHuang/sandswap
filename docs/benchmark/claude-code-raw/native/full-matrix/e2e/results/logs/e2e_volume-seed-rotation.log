@@ -1,0 +1,113 @@
+
+[0;32m═══ Phase 0: Pre-flight ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3 python3
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Stack up (config-file mode: the seed lives in the file) ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap-e2e/sandlot-e2e.yaml
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2624215)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2624249)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m tenant created: sandfs-7e644f79 -> sf-ayukjcrbkaksk33ys6sb5yvhwa
+[0;32m[✓][0m guest mounted and wrote its marker (pre-rotation)
+[0;32m[✓][0m volume carries a signed identity stamp (generation: 0d05378c)
+
+[0;32m═══ Phase 1b: a planted stamp symlink is refused (host target untouched) ═══[0m
+[0;32m[✓][0m volume-stamp-read refuses a symlinked stamp
+[0;32m[✓][0m volume-stamp-write refuses a symlinked stamp
+[0;32m[✓][0m the symlink target is untouched
+
+[0;32m═══ Phase 2: maintenance ON (refuse service, do not restart) ═══[0m
+[0;32m[✓][0m /stats reports the refusal
+[0;32m[✓][0m agent traffic refused with 503
+[0;32m[✓][0m refusal carries error_code MAINTENANCE
+[0;32m[✓][0m /health still answers (a refused gateway is not a dead one)
+[0;32m[✓][0m same gateway process (no restart)
+
+[0;32m═══ Phase 3: drain, then stage the next seed generation (hot reload) ═══[0m
+[0;32m[✓][0m mounts drained (in_use_vms=0)
+[0;32m[✓][0m staged via the production tool: [rotate-seed] staged next generation: /var/lib/sandswap-e2e/volume-seed-next-20261126T071530Z-2624727
+[0;32m[✓][0m prov staged the next generation via config hot-reload (no restart)
+[0;32m[✓][0m adoption record shows the staged generation
+[0;31m[✗][0m failed to create sandfs for 'vsr-staged': {"error":"storage operation failed","error_code":"STORAGE_ERROR"}
+[0;32m[✓][0m creation refused while a rotation is staged
+[0;32m[✓][0m early promote refused while old-generation volumes remain
+[0;32m[✓][0m the refused promote left the staged key intact
+
+[0;32m═══ Phase 4: rotate (rename + record update + re-stamp), then promote ═══[0m
+[0;32m[✓][0m rotation run completed: 3 log lines
+[0;32m[✓][0m volume renamed to the staged generation (sf-h6kenps62if7d34mq3guye6bc4)
+[0;32m[✓][0m stamp still binds the directory to its sandfs (re-signed under the new generation)
+[0;32m[✓][0m record updated to the new path
+[0;32m[✓][0m promoted: the staged generation is now current
+[0;32m[✓][0m staged key cleared from the config
+[0;32m[✓][0m prov hot-reloaded the promotion (generation switched live)
+[0;32m[✓][0m adoption record shows no staging (the window closed)
+
+[0;32m═══ Phase 5: maintenance OFF — the same tenant, rotated underneath it ═══[0m
+[0;32m[✓][0m service resumed
+[0;32m[✓][0m the SAME sandfs still executes and its data survived the rotation
+[0;32m[✓][0m a new sandfs lands in the CURRENT generation (sf-yyjdk7vjqz7ibguf4pcdy77mry)
+
+[0;32m═══ Phase 6: second rotation — a new generation lands at a NEW path ═══[0m
+[0;32m[✓][0m second window: mounts drained (in_use_vms=0)
+[0;32m[✓][0m the second --stage succeeded: [rotate-seed] staged next generation: /var/lib/sandswap-e2e/volume-seed-next-20261126T071532Z-2624981
+[0;32m[✓][0m the second stage drew no tamper refusal
+[0;32m[✓][0m the second stage was ADOPTED by the running instance (creation frozen)
+[0;32m[✓][0m the second generation landed at a NEW path (volume-seed-next-20261126T071532Z-2624981)
+[0;32m[✓][0m second rotation run completed: action=run total=2 moved=2
+[0;32m[✓][0m the tenant volume was renamed onto the second generation (sf-wlvsozff3sqv6teppqefsfwkgi)
+[0;32m[✓][0m second promote: promoted AND adopted by the running instance (fingerprint 96182082)
+[0;32m[✓][0m the config now names the second staged file
+[0;32m[✓][0m the first generation's file still exists, byte-identical (never rewritten)
+[0;32m[✓][0m the pre-rotation generation's file survives both windows, byte-identical
+[0;32m[✓][0m service resumed after the second rotation
+[0;32m[✓][0m the same tenant still executes after the second rotation
+
+[0;32m═══ volume-seed-rotation Summary ═══[0m
+  PASS: 42
+  FAIL: 0
+[0;32m[✓][0m volume-seed-rotation PASSED (42 checks)
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

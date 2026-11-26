@@ -1,0 +1,12 @@
+alloc-sweep: core pool: 8 whole cores, 2 threads/core, slice=2 CPUs/VM
+alloc-sweep: peaks (core-equivalents): loadgen / gateway+human+etcd / sandlot+prov = 1,2,2
+    target=0.60 loadgen=1 gateway=2 sandlot=2 reserve=5 vm_cores=3 pool=3 host=- per_vm=- layout=loadgen:0-1;gateway:2-3,4-5;sandlot:6-7,8-9 valid=1
+    target=0.70 loadgen=1 gateway=2 sandlot=2 reserve=5 vm_cores=3 pool=3 host=- per_vm=- layout=loadgen:0-1;gateway:2-3,4-5;sandlot:6-7,8-9 valid=1
+    target=0.80 loadgen=1 gateway=2 sandlot=2 reserve=5 vm_cores=3 pool=3 host=- per_vm=- layout=loadgen:0-1;gateway:2-3,4-5;sandlot:6-7,8-9 valid=1
+
+best: target=0.60 loadgen=1 gateway=2 sandlot=2 reserve=5 vm_cores=3 pool=3 host=- per_vm=- layout=loadgen:0-1;gateway:2-3,4-5;sandlot:6-7,8-9 valid=1
+
+run it with (bare metal):
+  PIN_MODE=1 PIN_STACK_LAYOUT="loadgen:0-1;gateway:2-3,4-5;sandlot:6-7,8-9" PIN_RESERVE_CORES=5 \
+    POOL_SIZE=3 PIN_SLICE_CPUS=2 \
+    bash e2e/latency-benchmark-load.sh

@@ -1,0 +1,19 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[✓][0m Running as root
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+
+[0;32m═══ Negative: gateway stream without -stream-tls-ca must exit ═══[0m
+[0;32m[✓][0m startup refused without a client CA (exit 1)
+
+[0;32m═══ Positive: with -stream-tls-ca the gateway serves /health ═══[0m
+[0;32m[✓][0m gateway with a CA is up and serving /health
+
+[0;32m═══ Verdict ═══[0m
+[0;32m[✓][0m ALL 2 checks passed — the stream plane is mTLS-only

@@ -1,0 +1,134 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Warden Hostile Coverage E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2629453)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2629487)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+
+[0;32m═══ ExecTimeout: sync exec past its timeout is killed, partial output kept ═══[0m
+[0;32m[✓][0m ExecTimeout: status=timed_out
+[0;32m[✓][0m ExecTimeout: partial output preserved
+[0;32m[✓][0m ExecTimeout: no output past the kill point
+[0;32m[✓][0m ExecTimeout (VM alive after scenario, attempt 1)
+
+[0;32m═══ PipeDeadlock: >64KiB output completes with a real exit code ═══[0m
+[0;32m[✓][0m PipeDeadlock: 2MiB-output command completed (status=done)
+[0;32m[✓][0m PipeDeadlock: real exit code 0
+[0;32m[✓][0m PipeDeadlock: kept output is head+truncation marker (cap semantics)
+[0;32m[✓][0m PipeDeadlock: large output returned (1048575 bytes)
+[0;32m[✓][0m PipeDeadlock: pipeline side-effect reached (fully drained)
+[0;32m[✓][0m PipeDeadlock (VM alive after scenario, attempt 1)
+
+[0;32m═══ NonUtf8Output: binary stdout survives the chain ═══[0m
+[0;32m[✓][0m NonUtf8Output: status=done with binary stdout
+[0;32m[✓][0m NonUtf8Output: stdout field present in JSON
+[0;32m[✓][0m NonUtf8Output (VM alive after scenario, attempt 1)
+
+[0;32m═══ File16MBBoundary: single-op caps ═══[0m
+[0;32m[✓][0m File16MB: 15MiB write accepted
+[0;32m[✓][0m File16MB: read back full 15MiB (b64 len 20971520)
+[0;32m[✓][0m File16MB: over-cap write rejected
+[0;32m[✓][0m File16MB (VM alive after scenario, attempt 1)
+
+[0;32m═══ ForkSpawnStorm: 200 background processes cleared at switch ═══[0m
+[0;32m[✓][0m ForkStorm: bg spawner started
+[1;33m[!][0m   switch attempt 1: NO_AVAILABLE_SANDBOX — waiting for pool...
+[1;33m[!][0m   switch attempt 2: NO_AVAILABLE_SANDBOX — waiting for pool...
+[1;33m[!][0m   switch attempt 3: NO_AVAILABLE_SANDBOX — waiting for pool...
+[1;33m[!][0m   switch attempt 4: NO_AVAILABLE_SANDBOX — waiting for pool...
+[0;32m[✓][0m ForkStorm: agent switch under 200-process storm succeeded
+[0;32m[✓][0m ForkStorm: bg exec not running after switch (status=expired)
+[0;32m[✓][0m ForkStorm (VM alive after scenario, attempt 1)
+
+[0;32m═══ ProtocolHardening: malformed + hostile raw vsock frames ═══[0m
+    probing guest CID 3
+[0;32m[✓][0m KeyDelivery: session key absent from the guest command line
+[0;32m[✓][0m KeyDelivery: state.json carries the per-VM key for delivery
+[0;32m[✓][0m Protocol: memstats works (code=0)
+[0;32m[✓][0m Protocol: bad-version → versioned rejection frame (code=2 + range message)
+[0;32m[✓][0m Protocol: bad-magic → connection refused (eof)
+[0;32m[✓][0m Protocol: oversize → connection refused (eof)
+[0;32m[✓][0m Protocol: short-body → connection refused (eof)
+[0;32m[✓][0m Protocol: half-header → connection refused (eof)
+[0;32m[✓][0m Protocol: field-past-end → connection refused (eof)
+[0;32m[✓][0m Protocol: too-many-fields → connection refused (eof)
+[0;32m[✓][0m Protocol: unknown-op → transport error response
+[0;32m[✓][0m Protocol: hostile mount_point (/sys/fs/cgroup) refused
+[0;32m[✓][0m Protocol: hostile unmount target (/proc) refused
+[0;32m[✓][0m Protocol (VM alive after scenario, attempt 1)
+    DoS bounds: connection cap (16) + body budget (6×16MiB)
+[0;32m[✓][0m DoS: connection cap enforced (accepted 15 stalls, rejected #16)
+[0;32m[✓][0m DoS: gateway exec still served (existing pooled connections unaffected)
+[0;32m[✓][0m DoS: 6×16MiB stalled bodies all reserved (budget holds)
+[0;32m[✓][0m DoS: 7th 16MiB claim closed by the body budget
+[0;32m[✓][0m DoS: body budget released after connection close
+[0;32m[✓][0m DoS: legit 8MiB file write accepted through the budget
+[0;32m[✓][0m DoS: legit 8MiB round-trip intact (sha256 match)
+[0;32m[✓][0m DoS: normal exec recovered after DoS barrage
+[0;32m[✓][0m DoS-bounds (VM alive after scenario, attempt 1)
+[0;32m[✓][0m DoS: unauthenticated silent connections accepted then capped (20)
+[0;32m[✓][0m DoS: unauthenticated slots released by the first-frame timeout
+
+[0;32m═══ ProcIsolation: chrooted exec vs /proc/1 (dumpable gate) ═══[0m
+[0;32m[✓][0m ProcIsolation: /proc/1/mem open denied to chrooted exec (rc=1)
+[0;32m[✓][0m ProcIsolation: /proc/1/root traversal denied to chrooted exec (rc=1)
+[0;32m[✓][0m ProcIsolation: no warden fd obtainable via /proc/1/fd (visible=0, openable=0)
+[0;32m[✓][0m ProcIsolation (VM alive after scenario, attempt 1)
+
+[0;32m═══ InitProtection: agent signals cannot kill or stop PID 1 ═══[0m
+[0;32m[✓][0m InitProtection: PID-1 signal guard refuses kill/tkill with EPERM (exit 1)
+[0;32m[✓][0m InitProtection: warden survived kill -9/-TERM/-STOP from agent, same VM still serving
+[0;32m[✓][0m InitProtection (VM alive after scenario, attempt 1)
+
+[0;32m═══ VolumeIdentity: hostile mount-only in the switch window self-heals ═══[0m
+    agent A volume: /var/lib/sandswap-e2e/volumes/sf-nmpfdsfmdlywf4adb6ipsuc5xq
+[0;32m[✓][0m VolumeIdentity: A's volume untouched by B's switch exec
+[0;32m[✓][0m VolumeIdentity: B's exec landed in B's own volume (generation gate + belt)
+[0;32m[✓][0m VolumeIdentity (VM alive after scenario)
+
+[0;32m═══ StragglerSweep: setsid straggler cleared, VM reused (not destroyed) ═══[0m
+[0;32m[✓][0m StragglerSweep: same VM reused across switch with a live setsid straggler
+[0;32m[✓][0m StragglerSweep (VM alive after scenario, attempt 1)
+
+[0;32m═══ MemCap: sync-exec RLIMIT_AS is enforced (not just inherited) ═══[0m
+[0;32m[✓][0m MemCap: RLIMIT_AS visible in guest (164339302 bytes ≈ agent_mem_percent% of VM RAM)
+[0;32m[✓][0m MemCap: allocation past the cap refused (dd rc=1)
+[0;32m[✓][0m MemCap (VM alive after scenario, attempt 1)
+
+[0;32m═══ Warden Hostile Coverage Summary ═══[0m
+  PASS: 61
+  FAIL: 0
+[OK] Warden Hostile Coverage E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

@@ -1,0 +1,17 @@
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m stack up, generator present
+[0;32m[✓][0m baseline fingerprints recorded (etcd 91:17:8C:57:63:A…, stream 3A:FF:64:F6:6B:E…)
+
+[0;32m═══ Phase 2: regenerate + install + restart all units ═══[0m
+[0;32m[✓][0m new PKI generated (etcd E8:77:AA:F3:F8:9… ≠ baseline)
+[0;32m[✓][0m new material installed, all units restarted
+
+[0;32m═══ Phase 3: wait for re-convergence ═══[0m
+[0;32m[✓][0m gateway healthy on the new PKI
+[0;32m[✓][0m served cert rotated (live handshake B9:7E:17:E3:89:0…)
+[0;32m[✓][0m provision plane reconnected over the rotated mTLS stream
+[0;32m[✓][0m storage plane over the rotated mTLS stream (sandfs sandfs-d114b031 created)
+[0;32m[✓][0m end-to-end exec on the rotated stack
+
+[0;32m═══ Summary ═══[0m
+[0;32m[✓][0m baremetal cert rotation: regenerated → installed → restarted → re-converged → end-to-end serving

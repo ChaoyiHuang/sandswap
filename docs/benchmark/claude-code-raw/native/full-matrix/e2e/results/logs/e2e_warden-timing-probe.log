@@ -1,0 +1,146 @@
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Required tools: curl python3 openssl
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Deploying to /tmp/ssdbg ...
+    Flat template deployed: /tmp/ssdbg/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /tmp/ssdbg/volumes
+    Logs:     /tmp/ssdbg-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /tmp/ssdbg/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9999)...
+[0;32m[✓][0m Gateway running (PID 2745920)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9999)...
+[0;32m[✓][0m Sandlot running (PID 2745961)
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3101)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+agents ready: sandfsA=sandfs-c4688fb4 sandfsB=sandfs-45cc98b7
+idx class client gateway sandlot exec
+measured samples: 70/70
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/ssdbg-logs
+All processes stopped.
+=== per-sample ===
+idx  class  client                       gateway  sandlot  exec
+1    warm   0.001376s|1.109|0.929|0.823                    
+2    warm   0.001255s|0.994|0.838|0.720                    
+3    warm   0.001179s|0.934|0.777|0.683                    
+4    warm   0.001203s|0.959|0.789|0.686                    
+5    warm   0.001177s|0.933|0.783|0.684                    
+6    warm   0.001185s|0.934|0.768|0.667                    
+7    warm   0.001172s|0.933|0.792|0.693                    
+8    warm   0.001132s|0.900|0.746|0.654                    
+9    warm   0.001106s|0.885|0.755|0.662                    
+10   warm   0.001125s|0.902|0.754|0.654                    
+11   warm   0.00113s|0.899|0.743|0.649                     
+12   warm   0.001086s|0.890|0.761|0.671                    
+13   warm   0.001119s|0.886|0.743|0.644                    
+14   warm   0.001096s|0.873|0.730|0.630                    
+15   warm   0.001079s|0.873|0.729|0.635                    
+16   warm   0.001198s|0.969|0.792|0.678                    
+17   warm   0.001102s|0.890|0.751|0.656                    
+18   warm   0.00109s|0.893|0.766|0.672                     
+19   warm   0.00111s|0.885|0.753|0.647                     
+20   warm   0.001178s|0.940|0.775|0.679                    
+21   warm   0.001088s|0.874|0.757|0.656                    
+22   warm   0.001122s|0.896|0.759|0.651                    
+23   warm   0.001098s|0.884|0.745|0.654                    
+24   warm   0.001117s|0.914|0.787|0.691                    
+25   warm   0.001133s|0.903|0.777|0.669                    
+26   warm   0.001095s|0.890|0.738|0.647                    
+27   warm   0.00111s|0.917|0.801|0.701                     
+28   warm   0.001161s|0.904|0.777|0.678                    
+29   warm   0.001129s|0.918|0.759|0.659                    
+30   warm   0.001128s|0.893|0.758|0.661                    
+31   cold   0.002537s|2.282|2.111|1.871                    
+32   cold   0.002294s|2.035|1.856|1.587                    
+33   cold   0.002475s|2.241|2.123|1.943                    
+34   cold   0.002408s|2.160|1.998|1.828                    
+35   cold   0.002381s|2.142|1.984|1.803                    
+36   cold   0.002397s|2.129|1.998|1.790                    
+37   cold   0.002219s|1.990|1.864|1.689                    
+38   cold   0.002307s|2.088|1.958|1.776                    
+39   cold   0.002342s|2.129|2.012|1.828                    
+40   cold   0.002373s|2.131|2.006|1.836                    
+41   cold   0.002745s|2.373|2.090|1.801                    
+42   cold   0.002375s|2.106|1.926|1.717                    
+43   cold   0.002393s|2.143|2.009|1.808                    
+44   cold   0.00214s|1.922|1.794|1.565                     
+45   cold   0.002217s|1.985|1.853|1.646                    
+46   cold   0.002227s|1.994|1.861|1.676                    
+47   cold   0.002231s|2.024|1.899|1.688                    
+48   cold   0.002363s|2.154|2.022|1.838                    
+49   cold   0.00229s|2.080|1.968|1.763                     
+50   cold   0.002248s|2.026|1.905|1.698                    
+51   cold   0.002409s|2.180|2.042|1.826                    
+52   cold   0.002384s|2.135|1.975|1.754                    
+53   cold   0.002398s|2.153|2.000|1.763                    
+54   cold   0.002448s|2.197|2.047|1.824                    
+55   cold   0.002592s|2.352|2.213|1.907                    
+56   cold   0.002492s|2.261|2.115|1.912                    
+57   cold   0.002453s|2.211|2.074|1.876                    
+58   cold   0.002292s|2.069|1.937|1.742                    
+59   cold   0.002331s|2.121|1.994|1.809                    
+60   cold   0.002334s|2.106|1.953|1.771                    
+61   cold   0.002895s|2.609|2.391|2.122                    
+62   cold   0.002374s|2.136|1.990|1.754                    
+63   cold   0.00239s|2.161|2.012|1.817                     
+64   cold   0.002587s|2.305|2.139|1.921                    
+65   cold   0.002611s|2.346|2.189|1.957                    
+66   cold   0.002509s|2.251|2.068|1.878                    
+67   cold   0.002287s|2.047|1.856|1.663                    
+68   cold   0.002415s|2.152|2.008|1.802                    
+69   cold   0.002235s|2.003|1.830|1.587                    
+70   cold   0.002292s|2.079|1.953|1.777                    
+
+=== warden timing lines (by frequency) ===
+     71 DEBG warden::raw_server exec done in 0ms (spawn=0ms wait=0ms exit=0)
+     36 DEBG warden::raw_server unmount_workspace done in 1ms (mnt=/mnt/rootfs)
+      5 DEBG warden::raw_server unmount_workspace done in 2ms (mnt=/mnt/rootfs)
+      2 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=772µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 2ms (mount=1ms exec_fn=967µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 2ms (mount=1ms exec_fn=886µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=847µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=841µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=822µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=810µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=808µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=795µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=791µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=788µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=782µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=777µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=775µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=774µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=771µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=768µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=760µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=753µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=750µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=747µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=745µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=739µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=721µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=711µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=1ms exec_fn=707µs exit=0)
+      1 DEBG warden::raw_server mount_and_exec done in 1ms (mount=0ms exec_fn=847µs exit=0)
+
+logs kept in /tmp/ssdbg-logs (NOT deleted)

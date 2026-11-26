@@ -1,0 +1,26 @@
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m stack up, iptables available, no stale rule
+
+[0;32m═══ Phase 1: hold a live mount (bg exec, 120s lease) ═══[0m
+[0;32m[✓][0m mount held (bg exec bg-2-9843678c61ec5706, sandfs sandfs-08b7bdfa)
+
+[0;32m═══ Phase 2: hot-reload etcd_fence_sec → 20s ═══[0m
+cfg patched
+[0;32m[✓][0m fence window set (20s, hot-reload)
+
+[0;32m═══ Phase 3: partition gateway→etcd (owner-matched, lo only) ═══[0m
+[0;32m[✓][0m partition rule inserted (15:56:51)
+
+[0;32m═══ Phase 4: fence fires (waiting ≤ 80s) ═══[0m
+[0;32m[✓][0m self-fence fired and released all mounts (15:57:22)
+[0;32m[✓][0m node stream stayed connected through the fence (no TOLERATING)
+
+[0;32m═══ Phase 5: heal the partition ═══[0m
+[0;32m[✓][0m self-fence lifted, presence re-granted
+
+[0;32m═══ Phase 6: same sandfs serves again (in-place recovery) ═══[0m
+[0;32m[✓][0m exec on the same sandfs after recovery
+[0;32m[✓][0m fence threshold restored in config
+
+[0;32m═══ Summary ═══[0m
+[0;32m[✓][0m etcd-partition self-fence drill: fenced → released → streams kept → lifted → in-place recovery

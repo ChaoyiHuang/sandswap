@@ -1,0 +1,102 @@
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected: systemd-detect-virt=none and no cpuinfo hypervisor flag -> bare-metal KVM host
+    pinning host stack to CPUs 16-23,64-71; VM slices: 13,61:0;14,62:0;15,63:0
+
+[0;32m═══ Phase 0: Environment detection (bare metal vs nested virt) ═══[0m
+[0;32m[✓][0m Bare-metal detected: systemd-detect-virt=none and no cpuinfo hypervisor flag -> bare-metal KVM host
+    CPU cores: 16    load: load: 0.43, 2.02, 1.43
+    Pinning:   PIN_MODE=1 (16-23,64-71 stack cores, 13,61:0;14,62:0;15,63:0 VM slices)
+[0;32m[✓][0m /dev/kvm available
+[0;32m[✓][0m /dev/vhost-vsock readable
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m Required tools: curl go python3
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+
+[0;32m═══ Phase 1: Deploy ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[✓][0m bare-metal pinning: stack CPUs 16-23,64-71, VM slices 13,61:0;14,62:0;15,63:0 (VMM shim: /var/lib/sandswap-e2e/pinned/sandvmm)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+
+[0;32m═══ Phase 2: Start gateway (single-node: agent+human in one process) ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2692600)
+
+[0;32m═══ Phase 3: Start sandlot (connects to gateway, mTLS) ═══[0m
+[0;32m[✓][0m Sandlot config written to /var/lib/sandswap-e2e/sandlot-aiagent.yaml
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2692641)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+
+[0;32m═══ Phase 4: Create agents A/B (busybox template) ═══[0m
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+    mode not specified — resolved template 'rootfs:v1' to mode=flat
+[0;32m[✓][0m agents A/B created (sandfs sandfs-76abbed5 / sandfs-a454c9ff)
+
+[0;32m═══ Phase 5: Run benchmark (mode=http) ═══[0m
+[0;32m[✓][0m benchmark binary: /opt/sandswap-pr38/src/e2e/../output/openai-sandswap
+
+[0;32m═══ Benchmark — mode=http ═══[0m
+═══ Sandswap latency benchmark — mode=http ═══
+Gateway: http://localhost:3001   warm_n=100  cold_n=50  warm_gap_ms=5  switch_gap_ms=300  switch_settle_ms=1000
+
+Warmup (excluded)...
+Warm: 100 consecutive calls to agent A (5ms gap)...
+Switch: 50 rounds alternating A<->B (300ms gap, lease expires)...
+
+Warm — sticky lease reuse (leaseHit=true, n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        0.860     0.890     0.950     1.127
+  gateway E2E              0.768     0.796     0.841     0.958
+  sandlot                  0.675     0.685     0.712     0.779
+  exec                     0.587     0.598     0.621     0.669
+
+Switch — cross-agent cold mount_and_exec (leaseHit=false, n=100) [ms]
+  metric                     min       P50       P95       max
+  client round-trip        1.791     1.860     1.974     2.719
+  gateway E2E              1.679     1.751     1.851     2.602
+  sandlot                  1.566     1.630     1.704     2.483
+  exec                     1.377     1.427     1.468     2.285
+
+
+[0;32m═══ Phase 6: Verdict ═══[0m
+  [0;32m[BARE-METAL] Bare-metal KVM; results reflect true steady-state latency.[0m
+  [0;32m  Expected: warm P50 ~0.7-1ms (tail <3ms), switch P50 ~3-5ms (tail <8ms).[0m
+
+
+[0;32m═══ Summary ═══[0m
+  Environment: bare-metal KVM
+  Mode:       http
+  Topology:   single
+  Warm/Cold:  WARM_N=100 COLD_N=50  warm_gap_ms=5  switch_gap_ms=300  settle_ms=1000
+  Gateway:    http://localhost:3001
+  Temp dirs:  deploy=/var/lib/sandswap-e2e logs=/tmp/sandswap-logs (all removed on exit)
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

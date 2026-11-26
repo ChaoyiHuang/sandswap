@@ -1,0 +1,94 @@
+[0;32m[✓][0m Flat template installed: /tmp/sandswap-flat-templates/rootfs/v1 (ref: rootfs:v1)
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Seccomp Deny-List E2E ═══[0m
+[0;32m[✓][0m Required tools: curl python3 gcc
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 3010886)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 3010920)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+[0;32m[✓][0m DenyList: mount(2): denied (EPERM)
+[0;32m[✓][0m DenyList: mount -t tmpfs: denied (EPERM)
+[0;32m[✓][0m DenyList: umount2: denied (EPERM)
+[0;32m[✓][0m DenyList: unshare(CLONE_NEWNS): denied (EPERM)
+[0;32m[✓][0m DenyList: unshare(CLONE_NEWUSER): denied (EPERM)
+[0;32m[✓][0m CapEff: capability lines readable
+CAPOK
+[0;32m[✓][0m CapEff: flat-mode profile is exactly the 10-cap install set (no SETPCAP/MKNOD/SYS_ADMIN/PTRACE/RAWIO/NET_RAW in Eff or Bnd)
+
+[0;32m═══ SUID neutrality: NNP + nosuid mount ═══[0m
+[0;32m[✓][0m SUIDNeutrality: rootfs mount is nosuid,nodev (guest layer)
+[0;32m[✓][0m SUIDNeutrality: NoNewPrivs=1 (exec-time layer)
+[0;32m[✓][0m SUIDNeutrality: setuid bit planted in-guest (threat vector is real)
+[0;32m[✓][0m SUIDNeutrality: host volume file carries the setuid bit (mode 4555) — host mount flags are the containment
+[0;32m[✓][0m SUIDNeutrality: exec of planted setuid binary granted NOTHING (caps+euid identical to plain exec)
+
+[0;32m═══ Identity forgery: uid passthrough ═══[0m
+[0;32m[✓][0m IdentityForge: writes under forged guest uids (65534 and 985) refused — daemon lacks CAP_SETUID, guest users never reach host creds
+[0;32m[✓][0m IdentityForge: no root-owned file in the volume (all daemon identity)
+[0;32m[✓][0m IdentityForge: guest symlink cannot resolve outside the share (RESOLVE_IN_ROOT)
+
+[0;32m═══ Identity split: sandvmm process and vsock devices ═══[0m
+[0;32m[✓][0m IdentitySplit: all 1 sandvmm processes run uid=987 CapEff=0 (zero capabilities)
+[0;32m[✓][0m IdentitySplit: sandvmm denied /dev/vsock (owner=sandlot 0600)
+[0;32m[✓][0m IdentitySplit: sandlot denied /dev/vhost-vsock (owner=sandvmm 0600)
+
+[0;32m═══ Identity split: sandprov storage identity ═══[0m
+[0;32m[✓][0m IdentityProv: sandprov denied /dev/vhost-vsock (owner-isolated 0600)
+[0;32m[✓][0m IdentityProv: sandprov denied /dev/vsock (owner-isolated 0600)
+    volume-name seed minted: /tmp/sandswap-prov-identity.0N2XMM/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Sandlot config written to /tmp/sandswap-prov-identity.0N2XMM/sandlot-prov.yaml
+[0;32m[✓][0m IdentityProv: storage-plane process runs uid=983 CapEff=0 (zero caps, shared group only)
+[0;32m[✓][0m IdentityProv: gateway prov-role gate ACCEPTED the uid=983 zero-cap connection (provisioners 1 → 2)
+[0;32m[✓][0m Post-deny: VM healthy after denied syscalls
+
+[0;32m═══ Guest kernel hardening: user namespaces closed + new seccomp classes ═══[0m
+[0;32m[✓][0m hardening probe: static helper uploaded through the file API
+[0;32m[✓][0m hardening probe: user namespaces closed (max_user_namespaces=0 or CONFIG_USER_NS=n)
+[0;32m[✓][0m hardening probe: clone3(CLONE_NEWUSER) refused
+[0;32m[✓][0m hardening probe: mount_setattr denied (EPERM)
+[0;32m[✓][0m hardening probe: statmount denied (EPERM)
+[0;32m[✓][0m hardening probe: listmount denied (EPERM)
+[0;32m[✓][0m hardening probe: pidfd_open denied (EPERM)
+[0;32m[✓][0m hardening probe: pidfd_send_signal denied (EPERM)
+[0;32m[✓][0m hardening probe: ioprio_set denied (EPERM)
+[0;32m[✓][0m hardening probe: modify_ldt denied (EPERM)
+[0;32m[✓][0m hardening probe: socket(AF_VSOCK) denied (EPERM)
+[0;32m[✓][0m hardening probe: socket(AF_INET) still allowed
+[0;32m[✓][0m hardening probe: no non-CLOEXEC descriptors inherited
+[0;32m[✓][0m hardening probe: all checks passed
+
+[0;32m═══ Seccomp E2E Summary ═══[0m
+  PASS: 37
+  FAIL: 0
+[OK] Seccomp E2E PASSED
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

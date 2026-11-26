@@ -41,3 +41,6 @@ build noted in each report — not guarantees.
    benchmark scripts yourself: the full developer build, or the prebuilt
    release package (no toolchain; benchmark scripts are bundled in the
    release tarball).
+6. **[Claude Code over MCP](claude-code.md)** — real GLM coding loops from a
+   Mac through an SSH-forwarded HTTPS MCP endpoint, independent sandbox
+   verification, client/server timing boundaries, and a full repository round.

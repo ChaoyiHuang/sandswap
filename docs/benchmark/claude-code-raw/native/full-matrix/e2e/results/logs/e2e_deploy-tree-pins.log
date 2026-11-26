@@ -1,0 +1,239 @@
+deploy-tree-pins: /opt/sandswap-pr38/src
+
+── the INSTALLED setup-network.sh resolves its shared runtime ──
+  ✓ no runtime → refuses (rc=1)
+  ✓ the refusal names both looked-at paths and the remedy
+  ✓ no bare bash ENOENT
+  ✓ an installed copy runs the shared implementation (SANDSWAP_SH_LIB_DIR)
+  ✓ the repo tree is preferred over the installed location
+
+── installers ship the library; uninstall removes it ──
+  ✓ every installer of the binary (2) also installs /usr/local/lib/sandswap/runtime.sh
+  ✓ uninstall.sh removes the installed runtime
+
+── uninstall/cleanup sweep the recorded residue classes ──
+  ✓ uninstall lists sandswap-vsock-retune.service for removal
+  ✓ uninstall sweeps the sandlot drop-in dir
+  ✓ uninstall removes the guest TCB item-wise (via $SANDSWAP_GUEST_DIR) and rmdirs the dir
+  ✓ uninstall removes apply-prov-ownership
+  ✓ uninstall never rm -rf's the shared lib dir
+  ✓ uninstall stops the legacy empty slices
+  ✓ cleanup.sh sweeps the sandprov drop-in
+  ✓ cleanup.sh sweeps /run/sandswap* and guards the live harness pidfile
+  ✓ k8s-cleanup.sh sweeps /run/sandswap* and guards the live harness pidfile
+  ✓ k8s-cleanup removes modules-load.d/sandswap.conf (deploy re-asserts it)
+  ✓ k8s-cleanup re-pins vhost-vsock ownership after the module reload
+  ✓ sandswap-sandlot.service pins DevicePolicy=closed
+  ✓ sandswap-sandlot-instance@.service pins DevicePolicy=closed
+  ✓ instance template carries the kvm/vhost-vsock device guards
+
+── gateway deployers install the ExecStartPost helper before start ──
+  ✓ deploy-cluster-multi-gw-simulation.sh installs the unit helper before starting a gateway
+  ✓ deploy-cluster-one-gw.sh installs the unit helper before starting a gateway
+  ✓ deploy-cluster-one-gw-simulation.sh installs the unit helper before starting a gateway
+
+── every log_* helper deploy-lib.sh calls is defined ──
+  ✓ the detector reports an undefined helper (self-test)
+  ✓ every log_* helper deploy/k8s/deploy-lib.sh references is defined in its runtime environment
+
+── --stage never targets the CURRENT generation's file ──
+  ✓ a default --stage mints and adopts (rc=0)
+  ✓ the mint landed at a new path (volume-seed-next-20261126T074152Z-2711814)
+  ✓ promote re-pointed the config (mini rotation leg 1)
+  ✓ volume_seed_file now names the staged file
+  ✓ --stage --seed-file <the live generation file> is refused (rc=1)
+  ✓ the refusal names the reason
+  ✓ a SECOND --stage on the same config succeeds (rc=0)
+  ✓ the second mint landed at a new path (volume-seed-next-20261126T074152Z-2711871)
+  ✓ the first generation's file is byte-identical after the second stage
+  ✓ the original generation file survives too
+
+── human_post fails on a non-2xx response ──
+  ✓ a refused maintenance switch exits non-zero (rc=1)
+  ✓ the refusal surfaces the HTTP status and body
+  ✓ a refused switch is not reported as ON
+  ✓ an accepted rotation switch exits 0
+  ✓ the accepted switch is reported
+
+── --prov-hosts fan-out stages through remote mktemp paths ──
+  ✓ the fan-out completes (stubbed transport, rc=0)
+  ✓ the transfer path comes from a remote mktemp (never a fixed name)
+  ✓ the generation file is installed under the config's directory, not /tmp
+  ✓ the transfer file is removed after staging
+  ✓ the staged generation is the config-directory path, not the transfer file
+  ✓ the remote stage points at the installed generation file
+  ✓ the local-host skip is named explicitly
+
+── seed-fetch.sh.template refuses an unreadable config ──
+  ✓ an unreadable config exits non-zero (rc=1)
+  ✓ the failure is named
+  ✓ no false 'nothing to fetch'
+  ✓ a config that cannot be parsed exits non-zero (rc=1)
+  ✓ the parse failure is named
+  ✓ a readable config with no seed file still succeeds (no-op)
+  ✓ the no-op says what it did
+
+── the sandvmm seed-scope predicate never passes a readable seed ──
+  ✓ a seed the probe identity can read is classified FAIL (rc=1)
+  ✓ a seed the probe identity cannot read is classified denied (rc=0)
+  ✓ a probe that cannot run is 'inconclusive' (rc=2), never a pass
+  ✓ live (uid sandvmm): a 0644 seed is readable → FAIL (rc=1)
+  ✓ live (uid sandvmm): an owner-only seed is denied (rc=0)
+
+── an unparsable tmpfs seed-dir mode is never reported as ok ──
+  ✓ control: a 0755 tmpfs seed dir is checked and reported
+  ✓ a garbage mode is named as unparsable
+  ✓ an unparsable mode never reads as a pass
+  ✓ a failed stat never reads as a pass
+
+── seed-file keys parse like the Go loader, and a named path is never skipped ──
+  ✓ single-quoted: the path is CHECKED (reported by name)
+  ✓ single-quoted: the parsed value is the real file path
+  ✓ single-quoted: the run did not degrade to the skip line
+  ✓ double-quoted: the path is CHECKED (reported by name)
+  ✓ double-quoted: the parsed value is the real file path
+  ✓ double-quoted: the run did not degrade to the skip line
+  ✓ trailing-comment: the path is CHECKED (reported by name)
+  ✓ trailing-comment: the parsed value is the real file path
+  ✓ trailing-comment: the run did not degrade to the skip line
+  ✓ a named-but-missing seed path FAILS loudly
+  ✓ an unparsable config is named (its keys were NOT checked)
+
+── /run/sandswap is sticky; the setup path fails hard ──
+  ✓ setup-host.sh's tmpfiles entry states 3770 (sticky)
+  ✓ ss_prepare_dirs installs /run/sandswap 3770 (sticky)
+  ✓ the tmpfiles application is a hard error (not swallowed)
+  ✓ setup-host.sh asserts the landed mode (stat == 3770)
+  ✓ self-test: the probe detects the 2770 defect (a sibling identity CAN remove a foreign entry without sticky)
+  ✓ live: at the source-stated 3770 an owner removes its own entry and a sibling identity CANNOT remove a foreign one
+  ✓ the sandvmm identity (uid 987) cannot remove a root-owned generation file from the 3770 dir
+  ✓ verifier: a GROUP-writable seed dir is a finding (the others-write-only check was the false green)
+  ✓ verifier: a root-owned STICKY shared dir (the /run/sandswap shape) is accepted
+  ✓ verifier: control — a 0755 seed dir still reports clean
+
+── bare-metal generator signs CN == the node id (dry mint) ──
+  ✓ default CN is the node id source ($(hostname) → stub-node-42)
+  ✓ no client pair is signed with a constant CN
+  ✓ SANDLOT_NODE_ID=node-1 → CN=node-1 (exact)
+  ✓ --client-cn (repeatable) mints sandlot-<node>.crt/.key with CN=<node> for every id
+
+── every deploy path mints a pair FOR the node id it configures ──
+  ✓ no deploy script signs a client pair with a constant CN
+  ✓ all 10 generator invokers name the node id (SANDLOT_NODE_ID)
+  ✓ deploy-single-node.sh mints the pair for $(hostname) (its empty node_id resolves to the hostname)
+  ✓ deploy-one-machine-etcd.sh composes the exec CN as <node_id>-<instance.id>
+  ✓ deploy-one-machine-etcd.sh mints the exec pair for the COMPOSED node id
+  ✓ deploy-one-machine-etcd.sh mints a role/prov pair for the prov node id
+  ✓ deploy-cluster-one-gw.sh mints the primary pair for the first config entry's node id
+  ✓ deploy-cluster-one-gw.sh mints a role/granting pair per remaining node id (prov node gets role/prov)
+  ✓ deploy-cluster-one-gw.sh derives each config's tls pair from its node id
+  ✓ deploy-cluster-multi-gw.sh mints a role-granting pair per node id (prov node gets role/prov)
+  ✓ the one-gw simulation mints a pair per instance node id
+  ✓ the multi-gw simulation mints a role/prov pair for the prov node id
+  ✓ verify-binpack.sh mints for the effective (instance-suffixed) node ids
+  ✓ verify-failover.sh mints for its declared node id
+  ✓ verify-cert-rotation.sh re-mints the SAME per-node identities
+  ✓ sandswap_generate_sandlot_config writes the tls block from SANDSWAP_SANDLOT_CERT_BASE
+  ✓ the generator no longer hardcodes sandlot.crt
+  ✓ deploy-single-node.sh: asserts the minted CN == its node id at deploy time
+  ✓ deploy-one-machine-etcd.sh: asserts the minted CN == its node id at deploy time
+  ✓ deploy-cluster-one-gw.sh: asserts the minted CN == its node id at deploy time
+  ✓ deploy-cluster-one-gw-simulation.sh: asserts the minted CN == its node id at deploy time
+  ✓ deploy-cluster-multi-gw-simulation.sh: asserts the minted CN == its node id at deploy time
+  ✓ verify-binpack.sh: asserts the minted CN == its node id at deploy time
+  ✓ verify-failover.sh: asserts the minted CN == its node id at deploy time
+
+── k8s pods verify the guest TCB like a bare-metal node ──
+  ✓ the shared sandlot config pins tinyvm.guest_tcb_dir=/sandswap-host (without it the k8s TCB hash check is skipped)
+  ✓ the k8s kernel resolves directly under the pinned directory
+  ✓ the k8s initramfs resolves directly under the pinned directory
+  ✓ deploy-lib writes the SHA256SUMS pin beside the hostPath pair it deploys
+  ✓ the pin is world-readable (0644) for the boxout-mode sandlot uid
+
+── k8s manifests bind node_id to spec.nodeName with a per-node cert ──
+  ✓ sandlot.yaml + sandlot-boxout.yaml: --node-id from spec.nodeName, certs from the per-node hostPath
+  ✓ sandlot-prov.yaml: fixed --node-id=sandlot-prov with its own Secret (no shared cluster certificate)
+  ✓ gen-k8s-certs.sh mints one pair per node (CN=<node>)
+  ✓ gen-k8s-certs.sh publishes one Secret per node (sandlot-certs-<node>)
+  ✓ gen-k8s-certs.sh mints the prov singleton pair (CN=sandlot-prov)
+  ✓ the k8s generator no longer signs the shared CN=sandlot-client
+  ✓ k8s-host-setup.sh fetches THIS node's Secret
+  ✓ k8s-host-setup.sh installs the client key 0600 owner-only (with an existing group — install -g rejects a bare numeric gid)
+  ✓ k8s-host-setup.sh asserts CN == node name on what landed
+  ✓ deploy-lib.sh has a per-node stream-cert phase
+  ✓ the deploy flow runs the per-node stream-cert phase
+
+── the prov instance loads ITS OWN pair (and its own key copy) ──
+  ✓ deploy-one-machine-etcd.sh: derives the prov pair name from the prov node id
+  ✓ deploy-one-machine-etcd.sh: re-points the prov config's key at prov.key
+  ✓ deploy-cluster-one-gw.sh: derives the prov pair name from the prov node id
+  ✓ deploy-cluster-one-gw.sh: re-points the prov config's key at prov.key
+  ✓ deploy-cluster-multi-gw.sh: derives the prov pair name from the prov node id
+  ✓ deploy-cluster-multi-gw.sh: re-points the prov config's key at prov.key
+  ✓ deploy-cluster-one-gw-simulation.sh: derives the prov pair name from the prov node id
+  ✓ deploy-cluster-one-gw-simulation.sh: re-points the prov config's key at prov.key
+  ✓ deploy-cluster-multi-gw-simulation.sh: derives the prov pair name from the prov node id
+  ✓ deploy-cluster-multi-gw-simulation.sh: re-points the prov config's key at prov.key
+  ✓ verify-binpack.sh: derives the prov pair name from the prov node id
+  ✓ verify-binpack.sh: re-points the prov config's key at prov.key
+  ✓ sandswap_prepare_provision_host copies the prov node's key into prov.key
+  ✓ sandswap_prepare_provision_host names a missing source pair instead of skipping silently
+  ✓ sandswap_verify_client_cert_cn exists (deploy-time CN assertion)
+  ✓ the assertion reads the CN from the certificate, not from a filename convention
+  ✓ deploy-cluster-one-gw.sh asserts the installed CN at install time
+
+── the k8s shapes pin a RESERVED sandbox uid (never a collidable one) ──
+  ✓ reserved sandbox uid 65536 (13 sites)
+  ✓ deploy-k8s-boxout.sh pins VSOCKGUARD_UID to the reserved uid
+  ✓ deploy-k8s-boxout.sh chowns /run/sandswap to the reserved uid
+  ✓ deploy-k8s-boxout.sh asserts the pod uid against the reserved value
+  ✓ verify-k8s.sh asserts the pod uid against the reserved value
+  ✓ deploy-lib.sh's cert-owner assertion uses the reserved uid
+  ✓ k8s-host-setup.sh creates the host account at the reserved uid
+  ✓ k8s-host-setup.sh refuses a node where the reserved uid belongs to another account
+  ✓ configmaps.yaml no longer grants api_gid/vmm_groups to the collidable uid 1001
+  ✓ sandlot.yaml no longer pins any sandbox identity to 1001
+  ✓ sandlot-boxout.yaml no longer pins any sandbox identity to 1001
+  ✓ sandlot-prov.yaml no longer pins any sandbox identity to 1001
+  ✓ k8s-host-setup.sh reads dotted Secret keys with go-template index
+  ✓ k8s-host-setup.sh no longer addresses dotted Secret keys with jsonpath dots
+
+── every k8s pod that touches the template store carries the sandtmpl GID ──
+  ✓ sandtmpl gid 982 granted to every exec/prov pod, never the sandvmm side
+
+── every human-listener start site carries the explicit anonymous opt-out ──
+  ✓ deploy/baremetal/systemd/sandswap-gateway.service carries -allow-anonymous-human
+  ✓ deploy/baremetal/systemd/sandswap-gateway@.service carries -allow-anonymous-human
+  ✓ deploy/k8s/human.yaml carries -allow-anonymous-human
+  ✓ deploy/baremetal/verify-binpack.sh carries -allow-anonymous-human
+
+── every seed/key-bearing unit suppresses core dumps (LimitCORE=0) ──
+  ✓ sandswap-sandlot.service sets LimitCORE=0
+  ✓ sandswap-sandlot-instance@.service sets LimitCORE=0
+  ✓ sandswap-sandlot-prov.service sets LimitCORE=0
+  ✓ sandswap-gateway.service sets LimitCORE=0
+  ✓ sandswap-gateway@.service sets LimitCORE=0
+  ✓ sandswap-seed-fetch.service sets LimitCORE=0
+
+── sandlot units consume the resolved identity env ──
+  ✓ sandswap-sandlot-instance@.service loads identity.env
+  ✓ sandswap-sandlot-prov.service loads identity.env
+  ✓ sandswap-sandlot.service loads identity.env
+  ✓ deploy/baremetal/systemd/sandswap-sandlot-prov.service: 1 sandlot spawn(s), 1 identity.env load(s)
+  ✓ deploy/baremetal/systemd/sandswap-sandlot.service: 1 sandlot spawn(s), 1 identity.env load(s)
+  ✓ deploy/baremetal/systemd/sandswap-sandlot-instance@.service: 1 sandlot spawn(s), 1 identity.env load(s)
+  ✓ deploy/baremetal/verify-binpack.sh: 2 sandlot spawn(s), 2 identity.env load(s)
+  ✓ deploy/baremetal/verify-failover.sh: 1 sandlot spawn(s), 1 identity.env load(s)
+
+── k8s host setup adopts/auto-picks the sandvmm uid ──
+  ✓ k8s-host-setup does not pin sandvmm to uid 987
+  ✓ deploy-lib does not silently fall back to uid 987
+  ✓ deploy-lib does not silently fall back to gid 987
+
+── CODE: production comments carry no plan/tracker IDs ──
+  ✓ no plan-ID references in production sources
+
+deploy-tree-pins Summary
+  PASS: 183
+  FAIL: 0
+deploy-tree-pins PASSED (183 checks)

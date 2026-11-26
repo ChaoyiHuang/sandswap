@@ -1,0 +1,79 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /var/lib/sandswap-e2e/volume-seed (KEEP — every volume name derives from it)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[✓][0m Running as root
+
+[0;32m═══ Setting up test environment ═══[0m
+
+============================================
+Sandswap Read-Only Overlay Benchmark
+============================================
+
+Architecture:
+  - Read-only overlay: lowerdir=template,ro (no upperdir/workdir)
+  - Writable /workspace: bind mount (local stand-in for the volume's storage)
+  - Writable /home/agent: bind mount (local stand-in for the volume's storage)
+  - Writable /tmp: tmpfs (local)
+
+=== Mount/Umount Latency (bind) ===
+Iterations: 100
+Total time: 282ms
+Average per mount+umount: 2ms
+
+=== Mount/Umount Latency (overlay-ro) ===
+Iterations: 100
+Total time: 303ms
+Average per mount+umount: 3ms
+
+=== Read Latency (bind) ===
+Small file read (1KB, 1000 iterations): 836ms (avg 836µs)
+Large file read (2MB, 10 iterations): 0ms (avg 0ms)
+
+=== Read Latency (overlay-ro) ===
+Small file read (1KB, 1000 iterations): 842ms (avg 842µs)
+Large file read (2MB, 10 iterations): 0ms (avg 0ms)
+
+=== Full Agent Mount/Umount Latency (ro overlay + bind mounts + tmpfs) ===
+Iterations: 50
+Total time: 512ms
+Average per full mount+umount: 10ms
+  (includes: ro overlay mount + 2 bind mounts + tmpfs + 4 umounts)
+
+=== Write Latency (workspace bind mount) ===
+Write to /workspace (bind mount to agent workspace dir):
+  First write latency: 627us
+Subsequent writes:
+  100 writes: 8ms (avg 89µs/write)
+Write to new files:
+  100 writes: 4ms (avg 40µs/write)
+
+=== Read-only rootfs enforcement ===
+[0;32m[✓][0m write to read-only rootfs blocked (Read-only file system)
+
+=== Agent Switch Latency (umount old + mount new) ===
+Read-only overlay + bind mount switch:
+Iterations: 50
+Total time: 512ms
+Average per switch: 10ms
+  (includes: 4 umounts + ro overlay mount + 2 bind mounts + tmpfs)
+
+Bind mount switch (baseline):
+Iterations: 50
+Total time: 140ms
+Average per switch: 2ms
+
+=== Summary ===
+Read-only overlay (no upperdir/workdir) eliminates upperdir issues.
+Writes go to workspace/ and home/ via bind mount (local dirs here; production may bind a shared backend).
+Read-only rootfs is enforced by the kernel (no copy-up overhead).
+
+For Sandswap:
+- Warm path: Negligible impact (reads are zero-overhead)
+- Switch path: ~0.3ms overlay overhead + bind mount cost
+- No NFS upperdir incompatibility (ro overlay works on any FS)
+- No CleanupOverlay needed (stateless overlay)

@@ -1,0 +1,12 @@
+{
+  "source": "full-matrix/deploy/results/logs/deploy_baremetal_verify-eino.log",
+  "actual_tool_calls": 5,
+  "background_true_calls": 0,
+  "calls": [
+    "[agent-1] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_1\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-f132f3f9\"})",
+    "[agent-2] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_2\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-66f66250\"})",
+    "[agent-1] <<< LLM tool call: file_write({\"data\":\"agent1 marker content\",\"path\":\"agent1_marker.txt\",\"sandfs_id\":\"sandfs-f132f3f9\"})",
+    "[agent-1] <<< LLM tool call: file_read({\"path\":\"agent1_marker.txt\",\"sandfs_id\":\"sandfs-f132f3f9\"})",
+    "[agent-2] <<< LLM tool call: execute({\"code\":\"echo agent2_final\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-66f66250\"})"
+  ]
+}

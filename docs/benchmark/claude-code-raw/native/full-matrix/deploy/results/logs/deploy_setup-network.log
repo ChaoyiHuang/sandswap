@@ -1,0 +1,10 @@
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/16)
+  subnet : 10.188.0.0/16
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+done. VMs on 10.188.0.0/16 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap

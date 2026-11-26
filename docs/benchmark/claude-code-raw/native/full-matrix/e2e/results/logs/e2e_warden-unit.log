@@ -1,0 +1,23 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m warden unit tests: CI suite (cargo test)
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+[0;32m[✓][0m warden CI unit suite green (319 tests passed)
+[0;32m[→][0m warden unit tests: root-gated suite (cargo test -- --ignored)
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+[0;32m[✓][0m warden root-gated unit suite green (24 tests passed)
+[0;32m[→][0m warden unit tests: done
+[0;32m[✓][0m warden unit tests PASSED (2 suite(s))

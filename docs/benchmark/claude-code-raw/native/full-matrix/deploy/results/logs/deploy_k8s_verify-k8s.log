@@ -1,0 +1,215 @@
+    Detected mode: boxout (DaemonSet sandlot-boxout)
+[0;32m[→][0m Waiting for PVCs to be bound...
+[0;32m[✓][0m PVCs bound (sandswap-volumes, sandswap-templates)
+[0;32m[→][0m Waiting for etcd pod...
+[0;32m[✓][0m etcd pod ready
+[0;32m[→][0m Waiting for gateway pods (StatefulSet)...
+[0;32m[✓][0m Gateway pods ready (1/1)
+[0;32m[→][0m Waiting for sandswap-sandns pods...
+[0;32m[✓][0m sandswap-sandns pods ready (1)
+[0;32m[→][0m Waiting for sandlot-boxout pods...
+[0;32m[✓][0m sandlot-boxout pods ready (1)
+[0;32m[→][0m Waiting for admin gateway pod...
+[0;32m[✓][0m Human gateway pod ready
+[0;32m[→][0m Waiting for sandlot-prov pod (provision plane)...
+[0;32m[✓][0m sandlot-prov pod ready (provision plane)
+[0;32m[→][0m Seeding flat templates into the templates PVC (via the prov pod)...
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+[0;32m[✓][0m Flat templates seeded (rootfs:v1 inside the shared templates PVC)
+[0;32m[→][0m Verifying sandlot container runs as UID 65536...
+[0;32m[✓][0m Sandlot container verified: runAsUser=65536 (unprivileged)
+
+NAME                               READY   STATUS    RESTARTS   AGE   IP              NODE                   NOMINATED NODE   READINESS GATES
+etcd-0                             1/1     Running   0          44s   10.42.0.29      test-host   <none>           <none>
+gateway-0                          1/1     Running   0          44s   10.42.0.24      test-host   <none>           <none>
+gateway-human-679db8fd8-tff25      1/1     Running   0          43s   10.42.0.28      test-host   <none>           <none>
+sandlot-boxout-szmv2               2/2     Running   0          44s   192.168.20.69   test-host   <none>           <none>
+sandlot-prov-85669f75ff-dhkv5      1/1     Running   0          43s   10.42.0.30      test-host   <none>           <none>
+sandswap-sandns-7666fc9965-gxpkc   1/1     Running   0          44s   10.42.0.25      test-host   <none>           <none>
+
+[0;32m[→][0m Asserting pod-side security invariants...
+[0;32m[✓][0m compute pod stream key: /certs/client.key = 400 65536
+[0;32m[✓][0m share root: /sandswap/volumes = 2710 1000
+[0;32m[✓][0m template store: /sandswap/overlay-templates = 2750 1000
+[0;32m[✓][0m prov stream key: /certs/client.key = 400 1000
+[0;32m[✓][0m prov pod: volume-name seed present
+[0;32m[→][0m Verifying per-node stream certificates...
+[0;32m[✓][0m per-node stream client Secrets present (1 node(s) + the prov singleton)
+[0;32m[→][0m Fetching this node's stream certificate (test-host)...
+[0;32m[✓][0m stream cert materialized on this node: /etc/sandswap/stream-certs (node test-host)
+[0;32m[→][0m Starting human gateway port-forward (3100 → 3100)...
+[0;32m[✓][0m Human gateway port-forward active on :3100 (https://localhost:3100)
+[0;32m[→][0m Waiting for the provisioning plane to register (health.provisioners >= 1)...
+[0;32m[✓][0m provision instance registered (storage plane live)
+[0;32m[✓][0m Exec gateway reachable at https://gateway-0.gateway-exec.sandswap.svc.cluster.local:3000 (host /etc/hosts → 10.42.0.24)
+[0;32m[→][0m Waiting for the sandlot node to register with the gateway...
+[0;32m[✓][0m Compute node registered (node_count=1)
+[0;32m[→][0m Creating agent 1 (eino-agent-1)...
+[0;32m[✓][0m Agent 1 created: agent-18711342
+[0;32m[→][0m Creating sandfs 1 (eino-sandfs-1)...
+[0;32m[✓][0m SandFS 1 created: sandfs-6410a39c
+[0;32m[→][0m Creating agent 2 (eino-agent-2)...
+[0;32m[✓][0m Agent 2 created: agent-94981c8a
+[0;32m[→][0m Creating sandfs 2 (eino-sandfs-2)...
+[0;32m[✓][0m SandFS 2 created: sandfs-85e01a5e
+[0;32m[→][0m Creating agent 3 (eino-agent-3)...
+[0;32m[✓][0m Agent 3 created: agent-607bc3c3
+[0;32m[→][0m Creating sandfs 3 (eino-sandfs-3)...
+[0;32m[✓][0m SandFS 3 created: sandfs-06e748d6
+[0;32m[→][0m Creating agent 4 (eino-agent-4)...
+[0;32m[✓][0m Agent 4 created: agent-081630f6
+[0;32m[→][0m Creating sandfs 4 (eino-sandfs-4)...
+[0;32m[✓][0m SandFS 4 created: sandfs-eb1d088e
+[0;32m[→][0m Waiting for etcd watch sync (5s)...
+[0;32m[→][0m Verifying exec gateway can resolve API keys...
+[0;32m[✓][0m Exec gateway resolved API key successfully (MCP session works)
+[0;32m[→][0m Waiting for compute node to be reachable via gateway...
+[0;32m[✓][0m Compute node reachable via gateway (execute succeeded)
+[0;32m[→][0m Running affinity self-test (owner-aware DNS + in-cluster execute)...
+[0;32m[✓][0m owner-aware DNS: sandfs-6410a39c.sandfs.sandswap.local → gateway-0.gateway-exec.sandswap.svc.cluster.local.
+[0;32m[✓][0m in-cluster execute via sandfs URL: OK
+[0;32m[✓][0m Affinity self-test PASSED
+[0;32m[→][0m Building Eino example binary...
+[0;32m[✓][0m Eino example binary built
+[0;32m[→][0m Running 4-agent piped test (pool size=2, budget=600s, boxout mode)...
+
+Sandswap Eino multi-agent ready (piped mode)
+  MCP endpoint: https://gateway-0.gateway-exec.sandswap.svc.cluster.local:3000/mcp
+  LLM backend:  deepseek
+  Model:        glm-5.3-flash
+  Agent 1:      agent-1 (12 tools discovered)
+  Agent 2:      agent-2 (12 tools discovered)
+  Agent 3:      agent-3 (12 tools discovered)
+  Agent 4:      agent-4 (12 tools discovered)
+
+[agent-1] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_1
+[agent-1] <<< LLM tool call: execute({"code":"echo hello_from_agent_1","language":"shell","sandfs_id":"sandfs-6410a39c"})
+[agent-1] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":3972119,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":5373530,\"sandlot_duration_ns\":5000370,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_1\\n\"}"}]}
+[agent-1] <<< LLM response: The command ran successfully. Output:\n\n```\nhello_from_agent_1\n```\n\nIt exited with code 0, no errors. Let me know if you'd like to run anything else!
+[agent-1] The command ran successfully. Output:
+
+```
+hello_from_agent_1
+```
+
+It exited with code 0, no errors. Let me know if you'd like to run anything else!
+
+[agent-2] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_2
+[agent-2] <<< LLM tool call: execute({"code":"echo hello_from_agent_2","language":"shell","sandfs_id":"sandfs-85e01a5e"})
+[agent-2] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4073017,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":6879615,\"sandlot_duration_ns\":5243884,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_2\\n\"}"}]}
+[agent-2] <<< LLM response: The command ran successfully:\n\n```\nhello_from_agent_2\n```\n\nExit code: 0, no errors.
+[agent-2] The command ran successfully:
+
+```
+hello_from_agent_2
+```
+
+Exit code: 0, no errors.
+
+[agent-3] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_3
+[agent-3] <<< LLM tool call: execute({"code":"echo hello_from_agent_3","language":"shell","sandfs_id":"sandfs-06e748d6"})
+[agent-3] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4011369,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":6874283,\"sandlot_duration_ns\":5301090,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_3\\n\"}"}]}
+[agent-3] <<< LLM response: The command ran successfully:\n\n```\nhello_from_agent_3\n```\n\nExit code: 0, no errors. Anything else you'd like me to run?
+[agent-3] The command ran successfully:
+
+```
+hello_from_agent_3
+```
+
+Exit code: 0, no errors. Anything else you'd like me to run?
+
+[agent-4] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_4
+[agent-4] <<< LLM tool call: execute({"code":"echo hello_from_agent_4","language":"shell","sandfs_id":"sandfs-eb1d088e"})
+[agent-4] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4064857,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":6853102,\"sandlot_duration_ns\":5253040,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_4\\n\"}"}]}
+[agent-4] <<< LLM response: The command ran successfully. Output:\n\n```\nhello_from_agent_4\n```\n\nExit code: 0, no stderr. Let me know if you'd like to run anything else!
+[agent-4] The command ran successfully. Output:
+
+```
+hello_from_agent_4
+```
+
+Exit code: 0, no stderr. Let me know if you'd like to run anything else!
+
+[agent-1] >>> user prompt: Use the file_write tool to write the text 'agent1 marker content' to a file called agent1_marker.txt
+[agent-1] <<< LLM tool call: file_write({"data":"agent1 marker content","path":"agent1_marker.txt","sandfs_id":"sandfs-6410a39c"})
+[agent-1] >>> tool result [file_write]: {"content":[{"type":"text","text":"{\"ok\":true,\"size\":21}"}]}
+[agent-1] <<< LLM response: Done! I wrote the text to `agent1_marker.txt` (21 bytes, confirmed with `ok: true`).\n\nThe file now contains: `agent1 marker content`\n\nWould you like me to verify the contents or write anything else?
+[agent-1] Done! I wrote the text to `agent1_marker.txt` (21 bytes, confirmed with `ok: true`).
+
+The file now contains: `agent1 marker content`
+
+Would you like me to verify the contents or write anything else?
+
+[agent-1] >>> user prompt: Use the file_read tool to read the file agent1_marker.txt back from the sandbox filesystem. You must call the tool, do not answer from memory.
+[agent-1] <<< LLM tool call: file_read({"path":"agent1_marker.txt","sandfs_id":"sandfs-6410a39c"})
+[agent-1] >>> tool result [file_read]: {"content":[{"type":"text","text":"{\"data\":\"agent1 marker content\",\"is_text\":true,\"ok\":true,\"size\":21}"}]}
+[agent-1] <<< LLM response: I read the file back from the sandbox, and it confirms what was written:\n\n**`agent1_marker.txt`** → `agent1 marker content`\n\nThe round-trip worked: 21 bytes, text content, exactly as originally written.
+[agent-1] I read the file back from the sandbox, and it confirms what was written:
+
+**`agent1_marker.txt`** → `agent1 marker content`
+
+The round-trip worked: 21 bytes, text content, exactly as originally written.
+
+[agent-3] >>> user prompt: Use the execute tool with background=true and lease_duration=30 to start this shell command in the background: sleep 5 && echo bg_complete_marker. IMPORTANT: Do NOT call exec_status after starting the background exec. Just reply that the background task has been started and stop.
+[agent-3] <<< LLM tool call: execute({"background":true,"code":"sleep 5 && echo bg_complete_marker","language":"shell","lease_duration":30,"sandfs_id":"sandfs-06e748d6"})
+[agent-3] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":0,\"exec_id\":\"bg-1-2ca44ce05828a7d4\",\"exit_code\":0,\"gateway_duration_ns\":3852689,\"sandlot_duration_ns\":0,\"status\":\"running\",\"stderr\":\"\",\"stdout\":\"\"}"}]}
+[agent-3] <<< LLM response: The background task has been started successfully.\n\n- **Exec ID:** `bg-1-2ca44ce05828a7d4`\n- **Status:** running\n- **Command:** `sleep 5 && echo bg_complete_marker`\n- **Lease duration:** 30 seconds\n\nIt will finish in ~5 seconds and print `bg_complete_marker`. As requested, I haven't polled its status — let me know when you'd like to check on it.
+[agent-3] The background task has been started successfully.
+
+- **Exec ID:** `bg-1-2ca44ce05828a7d4`
+- **Status:** running
+- **Command:** `sleep 5 && echo bg_complete_marker`
+- **Lease duration:** 30 seconds
+
+It will finish in ~5 seconds and print `bg_complete_marker`. As requested, I haven't polled its status — let me know when you'd like to check on it.
+
+[agent-4] >>> user prompt: Use the execute tool to run this shell command: echo agent4_final
+[agent-4] <<< LLM tool call: execute({"code":"echo agent4_final","language":"shell","sandfs_id":"sandfs-eb1d088e"})
+[agent-4] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4359287,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":6061222,\"sandlot_duration_ns\":5286519,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"agent4_final\\n\"}"}]}
+[agent-4] <<< LLM response: The command ran successfully. Output:\n\n```\nagent4_final\n```\n\nExit code: 0, no stderr. Anything else you'd like to run?
+[agent-4] The command ran successfully. Output:
+
+```
+agent4_final
+```
+
+Exit code: 0, no stderr. Anything else you'd like to run?
+
+
+[0;32m[✓][0m Eino multi-agent started in piped mode
+[0;32m[✓][0m All agents discovered MCP tools (4 tool entries found)
+[0;32m[✓][0m Agent 1 executed shell command
+[0;32m[✓][0m Agent 2 executed shell command
+[0;32m[✓][0m Agent 3 executed shell command
+[0;32m[✓][0m Agent 4 executed shell command
+[0;32m[✓][0m Agent 1 marker write + read-back confirmed (tolerant format match)
+[0;32m[✓][0m Background exec was exercised
+[0;32m[✓][0m Agent 4 executed final command (warm path)
+[0;32m[→][0m Checking VM reuse across agents...
+[0;32m[✓][0m VM reuse confirmed: 2 VMs created (pool size=2)
+[0;32m[→][0m Checking MCP tool-call path...
+[0;32m[✓][0m MCP tool-call path served 16 invocations (stateless, >= 4 agents)
+    Failover test skipped (use --failover to enable)
+
+┌─────────────────────────────────────────────────────────┐
+│  Sandswap K8s Verification Results (boxout mode)
+├─────────────────────────────────────────────────────────┤
+│  K8s Namespace:  sandswap
+│  VM Mode:        boxout (privileged sidecar + unprivileged UID 65536 sandlot)
+│  Gateway Pods:   1/1
+│  Sandlot Pods:   1/1
+│  Human Pod:      1/1
+│  Agents:         4
+│  SandFS:         4
+│  Pool Size:      2 VMs/node
+│  LLM Backend:    deepseek
+│  Eino Exit Code: 0
+│  Test Log:       /tmp/sandswap-logs/eino-sandswap-k8s-boxout-test.log
+└─────────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m All tests PASSED (boxout mode: affinity self-test + eino)
+[0;32m[→][0m Cleaning up...
+    Namespace sandswap preserved (keep mode — verify-k8s.sh / k8s-cleanup.sh next)
+[0;32m[✓][0m Side-effect ledger: reversed 1 leftover mutation(s)
+[0;32m[✓][0m Cleanup done

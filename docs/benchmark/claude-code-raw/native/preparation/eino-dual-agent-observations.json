@@ -1,0 +1,52 @@
+{
+  "source": "eino-dual-agent.log",
+  "actual_tool_calls": 8,
+  "tools": {
+    "execute": 4,
+    "file_write": 2,
+    "file_read": 2
+  },
+  "background_true_calls": 0,
+  "calls": [
+    {
+      "agent": "agent-A",
+      "tool": "execute",
+      "background_true": false
+    },
+    {
+      "agent": "agent-B",
+      "tool": "execute",
+      "background_true": false
+    },
+    {
+      "agent": "agent-A",
+      "tool": "file_write",
+      "background_true": false
+    },
+    {
+      "agent": "agent-B",
+      "tool": "file_write",
+      "background_true": false
+    },
+    {
+      "agent": "agent-A",
+      "tool": "file_read",
+      "background_true": false
+    },
+    {
+      "agent": "agent-B",
+      "tool": "file_read",
+      "background_true": false
+    },
+    {
+      "agent": "agent-A",
+      "tool": "execute",
+      "background_true": false
+    },
+    {
+      "agent": "agent-B",
+      "tool": "execute",
+      "background_true": false
+    }
+  ]
+}

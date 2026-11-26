@@ -1,0 +1,50 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[✓][0m etcd binary: /usr/local/bin/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (reapgw-e2e, data=/tmp/sandswap-reapgw-e2e-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=2564077)
+
+[0;32m═══ Building + starting human gateway ═══[0m
+[0;32m[✓][0m gateway built
+[0;32m[✓][0m human gateway started (PID=2564328, http://127.0.0.1:13100)
+
+[0;32m═══ Seeding dead-owner sandfs ═══[0m
+[0;32m[✓][0m seeded 4 sandfs owned by dead gw-reap-dead-1795676616 (2 idle, 1 mounted+presence, 1 mounted+no-presence)
+
+[0;32m═══ Test 1: dry-run reap-stuck ═══[0m
+[0;32m[✓][0m dry-run reports reaped_count=3
+[0;32m[✓][0m dry-run reports skipped_count=1
+[0;32m[✓][0m dry-run did not delete sandfs-reap-idle1-1795676616
+[0;32m[✓][0m dry-run did not delete sandfs-reap-idle2-1795676616
+[0;32m[✓][0m dry-run did not delete sandfs-reap-mounted-alive-1795676616
+[0;32m[✓][0m dry-run did not delete sandfs-reap-mounted-gone-1795676616
+
+[0;32m═══ Test 2: real reap-stuck ═══[0m
+[0;32m[✓][0m real run reaped_count=3
+[0;32m[✓][0m sandfs-reap-idle1-1795676616 reaped
+[0;32m[✓][0m sandfs-reap-idle2-1795676616 reaped
+[0;32m[✓][0m sandfs-reap-mounted-gone-1795676616 reaped
+[0;32m[✓][0m sandfs-reap-mounted-alive-1795676616 survived (presence present → skipped)
+
+[0;32m═══ Test 3: live owner refused ═══[0m
+[0;32m[✓][0m live owner refused with 409 Conflict
+
+[0;32m═══ Test 4: /stats staleness exposure ═══[0m
+[0;32m[✓][0m /stats lists stale gateway gw-stats-stale-1795676616
+[0;32m[✓][0m /stats exposes stale_sec > 0 for stale gateway
+[0;32m[✓][0m /stats lists local live gateway gw-human-reap
+
+[0;32m═══ Summary ═══[0m
+  pass=18 fail=0
+[0;32m[✓][0m All reap-stuck real-gateway E2E tests PASSED
+{"level":"error","ts":"2026-11-26T15:03:36.857960+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"http: Server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:03:36.857969+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"mux: server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:03:41.860055+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2379: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+{"level":"error","ts":"2026-11-26T15:03:41.860757+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2380: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}

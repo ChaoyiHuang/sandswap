@@ -1,0 +1,46 @@
+═══ Sandswap K8s Cleanup ═══
+  Host: test-host
+
+[1/9] K8s namespace
+  ✓ volume-name generation 'volume-seed' backed up to /etc/sandswap/volume-seed (restored on next deploy)
+  Deleting namespace sandswap...
+namespace "sandswap" deleted
+  ✓ Namespace deleted
+  Removing stale sandfs.sandswap.local zone from coredns Corefile...
+  ✓ coredns zone reverted + coredns restarted
+[2/9] Port-forward processes
+  ✓ Port-forwards cleaned
+[3/9] vsockguard BPF
+vsockguard: detached; removed pins /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/allowed_uid
+  ✓ vsockguard detached
+[4/9] TAP devices + network bridge
+  ✓ Removed 2 TAP device(s)
+  ✓ br-sandswap removed
+  ✓ nftables table removed
+  ✓ nftables table netdev sandswap_baseline removed
+  ✓ nftables table bridge sandswap_baseline removed
+  ✓ nftables table inet sandswap_baseline removed
+  ✓ shm binding region removed
+  ✓ bpf binding pin removed
+[5/9] Stale udev rules
+  ✓ No stale udev rules
+[5b/9] Network persistence unit
+  ✓ Removed /etc/sandswap/stream-certs (re-fetch after the next deploy)
+[6/9] Seccomp profile
+  ✓ Removed /var/lib/kubelet/seccomp/sandswap
+[7/9] Host runtime state
+  ✓ /run/sandswap* + /var/lib/sandswap removed (stale harness pidfile only)
+[8/9] Remaining processes
+  ✓ No sandswap processes running
+
+═══ Cleanup Complete ═══
+  K8s namespace:  deleted
+  Port-forwards:  killed
+  vsockguard:     detached
+  TAP devices:    removed
+  br-sandswap:    removed
+  Seccomp:        removed
+  udev rules:     cleaned
+  /run/sandswap:  removed
+  /var/lib/sandswap: removed
+

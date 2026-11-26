@@ -1,0 +1,32 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+
+[0;32m═══ Gateway self-pressure routing-gate E2E (real etcd, no KVM) ═══[0m
+[0;32m[✓][0m etcd binary: /usr/local/bin/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (selfpressure-e2e, data=/tmp/sandswap-selfpressure-e2e-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=2556775)
+
+[0;32m═══ Building gateway + dns ═══[0m
+[0;32m[✓][0m gateway build succeeded
+[0;32m[✓][0m dns build succeeded
+
+[0;32m═══ Running self-pressure E2E tests ═══[0m
+--- PASS: TestSelfLoadE2ESamplerLoop (8.02s)
+--- PASS: TestSelfLoadE2EPublisherChain (2.02s)
+ok  	gateway/app	11.090s
+--- PASS: TestEtcdStatsReportAggregate (0.03s)
+ok  	gateway/handler	1.070s
+--- PASS: TestE2ESelfPressureRouting (0.04s)
+ok  	dns	1.062s
+[0;32m[✓][0m self-pressure E2E suites passed in 21s
+{"level":"error","ts":"2026-11-26T15:03:10.954889+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"mux: server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:03:10.954863+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"http: Server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:03:10.955151+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2379: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+{"level":"error","ts":"2026-11-26T15:03:10.955504+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2380: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}

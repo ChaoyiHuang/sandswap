@@ -1,0 +1,86 @@
+[1;34m[sandswap][0m Sandswap Cluster Status
+[1;34m[sandswap][0m ========================
+[1;34m[sandswap][0m   GW localhost:3000: healthy
+{
+    "gateways": [
+        {
+            "gateway_id": "gw-exec-1",
+            "healthy": true,
+            "gateway_url": "https://localhost:3000",
+            "stream_addr": "localhost:9998",
+            "node_count": 1,
+            "clean_vms": 2,
+            "total_vms": 2,
+            "agg_duty_long": 0,
+            "self_cpu_pct": 0.00085160156272313,
+            "self_mem_pct": 0,
+            "self_inflight": 0,
+            "self_pressured": false,
+            "last_healthy_ts": "2026-11-26T15:59:30+08:00",
+            "stale_sec": 1,
+            "nodes": [
+                {
+                    "node_id": "test-host-main",
+                    "duty_long": 0,
+                    "duty_short": 0,
+                    "duty_daily": 0,
+                    "duty_var": 0,
+                    "host_cpu_pct": 0,
+                    "host_mem_avail_mb": 0,
+                    "active_sandfs": 0,
+                    "clean_vms": 2,
+                    "total_vms": 2,
+                    "peak_concurrent_execs": 0,
+                    "slot_wait_ms": 0,
+                    "slot_wait_events": 0,
+                    "recycle_triggers": 0,
+                    "stranded_reservations_mb": 0,
+                    "stranded_cids": 0
+                }
+            ]
+        },
+        {
+            "gateway_id": "human-test-host",
+            "healthy": true,
+            "gateway_url": "",
+            "stream_addr": "",
+            "node_count": 0,
+            "clean_vms": 0,
+            "total_vms": 0,
+            "agg_duty_long": 0,
+            "self_cpu_pct": 0,
+            "self_mem_pct": 0,
+            "self_inflight": 0,
+            "self_pressured": false,
+            "last_healthy_ts": "2026-11-26T15:59:29+08:00",
+            "stale_sec": 2
+        }
+    ],
+    "totals": {
+        "clean_vms": 2,
+        "total_vms": 2,
+        "in_use_vms": 0,
+        "node_count": 1,
+        "gateway_count": 2
+    },
+    "maintenance": {
+        "refusing": false
+    },
+    "rotation": {
+        "refusing": false
+    },
+    "prov_seeds": [
+        {
+            "node_id": "sandlot-prov",
+            "generation": "19ca9b1a",
+            "age_sec": 1
+        }
+    ],
+    "egress_bindings": [
+        {
+            "node_id": "sandlot-prov",
+            "binding": "none"
+        }
+    ]
+}
+

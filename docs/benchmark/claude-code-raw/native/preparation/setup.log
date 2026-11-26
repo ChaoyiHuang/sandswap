@@ -1,0 +1,19 @@
+==> creating agent claude-code
+==> creating flat SandFS claude-code from ubuntu:24.04
+==> sandbox toolchain check (python3 / pip3 / git / make inside the tinyVM)
+{"stdout":"Python 3.12.3\npip 24.0 from /usr/lib/python3/dist-packages/pip (python 3.12)\ngit version 2.43.0\nGNU Make 4.3\n","exit_code":0,"status":"done","exec_duration_ns":406650280,"sandlot_duration_ns":408936557,"gateway_duration_ns":409734774}
+==> seeding /workspace of sandfs-be075fe1 (expected: the suite FAILS)
+{"stdout":"Ran 5 tests in 0.001s\n\nFAILED (failures=3)\n","exit_code":0,"status":"done","exec_duration_ns":144901410,"sandlot_duration_ns":145171574,"gateway_duration_ns":145472168}
+
+===================================================================
+ Provisioned:
+   agent:    claude-code (agent-d8f5729c)
+   sandbox:  sandfs-be075fe1  (template ubuntu:24.04, mode flat)
+   MCP url:  https://localhost:3000/mcp
+   TLS:      export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt
+
+ Next (README step 7):
+   source /opt/sandswap-pr38/src/examples/claude-code/.env.sh
+   export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt
+   cd /opt/sandswap-pr38/src/examples/claude-code && claude        # then paste TASK.md, or: Complete the task in TASK.md
+===================================================================

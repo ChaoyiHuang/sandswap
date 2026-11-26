@@ -1,0 +1,59 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+
+[0;32m═══ Phase 0: preflight ═══[0m
+[0;32m[✓][0m binaries present, 393G free
+
+[0;32m═══ Phase 1: ephemeral etcd ═══[0m
+[0;32m[✓][0m etcd up (127.0.0.1:12379)
+
+[0;32m═══ Phase 2: population (tenants=1000 agents/t=100 sandfs/a=10) ═══[0m
+[0;32m[✓][0m sample keys → /var/tmp/sandswap-scale/sample-keys.txt (1000 lines)
+
+[0;32m═══ Phase 3: gateways (C1: identity full load) ═══[0m
+[0;32m[✓][0m C1: human gw ready in 5133ms (full identity load)
+[0;32m[✓][0m human gw leg up (exec gw deferred to Phase 7 — single residency)
+[1;33m[!][0m C2/C8 skipped: /human/ns/* requires verified claims; this rehearsal's human gateway is anonymous
+
+[0;32m═══ Phase 4a: measurements — listing shapes (C2/C3) ═══[0m
+[1;33m[!][0m C2 skipped (anonymous human posture;: verified claims required)
+[0;32m[✓][0m C3 fleet /human/sandfs?limit=1000: min=393ms med=402ms max=614ms (hard-paginated page)
+
+[0;32m═══ Phase 4c: /stats + /metrics projection (C5) ═══[0m
+[0;32m[✓][0m C5 /stats: median 7ms
+[0;32m[✓][0m C5 /metrics: median 8ms
+
+[0;32m═══ Phase 4d: DNS owner-aware zone (C6) ═══[0m
+[0;32m[✓][0m C6 DNS sandfs-00000c78.sandfs.zone: P50=17ms P95=18ms P99=29ms (n=50)
+
+[0;32m═══ Phase 5: restart re-load (C7) ═══[0m
+[0;32m[✓][0m C7: restart re-load 5633ms to /ready
+
+[0;32m═══ Phase 6: ownership CAS contention (C8, two concurrent reap callers) ═══[0m
+[1;33m[!][0m C8 skipped (anonymous human posture;: verified claims required)
+
+[0;32m═══ Phase 7: exec gateway leg (C4; human gw stopped — single residency) ═══[0m
+[0;32m[✓][0m exec gw ready in 9674ms (hot-only identity load + ownership)
+
+[0;32m═══ Phase 7a: agent-API auth hot path (C4) ═══[0m
+[0;32m[✓][0m C4 /agent/sandfs (digest auth + owned list): P50=40ms P95=107ms P99=114ms avg=45.2ms (n=200)
+
+[0;32m═══ Report ═══[0m
+  raw json → /var/tmp/sandswap-scale-rehearsal/scale-rehearsal-20261126-153143.json
+  curve                                     value  
+  C1 identity full load                    5133 ms
+  C2 per-ns agent listing P95        skipped-anonymous ms
+  C2 per-ns sandfs listing P95       skipped-anonymous ms
+  C3 fleet listing (med/max)            402/614 ms
+  C4 agent auth P95                         107 ms
+  C5 /stats median                            7 ms
+  C5 /metrics median                          8 ms
+  C6 DNS P95                                 18 ms
+  C7 restart re-load                       5633 ms
+  C8 CAS race                        skipped-anonymous ms
+[0;32m[✓][0m scale rehearsal complete

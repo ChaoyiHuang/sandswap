@@ -1,0 +1,4 @@
+commit=6126eb89787ba84a9162ee452c76e78d862fa683
+start=2026-11-26T08:21:25Z
+commands=bash e2e/run-matrix.sh --only e2e/multi-instance-orphan-safety.sh --force; bash e2e/run-matrix.sh --only e2e/seccomp.sh --force
+end=2026-11-26T08:21:56Z

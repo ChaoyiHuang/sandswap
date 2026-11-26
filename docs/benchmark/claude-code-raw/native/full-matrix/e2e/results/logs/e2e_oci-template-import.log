@@ -1,0 +1,146 @@
+
+[0;32m═══ Phase 0: Pre-flight ═══[0m
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m All 5 artifacts present in output/
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m artifacts present
+
+[0;32m═══ Phase 1: Assemble synthetic image archives (tar + sha256sum) ═══[0m
+[0;32m[✓][0m synthetic archives built (multi-arch amd64 [plain+gzip layers], arm64-only, corrupt, legacy, rootfs tar)
+
+[0;32m═══ Phase 2: Offline import — negatives first (no stack yet) ═══[0m
+[0;32m[✓][0m arm64 archive: refused as expected
+[0;32m[✓][0m legacy docker save: refused as expected
+[0;32m[✓][0m corrupt blob: refused, nothing published
+[0;32m[→][0m negatives: platform/corruption/legacy refusals checked
+
+[0;32m═══ Phase 3: Import into the flat scan root + template store ═══[0m
+    ss_prepare_shared_dir[/tmp/sandswap-oci-import-sBEFR0/templates]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-oci-import-sBEFR0/templates]: created root:sandlot 2770
+[0;32m[✓][0m flat import published /tmp/sandswap-oci-import-sBEFR0/flat/convimg/v1
+[0;32m[✓][0m re-import refused (refs are immutable)
+[0;32m[✓][0m overlay-store import published /tmp/sandswap-oci-import-sBEFR0/templates/convimg/v2
+[0;32m[✓][0m rootfs-tar import published /tmp/sandswap-oci-import-sBEFR0/flat/convroot/v1
+[0;32m[✓][0m template-tool validate clean: /tmp/sandswap-oci-import-sBEFR0/flat/convimg/v1
+[0;32m[✓][0m template-tool validate clean: /tmp/sandswap-oci-import-sBEFR0/flat/convroot/v1
+[0;32m[✓][0m template-tool validate clean: /tmp/sandswap-oci-import-sBEFR0/templates/convimg/v2
+[0;32m[✓][0m imported tree published at /tmp/sandswap-oci-import-sBEFR0/flat/convimg/v1
+[0;32m[✓][0m whiteout removed opt/wh-target (host)
+[0;32m[✓][0m opaque dir hid opt/whdir/old (host)
+[0;32m[✓][0m directory whiteout removed opt/pkg (host)
+[0;32m[✓][0m legacy 0/0 device whiteout removed opt/dev-tgt (host)
+[0;32m[✓][0m setuid 4755 preserved (host)
+[0;32m[✓][0m file→dir transition applied (host)
+[0;32m[✓][0m dir→file transition applied (host)
+[0;32m[✓][0m masked-symlink whiteout is a no-op: /b/c survives (host)
+[0;32m[✓][0m upper dir a masks the lower symlink, no victim materialized (host)
+[0;32m[✓][0m volume control file stripped (host)
+[0;32m[✓][0m whiteout markers never materialize (metadata applied, not content)
+
+[0;32m═══ Phase 3b: Group grant — settle + offline audit (host-side) ═══[0m
+[0;32m[→][0m group-fixture archive built (reliant: /root 0700, /etc/shadow 0640; setuid /bin/su 4755)
+[0;32m[✓][0m import --group 4242 (numeric, no local group of that number) published
+[0;32m[✓][0m import warns about the group-grant-reliant entries
+[0;32m[✓][0m group settle reached root (gid 4242)
+[0;32m[✓][0m group settle reached etc/shadow (gid 4242)
+[0;32m[✓][0m group settle reached bin/su (gid 4242)
+[0;32m[✓][0m setuid bit survives the group settle
+[0;32m[✓][0m validate --expect-group 4242 passes on the settled tree
+[0;32m[✓][0m foreign expected gid errors with the manual chgrp -R fix
+[0;32m[✓][0m unresolvable group name refuses with the numeric-gid hint
+[0;32m[✓][0m name form: --group root settles, --expect-group root passes
+[0;32m[✓][0m default-settle import published (no --group)
+[0;32m[✓][0m default settle lands the --out root's gid on reliant entries
+[0;32m[✓][0m non-setgid --out root earns the copy-does-not-preserve-group warning
+[0;32m[✓][0m push-only + --group refused (nothing local to settle)
+[0;32m[✓][0m check-store flags the foreign-gid reliant entry (against the store root's group)
+[0;32m[✓][0m check-store clean after the re-settle
+[0;32m[✓][0m check-store skips writer-internal staging (foreign gid there is mid-flight)
+[0;32m[✓][0m check-store audits in-store template trees (import --out <store> shape)
+[0;32m[✓][0m in-store tree clean after the re-settle
+[0;32m[✓][0m check-store --expect-group flags the store root carrying a foreign group (cross-host)
+[0;32m[✓][0m check-store --expect-group matching the store's own group is clean
+[0;32m[✓][0m check-store --expect-group accepts a group NAME (resolved on this host)
+    ss_prepare_shared_dir[/tmp/sandswap-oci-import-sBEFR0/grpscan-TR8aH6/scan]: group-var='sandlot' (gid=985)
+    ss_prepare_shared_dir[/tmp/sandswap-oci-import-sBEFR0/grpscan-TR8aH6/scan]: created root:sandlot 2770
+[0;32m[✓][0m scan-root publish gscan:v1 (default settle = root gid 985, no --group)
+[0;32m[✓][0m scan-root publish gscan:v2 (default settle = root gid 985, no --group)
+[0;32m[✓][0m setgid scan root: trees inherit the group, settle is a no-op
+[0;32m[✓][0m reliant entry inherited the scan root's gid
+[0;32m[✓][0m validate --expect-group over the scan root passes (every leaf + the root; unconsumed .junk ignored)
+[0;32m[✓][0m validate --expect-group 4242 over the scan root flags both leaves (reliant entries)
+[0;32m[✓][0m root-owned tree published for the non-owner audit leg
+[0;32m[✓][0m non-owner validate reports the unreadable /root exactly once and exits 1
+[0;32m[✓][0m owner validate of the same tree is clean (unreadable finding is identity-specific)
+[0;32m[→][0m group grant: numeric/name/default settle, offline audit, store audit (layers + in-store trees + cross-host), scan root, non-owner audit
+
+[0;32m═══ Phase 4: Start stack ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2673842)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2673876)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+[0;32m[✓][0m stack up (gateway + sandlot, flat root = /tmp/sandswap-oci-import-sBEFR0/flat)
+
+[0;32m═══ Phase 5: Flat SandFS from the converted image ═══[0m
+[0;32m[✓][0m flat sandfs created from the converted template
+[0;32m[✓][0m 5.1 whiteout: /opt/wh-target gone in guest
+[0;32m[✓][0m 5.2 opaque: /opt/whdir/old gone in guest
+[0;32m[✓][0m 5.3 opaque: /opt/whdir/new present in guest
+[0;32m[✓][0m 5.4 type transition dir→file in guest
+[0;32m[✓][0m 5.5 directory whiteout: /opt/pkg gone in guest
+[0;32m[✓][0m 5.6 legacy device whiteout applied in guest
+[0;32m[✓][0m 5.7 type transition file→dir in guest
+[0;32m[✓][0m 5.8 flat copy applies the volume mode policy
+[0;32m[✓][0m 5.9 absolute symlink is tree-relative in guest
+[0;32m[✓][0m 5.10 masked-symlink whiteout is a no-op (/b/c)
+[0;32m[✓][0m 5.11 upper dir masks the lower symlink
+[0;32m[✓][0m 5.12 volume control content never leaked
+
+[0;32m═══ Phase 6: Overlay SandFS from the store-registered import ═══[0m
+[0;32m[✓][0m overlay sandfs created from the store-registered import
+[0;32m[✓][0m 6.1 overlay exec works (shell resolves)
+[0;32m[✓][0m 6.2 overlay base is read-only
+[0;32m[✓][0m 6.3 overlay whiteout applied
+[0;32m[✓][0m 6.4 workspace write persists
+[0;32m[✓][0m 6.5 setuid bit survives on the read-only base
+
+[0;32m═══ Phase 7: Plain rootfs tar (docker export shape) ═══[0m
+[0;32m[✓][0m flat sandfs created from the rootfs-tar template
+[0;32m[✓][0m 7.1 rootfs-tar template execs
+
+[0;32m═══ Verdict ═══[0m
+[0;32m[✓][0m ALL 74 checks passed — OCI image → template conversion serves both modes
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 4 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

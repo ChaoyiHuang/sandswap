@@ -1,0 +1,14 @@
+{
+  "log": "runtime-logs/sandswap-logs/eino-baremetal-test.log",
+  "actual_tool_calls": 7,
+  "background_tool_calls": 1,
+  "actual_calls": [
+    "[agent-1] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_1\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-e630c294\"})",
+    "[agent-2] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_2\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-3d85666c\"})",
+    "[agent-3] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_3\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-ed162081\"})",
+    "[agent-4] <<< LLM tool call: execute({\"code\":\"echo hello_from_agent_4\",\"language\":\"shell\",\"sandfs_id\":\"sandfs-ceb1b104\"})",
+    "[agent-1] <<< LLM tool call: file_write({\"data\":\"agent1 marker content\",\"path\":\"agent1_marker.txt\",\"sandfs_id\":\"sandfs-e630c294\"})",
+    "[agent-1] <<< LLM tool call: file_read({\"path\":\"agent1_marker.txt\",\"sandfs_id\":\"sandfs-e630c294\"})",
+    "[agent-3] <<< LLM tool call: execute({\"background\":true,\"code\":\"sleep 5 && echo bg_complete_marker\",\"language\":\"shell\",\"lease_duration\":30,\"sandfs_id\":\"sandfs-ed162081\"})"
+  ]
+}

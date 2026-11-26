@@ -1,0 +1,179 @@
+++ id -u
++ '[' 0 -eq 0 ']'
++ K3S_DATA_DIR=/var/lib/rancher/k3s
++ /usr/local/bin/k3s-killall.sh
++ for service in /etc/systemd/system/k3s*.service
++ '[' -s /etc/systemd/system/k3s.service ']'
+++ basename /etc/systemd/system/k3s.service
++ systemctl stop k3s.service
++ for service in /etc/init.d/k3s*
++ '[' -x '/etc/init.d/k3s*' ']'
++ killtree 2882894 2882980 2883923 2884092 2963676
++ kill -9 2882894 2883010 2883218 2882980 2883032 2883347 2883923 2883948 2883988 2884130 2884092 2884122 2884283 2963676 2963903 2963928
++ do_unmount_and_remove /run/k3s
++ set +x
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/e0e791b06f71861596e931bf66dc1ecb757e825a6c6de3767368395b1cc8a4ad/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/bf0e14b4daefa805b2dc36d10827ae57e92150bb88e3c6533f1ff37c792496b9/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/acbb67ec857f7fec242e3e95775d7b830b2d69788da947e6a998117e55e023ed/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/8791c8197371c0ad9a844ea0389f077976ff2884be7ce164a66e968deedc6b04/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/7be0c8e13a024bc4c8f35ca98fa7b8b536d0bb041885d14f1a66b161071ea1b3/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/683e5906878a5bdeb2c8e8b2ae044b5a68ce4febfeb47ce0b8570e81bf93b254/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/56129a9e04fc21f0d8f11edc1bc71e2c472be3113c006242eca3a562172d0db1/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/525515e8094a004338d7e3207a5cd8f5d513d1a2aa24d54c71fe1e4f928e0cad/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/37ce1fb64a18839a97ed4f9a994d4f83096ba88d9a523abcdba8314f3f9f450c/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/3634ac9c641d0c893abe7ddf0e8f3606d62c690eb522e9c4bdecbca823519820/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.runtime.v2.task/k8s.io/343a22c2f1e771506582178f513e3734d7e8b2bf99177105c459db43ca21e3a3/rootfs
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.grpc.v1.cri/sandboxes/e0e791b06f71861596e931bf66dc1ecb757e825a6c6de3767368395b1cc8a4ad/shm
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.grpc.v1.cri/sandboxes/8791c8197371c0ad9a844ea0389f077976ff2884be7ce164a66e968deedc6b04/shm
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.grpc.v1.cri/sandboxes/525515e8094a004338d7e3207a5cd8f5d513d1a2aa24d54c71fe1e4f928e0cad/shm
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.grpc.v1.cri/sandboxes/37ce1fb64a18839a97ed4f9a994d4f83096ba88d9a523abcdba8314f3f9f450c/shm
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/k3s/containerd/io.containerd.grpc.v1.cri/sandboxes/343a22c2f1e771506582178f513e3734d7e8b2bf99177105c459db43ca21e3a3/shm
++ do_unmount_and_remove /var/lib/kubelet/pods
++ set +x
+sh -c 'umount -f "$0" && rm -rf "$0"' /var/lib/kubelet/pods/fe55f082-f997-486e-9475-356330e5c6a9/volumes/kubernetes.io~projected/kube-api-access-xrw8n
+sh -c 'umount -f "$0" && rm -rf "$0"' /var/lib/kubelet/pods/85464217-e581-4f1a-ba34-ea3227f63137/volumes/kubernetes.io~projected/kube-api-access-sjmgq
+sh -c 'umount -f "$0" && rm -rf "$0"' /var/lib/kubelet/pods/54d0b4ef-7b9e-4408-ab31-c9875216078c/volumes/kubernetes.io~projected/kube-api-access-ng8rc
+sh -c 'umount -f "$0" && rm -rf "$0"' /var/lib/kubelet/pods/4afd9808-2961-48cb-b6e6-a62b7af19494/volumes/kubernetes.io~projected/kube-api-access-89lpl
++ do_unmount_and_remove /var/lib/kubelet/plugins
++ set +x
++ do_unmount_and_remove /run/netns/cni-
++ set +x
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-a153c122-b989-d9d6-c59a-2f95f0ab0a88
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-a153c122-b989-d9d6-c59a-2f95f0ab0a88
+umount: /run/netns/cni-a153c122-b989-d9d6-c59a-2f95f0ab0a88: no mount point specified.
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-7c49ba64-3cbf-e3e9-ed9e-e058e05a22f0
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-7c49ba64-3cbf-e3e9-ed9e-e058e05a22f0
+umount: /run/netns/cni-7c49ba64-3cbf-e3e9-ed9e-e058e05a22f0: no mount point specified.
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-71f6ad7e-d228-cf30-82c5-b65b20ab9c86
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-71f6ad7e-d228-cf30-82c5-b65b20ab9c86
+umount: /run/netns/cni-71f6ad7e-d228-cf30-82c5-b65b20ab9c86: no mount point specified.
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-317b520d-50f4-a801-27df-4a822e1d8c00
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-317b520d-50f4-a801-27df-4a822e1d8c00
+umount: /run/netns/cni-317b520d-50f4-a801-27df-4a822e1d8c00: no mount point specified.
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-0334e954-4d49-34f0-1b83-ea67a9655e7b
+sh -c 'umount -f "$0" && rm -rf "$0"' /run/netns/cni-0334e954-4d49-34f0-1b83-ea67a9655e7b
+umount: /run/netns/cni-0334e954-4d49-34f0-1b83-ea67a9655e7b: no mount point specified.
++ ip netns show
++ grep cni-
++ xargs -r -t -n 1 ip netns delete
++ remove_interfaces
++ ip link show
++ grep 'master cni0'
++ read ignore iface ignore
++ iface=veth3b50cdcd
++ '[' -z veth3b50cdcd ']'
++ ip link delete veth3b50cdcd
++ read ignore iface ignore
++ iface=vethca94b6bd
++ '[' -z vethca94b6bd ']'
++ ip link delete vethca94b6bd
++ read ignore iface ignore
++ iface=veth4c3ccadf
++ '[' -z veth4c3ccadf ']'
++ ip link delete veth4c3ccadf
+Cannot find device "veth4c3ccadf"
++ read ignore iface ignore
++ iface=veth65d4f590
++ '[' -z veth65d4f590 ']'
++ ip link delete veth65d4f590
+Cannot find device "veth65d4f590"
++ read ignore iface ignore
++ ip link delete cni0
++ ip link delete flannel.1
++ ip link delete flannel-v6.1
+Cannot find device "flannel-v6.1"
++ ip link delete kube-ipvs0
+Cannot find device "kube-ipvs0"
++ ip link delete flannel-wg
+Cannot find device "flannel-wg"
++ ip link delete flannel-wg-v6
+Cannot find device "flannel-wg-v6"
+++ command -v tailscale
++ '[' -n '' ']'
++ rm -rf /var/lib/cni/
++ iptables-save
++ grep -v KUBE-
++ grep -iv flannel
++ grep -v CNI-
++ iptables-restore
++ ip6tables-save
++ grep -v KUBE-
++ grep -v CNI-
++ grep -iv flannel
++ ip6tables-restore
++ command -v systemctl
+/usr/bin/systemctl
++ systemctl disable k3s
+Removed /etc/systemd/system/multi-user.target.wants/k3s.service.
++ systemctl reset-failed k3s
+Failed to reset failed state of unit k3s.service: Unit k3s.service not loaded.
++ systemctl daemon-reload
++ command -v rc-update
++ rm -f /etc/systemd/system/k3s.service
++ rm -f /etc/systemd/system/k3s.service.env
++ trap remove_uninstall EXIT
++ for cmd in kubectl crictl ctr
++ '[' -L /usr/local/bin/kubectl ']'
++ rm -f /usr/local/bin/kubectl
++ for cmd in kubectl crictl ctr
++ '[' -L /usr/local/bin/crictl ']'
++ rm -f /usr/local/bin/crictl
++ for cmd in kubectl crictl ctr
++ '[' -L /usr/local/bin/ctr ']'
++ rm -rf /etc/rancher/k3s
++ rm -rf /run/k3s
++ rm -rf /run/flannel
++ clean_mounted_directory /var/lib/rancher/k3s
++ grep -q ' /var/lib/rancher/k3s' /proc/mounts
++ for path in "$1"/*
++ '[' -d /var/lib/rancher/k3s/agent ']'
++ grep -q ' /var/lib/rancher/k3s/agent' /proc/mounts
++ rm -rf /var/lib/rancher/k3s/agent
++ for path in "$1"/*
++ '[' -d /var/lib/rancher/k3s/data ']'
++ grep -q ' /var/lib/rancher/k3s/data' /proc/mounts
++ rm -rf /var/lib/rancher/k3s/data
++ for path in "$1"/*
++ '[' -d /var/lib/rancher/k3s/server ']'
++ grep -q ' /var/lib/rancher/k3s/server' /proc/mounts
++ rm -rf /var/lib/rancher/k3s/server
++ for path in "$1"/*
++ '[' -d /var/lib/rancher/k3s/storage ']'
++ grep -q ' /var/lib/rancher/k3s/storage' /proc/mounts
++ clean_mounted_directory /var/lib/rancher/k3s/storage
++ grep -q ' /var/lib/rancher/k3s/storage' /proc/mounts
++ for path in "$1"/*
++ '[' -d '/var/lib/rancher/k3s/storage/*' ']'
++ rm '/var/lib/rancher/k3s/storage/*'
+rm: cannot remove '/var/lib/rancher/k3s/storage/*': No such file or directory
++ rm -rf /var/lib/kubelet
++ rm -f /usr/local/bin/k3s
++ rm -f /usr/local/bin/k3s-killall.sh
++ rpm_ostree_uninstall_cmd='rpm-ostree uninstall --idempotent k3s-selinux'
++ '[' -r /etc/os-release ']'
++ . /etc/os-release
+++ PRETTY_NAME='Ubuntu 22.04.4 LTS'
+++ NAME=Ubuntu
+++ VERSION_ID=22.04
+++ VERSION='22.04.4 LTS (Jammy Jellyfish)'
+++ VERSION_CODENAME=jammy
+++ ID=ubuntu
+++ ID_LIKE=debian
+++ HOME_URL=https://www.ubuntu.com/
+++ SUPPORT_URL=https://help.ubuntu.com/
+++ BUG_REPORT_URL=https://bugs.launchpad.net/ubuntu/
+++ PRIVACY_POLICY_URL=https://www.ubuntu.com/legal/terms-and-policies/privacy-policy
+++ UBUNTU_CODENAME=jammy
+++ expr debian : '.*suse.*'
++ '[' 0 '!=' 0 ']'
++ '[' ubuntu = fedora ']'
+++ expr debian : '.*fedora.*\|.*rhel.*\|.*centos.*'
++ '[' 0 '!=' 0 ']'
++ command -v rpm-ostree
++ command -v zypper
++ command -v yum
++ '[' -d /usr/share/selinux ']'
++ '[' -d /etc/zypp/repos.d ']'
++ '[' -d /etc/yum.repos.d ']'
++ remove_uninstall
++ rm -f /usr/local/bin/k3s-uninstall.sh

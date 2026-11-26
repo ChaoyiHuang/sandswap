@@ -1,0 +1,13 @@
+{
+  "tests_run": 5,
+  "failures": 3,
+  "errors": 0,
+  "output": "test_ints (test_calc.TestAdd.test_ints) ... FAIL\ntest_negatives (test_calc.TestAdd.test_negatives) ... FAIL\ntest_base (test_calc.TestFib.test_base) ... ok\ntest_rejects_negative (test_calc.TestFib.test_rejects_negative) ... ok\ntest_sequence (test_calc.TestFib.test_sequence) ... FAIL\n\n======================================================================\nFAIL: test_ints (test_calc.TestAdd.test_ints)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/tests/test_calc.py\", line 8, in test_ints\n    self.assertEqual(add(2, 3), 5)\nAssertionError: -1 != 5\n\n======================================================================\nFAIL: test_negatives (test_calc.TestAdd.test_negatives)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/tests/test_calc.py\", line 11, in test_negatives\n    self.assertEqual(add(-1, 1), 0)\nAssertionError: -2 != 0\n\n======================================================================\nFAIL: test_sequence (test_calc.TestFib.test_sequence)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/tests/test_calc.py\", line 20, in test_sequence\n    self.assertEqual([fib(i) for i in range(7)], [0, 1, 1, 2, 3, 5, 8])\nAssertionError: Lists differ: [0, 1, 1, 1, 2, 3, 5] != [0, 1, 1, 2, 3, 5, 8]\n\nFirst differing element 3:\n1\n2\n\n- [0, 1, 1, 1, 2, 3, 5]\n?           ---\n\n+ [0, 1, 1, 2, 3, 5, 8]\n?                  +++\n\n\n----------------------------------------------------------------------\nRan 5 tests in 0.001s\n\nFAILED (failures=3)\n",
+  "test_sha256": "0e79b17432c425f2b03036a2c641a820e0d597397e2f4d5b4c3acfa8022ae091",
+  "commits": [
+    "add failing calc suite"
+  ],
+  "head": "f218dba84ae9e095da81098ac3a1e03a65e94405",
+  "status": "?? calc/__pycache__/\n?? tests/__pycache__/",
+  "core_committed": true
+}

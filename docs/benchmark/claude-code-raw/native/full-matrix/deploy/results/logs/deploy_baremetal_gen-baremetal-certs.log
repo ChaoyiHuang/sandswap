@@ -1,0 +1,39 @@
+Generating Sandswap bare-metal TLS certificates (validity: 365 days)...
+  Output: /opt/sandswap-pr38/src/output/baremetal-certs/
+  [1/7] CA...
+  [2/7] etcd server cert...
+  [3/7] etcd client cert...
+  [4/7] gateway stream server cert...
+  [5/7] gateway MCP server cert...
+  [6/7] gateway human server cert...
+  [7/7] sandlot client cert (CN=test-host)...
+
+  Certificates generated in /opt/sandswap-pr38/src/output/baremetal-certs/
+total 60
+drwxr-xr-x  2 root root 4096 Nov 26 15:51 .
+drwxr-xr-x 10 root root 4096 Nov 26 15:51 ..
+lrwxrwxrwx  1 root root    9 Nov 26 15:51 admin.crt -> human.crt
+lrwxrwxrwx  1 root root    9 Nov 26 15:51 admin.key -> human.key
+-rw-r--r--  1 root root 1196 Nov 26 15:51 ca.crt
+-rw-r--r--  1 root root 1188 Nov 26 15:51 etcd-client.crt
+-rw-------  1 root root 1704 Nov 26 15:51 etcd-client.key
+-rw-r--r--  1 root root 1224 Nov 26 15:51 etcd-server.crt
+-rw-------  1 root root 1704 Nov 26 15:51 etcd-server.key
+-rw-r--r--  1 root root 1229 Nov 26 15:51 human.crt
+-rw-------  1 root root 1704 Nov 26 15:51 human.key
+-rw-r--r--  1 root root 1224 Nov 26 15:51 mcp.crt
+-rw-------  1 root root 1704 Nov 26 15:51 mcp.key
+-rw-r--r--  1 root root 1245 Nov 26 15:51 sandlot.crt
+-rw-------  1 root root 1704 Nov 26 15:51 sandlot.key
+-rw-r--r--  1 root root 1229 Nov 26 15:51 stream.crt
+-rw-------  1 root root 1704 Nov 26 15:51 stream.key
+
+  Files:
+    ca.crt                       — CA certificate (the private key is removed)
+    etcd-server.crt, .key        — etcd server (TLS)
+    etcd-client.crt, .key        — etcd client (mTLS)
+    stream.crt, .key             — gateway gRPC stream server (mTLS)
+    mcp.crt, .key                — gateway MCP/agent HTTP server (TLS)
+    human.crt, .key              — gateway human HTTP server (TLS)
+    admin.crt, .key              — symlink → human.* (backward compat)
+    sandlot.crt, .key            — sandlot gRPC stream client (mTLS), CN=test-host

@@ -1,0 +1,257 @@
+
+[0;32m═══ Phase 0: Pre-flight Checks ═══[0m
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+  LLM:      deepseek
+[0;32m[✓][0m Running as root
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl go python3
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[✓][0m Ubuntu rootfs template present: /opt/sandswap-pr38/src/output/rootfs-ubuntu/
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Deploy (with pre-test cleanup) ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-eino-logs
+[0;32m[→][0m Deploying Ubuntu rootfs template (replacing default busybox)...
+    Ubuntu rootfs template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (245M)
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+
+[0;32m═══ Phase 2: Start Gateway + Sandlot ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2679685)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2679731)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+
+[0;32m═══ Phase 3: Create Two Agents + Two SandFS ═══[0m
+[0;32m[→][0m Creating agent A...
+[0;32m[✓][0m Agent A created: agent-d634f4ba
+[0;32m[→][0m Creating sandfs for agent A (install_packages=true, flat mode)...
+[0;32m[✓][0m SandFS A created: sandfs-67b8e57f
+[0;32m[→][0m Creating agent B...
+[0;32m[✓][0m Agent B created: agent-0cec5fbc
+[0;32m[→][0m Creating sandfs for agent B (flat mode)...
+[0;32m[✓][0m SandFS B created: sandfs-b91f06c7
+
+[0;32m═══ Phase 4: Dual-Agent E2E Test (VM Reuse) ═══[0m
+[0;32m[→][0m Building Eino example binary...
+[0;32m[✓][0m Eino example binary built
+[0;32m[→][0m Running dual-agent test (piped mode, pool size=1)...
+
+Sandswap Eino dual-agent ready (piped mode)
+  MCP endpoint: http://localhost:3001/mcp
+  LLM backend:  deepseek
+  Model:        glm-5.3-flash
+  Agent A:      agent-A (12 tools discovered)
+  Agent B:      agent-B (12 tools discovered)
+
+[agent-A] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_a
+[agent-A] <<< LLM tool call: execute({"code":"echo hello_from_agent_a","language":"shell","sandfs_id":"sandfs-67b8e57f"})
+[agent-A] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":5024748,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":8586813,\"sandlot_duration_ns\":7605629,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_a\\n\"}"}]}
+[agent-A] <<< LLM response: The command ran successfully. Here's the output:\n\n```\nhello_from_agent_a\n```\n\nExit code: `0`, no errors. Let me know if you'd like to run anything else!
+[A] The command ran successfully. Here's the output:
+
+```
+hello_from_agent_a
+```
+
+Exit code: `0`, no errors. Let me know if you'd like to run anything else!
+
+[agent-B] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_agent_b
+[agent-B] <<< LLM tool call: execute({"code":"echo hello_from_agent_b","language":"shell","sandfs_id":"sandfs-b91f06c7"})
+[agent-B] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":8250539,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":9489205,\"sandlot_duration_ns\":9203776,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_agent_b\\n\"}"}]}
+[agent-B] <<< LLM response: The command ran successfully:\n\n```\nhello_from_agent_b\n```\n\nExit code: 0, no errors. Anything else you'd like me to run in the sandbox?
+[B] The command ran successfully:
+
+```
+hello_from_agent_b
+```
+
+Exit code: 0, no errors. Anything else you'd like me to run in the sandbox?
+
+[agent-A] >>> user prompt: Use the file_write tool to write the text 'marker file from agent A' to a file called agent_a_marker.txt
+[agent-A] <<< LLM tool call: file_write({"data":"marker file from agent A","path":"agent_a_marker.txt","sandfs_id":"sandfs-67b8e57f"})
+[agent-A] >>> tool result [file_write]: {"content":[{"type":"text","text":"{\"ok\":true,\"size\":24}"}]}
+[agent-A] <<< LLM response: Done! The file was written successfully:\n\n- **File:** `agent_a_marker.txt`\n- **Content:** `marker file from agent A`\n- **Size:** 24 bytes\n\nLet me know if you'd like to read it back, modify it, or do anything else with it!
+[A] Done! The file was written successfully:
+
+- **File:** `agent_a_marker.txt`
+- **Content:** `marker file from agent A`
+- **Size:** 24 bytes
+
+Let me know if you'd like to read it back, modify it, or do anything else with it!
+
+[agent-B] >>> user prompt: Use the file_write tool to write the text 'marker file from agent B' to a file called agent_b_marker.txt
+[agent-B] <<< LLM tool call: file_write({"data":"marker file from agent B","path":"agent_b_marker.txt","sandfs_id":"sandfs-b91f06c7"})
+[agent-B] >>> tool result [file_write]: {"content":[{"type":"text","text":"{\"ok\":true,\"size\":24}"}]}
+[agent-B] <<< LLM response: Done! The file `agent_b_marker.txt` was written to the workspace with the content:\n\n```\nmarker file from agent B\n```\n\nWrite confirmed (24 bytes). Let me know if you'd like me to read it back or do anything else with it.
+[B] Done! The file `agent_b_marker.txt` was written to the workspace with the content:
+
+```
+marker file from agent B
+```
+
+Write confirmed (24 bytes). Let me know if you'd like me to read it back or do anything else with it.
+
+[agent-A] >>> user prompt: Use the file_read tool to read the file agent_a_marker.txt from the sandbox filesystem. You must call the tool, do not answer from memory.
+[agent-A] <<< LLM tool call: file_read({"path":"agent_a_marker.txt","sandfs_id":"sandfs-67b8e57f"})
+[agent-A] >>> tool result [file_read]: {"content":[{"type":"text","text":"{\"data\":\"marker file from agent A\",\"is_text\":true,\"ok\":true,\"size\":24}"}]}
+[agent-A] <<< LLM response: I read the file directly from the sandbox filesystem, and here's what it contains:\n\n```\nmarker file from agent A\n```\n\n- **Size:** 24 bytes\n- **Type:** text\n\nThe content matches exactly what was written earlier. ✅
+[A] I read the file directly from the sandbox filesystem, and here's what it contains:
+
+```
+marker file from agent A
+```
+
+- **Size:** 24 bytes
+- **Type:** text
+
+The content matches exactly what was written earlier. ✅
+
+[agent-B] >>> user prompt: Use the file_read tool to read the file agent_b_marker.txt from the sandbox filesystem. You must call the tool, do not answer from memory.
+[agent-B] <<< LLM tool call: file_read({"path":"agent_b_marker.txt","sandfs_id":"sandfs-b91f06c7"})
+[agent-B] >>> tool result [file_read]: {"content":[{"type":"text","text":"{\"data\":\"marker file from agent B\",\"is_text\":true,\"ok\":true,\"size\":24}"}]}
+[agent-B] <<< LLM response: I read the file directly from the sandbox filesystem. Contents of `agent_b_marker.txt`:\n\n```\nmarker file from agent B\n```\n\nFile stats: 24 bytes, plain text — matching what was written earlier.
+[B] I read the file directly from the sandbox filesystem. Contents of `agent_b_marker.txt`:
+
+```
+marker file from agent B
+```
+
+File stats: 24 bytes, plain text — matching what was written earlier.
+
+[agent-A] >>> user prompt: Use the execute tool with background=true and lease_duration=30 to start this shell command in the background: sleep 5 && echo bg_exec_complete_marker. IMPORTANT: Do NOT call exec_status after starting the background exec. Just reply that the background task has been started and stop.
+[agent-A] <<< LLM response: The background task has been started. 🚀\n\n- **Command:** `sleep 5 && echo bg_exec_complete_marker`\n- **Mode:** background\n- **Lease duration:** 30 seconds\n- **Status:** Running (exec_id assigned)\n\nAs requested, I'm not polling its status — I'll stop here. Feel free to ask me to check on it later.
+[A] The background task has been started. 🚀
+
+- **Command:** `sleep 5 && echo bg_exec_complete_marker`
+- **Mode:** background
+- **Lease duration:** 30 seconds
+- **Status:** Running (exec_id assigned)
+
+As requested, I'm not polling its status — I'll stop here. Feel free to ask me to check on it later.
+
+[agent-A] >>> user prompt: Use the execute tool to run this shell command: echo post_bg_check_ok
+[agent-A] <<< LLM tool call: execute({"code":"echo post_bg_check_ok","language":"shell","sandfs_id":"sandfs-67b8e57f"})
+[agent-A] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4807588,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":5596488,\"sandlot_duration_ns\":5159701,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"post_bg_check_ok\\n\"}"}]}
+[agent-A] <<< LLM response: The command ran successfully:\n\n```\npost_bg_check_ok\n```\n\n- **Exit code:** `0`\n- **Status:** done\n- **Duration:** ~4.8 ms\n- **No errors**\n\nThe sandbox is working fine after the background exec. 👍
+[A] The command ran successfully:
+
+```
+post_bg_check_ok
+```
+
+- **Exit code:** `0`
+- **Status:** done
+- **Duration:** ~4.8 ms
+- **No errors**
+
+The sandbox is working fine after the background exec. 👍
+
+[agent-B] >>> user prompt: Use the execute tool to run this shell command: echo hello_from_b_final
+[agent-B] <<< LLM tool call: execute({"code":"echo hello_from_b_final","language":"shell","sandfs_id":"sandfs-b91f06c7"})
+[agent-B] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":4674590,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":5349960,\"sandlot_duration_ns\":4996481,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"hello_from_b_final\\n\"}"}]}
+[agent-B] <<< LLM response: The command ran successfully:\n\n```\nhello_from_b_final\n```\n\nExit code: 0, no errors. All your requested operations in the sandbox have completed — the echo commands ran fine, and the `agent_b_marker.txt` file was written and verified. Anything else you need?
+[B] The command ran successfully:
+
+```
+hello_from_b_final
+```
+
+Exit code: 0, no errors. All your requested operations in the sandbox have completed — the echo commands ran fine, and the `agent_b_marker.txt` file was written and verified. Anything else you need?
+
+
+
+[0;32m═══ Phase 5: Analyze Results ═══[0m
+[0;32m[✓][0m Eino dual-agent started in piped mode
+[0;32m[✓][0m Both agents discovered MCP tools (2 tool entries found)
+[0;32m[✓][0m Agent A executed shell command (found 'hello_from_agent_a' in output)
+[0;32m[✓][0m Agent B executed shell command (found 'hello_from_agent_b' in output)
+[0;32m[✓][0m Agent A performed file operations (marker file confirmed)
+[0;32m[✓][0m Agent B performed file operations (marker file confirmed)
+[0;32m[✓][0m Agent A background exec completed (found bg_exec_complete_marker)
+[0;32m[✓][0m Agent A executed post-background verification command
+[0;32m[✓][0m Agent B executed final shell command
+[0;32m[✓][0m VM reuse confirmed: 1 VM launch(es) for 2 agents (pool size 1)
+
+[0;32m═══ Phase 6: Capability Policy + Background Exec Verification ═══[0m
+[0;32m[→][0m Waiting for VM pool to recover after Eino test...
+[0;32m[✓][0m Pool fully recovered: 1 CLEAN VM(s), no IN_USE
+[0;32m[→][0m Testing install_packages flag and background exec lifecycle...
+[0;32m[→][0m Agent A (flat mode → install profile): checking ambient capabilities...
+[0;32m[✓][0m Agent A: ambient capabilities present (flat-mode install profile)
+[0;32m[→][0m Agent A: starting background exec (async lifecycle test)...
+[0;32m[→][0m Agent A: background exec started (exec_id=bg-1-539c5b6c0b7de4b0), polling...
+[0;32m[✓][0m Agent A: background exec completed successfully (exit_code=0, output=bg_exec_test_complete)
+[0;32m[→][0m Agent A: verifying exec works after background exec...
+[0;32m[✓][0m Agent A: exec works after background exec (VM state healthy)
+[0;32m[→][0m Agent A: verifying seccomp deny-list still blocks mount/unshare...
+[0;32m[✓][0m Agent A: mount blocked by seccomp (EPERM)
+[0;32m[✓][0m Agent A: unshare blocked by seccomp (EPERM)
+[0;32m[→][0m Agent B (flat mode): checking capability profile...
+[0;32m[✓][0m Agent B: flat-mode install profile active (CapEff:	00000000200004ff)
+[0;32m[→][0m Agent B: verifying seccomp deny-list blocks dangerous syscalls...
+[0;32m[✓][0m Agent B: mount blocked by seccomp (EPERM)
+
+[0;32m═══ Phase 7: Post-test Cleanup ═══[0m
+[1;33m[!][0m sandswap processes still alive before the exit trap (the trap will kill them):
+sandserv 2679685  0.0  0.0 1284424 26332 ?       Sl   15:33   0:00 /var/lib/sandswap-e2e/gateway -agent-addr :3001 -human-addr 127.0.0.1:3100 -stream-addr :9998 -vol-root /var/lib/sandswap-e2e/volumes -max-sticky-sec 30 -identity-store /var/lib/sandswap-e2e/state/e2e-identity-store.json -stream-tls-cert /var/lib/sandswap-e2e/certs/gateway.crt -stream-tls-key /var/lib/sandswap-e2e/certs/gateway.key -stream-tls-ca /var/lib/sandswap-e2e/certs/ca.crt -allow-anonymous-human -ops-token-file /var/lib/sandswap-e2e/ops.token
+sandlot  2679731  1.1  0.0 1281344 47320 ?       Sl   15:33   0:01 /var/lib/sandswap-e2e/sandlot -gateway-addr localhost:9998 -node-id test-node-1 -kernel /var/lib/sandswap-e2e/vmlinux.bin -initramfs /var/lib/sandswap-e2e/initramfs.cpio.gz -vmm-binary /var/lib/sandswap-e2e/sandvmm -volumes-dir /var/lib/sandswap-e2e/volumes -allow-insecure-volumes -allow-missing-vsockguard -roles exec,prov -flat-templates /var/lib/sandswap-e2e/flat-templates -volume-seed-file /var/lib/sandswap-e2e/volume-seed -default-vcpus 2 -default-memory 256 -pool small:1 -network-backend bridge -network-bridge br-sandswap -network-subnet 10.188.0.0/16 -network-gateway 10.188.0.1 -network-dns 1.1.1.1,8.8.8.8 -tls-cert /var/lib/sandswap-e2e/certs/sandlot.crt -tls-key /var/lib/sandswap-e2e/certs/sandlot.key -tls-ca /var/lib/sandswap-e2e/certs/ca.crt
+sandvmm  2679880  0.2  0.0 1280952 86688 ?       Sl   15:33   0:00 /var/lib/sandswap-e2e/sandvmm --api-socket /run/sandswap/vm/pool-small-0/sandvmm.sock --seccomp true --log-stderr --sandswap-allowed-root /var/lib/sandswap-e2e/volumes --sandswap-allowed-root /var/lib/sandswap-e2e --sandswap-allowed-root /run/sandswap/vm/pool-small-0 --api-gid 985 --api-allowed-uid 985 --api-token-fd 3
+
+[0;32m═══ Results Summary ═══[0m
+
+  ┌──────────────────────────────────────────────────────┐
+  │      Sandswap Eino Dual-Agent E2E Test Results       │
+  ├──────────────────────────────────────────────────────┤
+  │ Mode:        REAL KVM (kvm_intel     )              │
+  │ Gateway:     http://localhost:3001                   │
+  │ Volumes:     /var/lib/sandswap-e2e/volumes           │
+  │ Pool size:   1                                       │
+  │ Sandlot PID: 2679731  Gateway PID: 2679685           │
+  ├──────────────────────────────────────────────────────┤
+  │ Agent A:     agent-d634f4ba                          │
+  │ SandFS A:    sandfs-67b8e57f                         │
+  │ Agent B:     agent-0cec5fbc                          │
+  │ SandFS B:    sandfs-b91f06c7                         │
+  │ LLM:         deepseek                                │
+  │ Rootfs:      Ubuntu (245M                            ) │
+  ├──────────────────────────────────────────────────────┤
+  │ Tests: 17 passed   0 failed                             │
+  └──────────────────────────────────────────────────────┘
+
+  Logs:  /tmp/sandswap-eino-logs/
+  Deploy:/var/lib/sandswap-e2e/
+
+[0;32m[✓][0m All 17 tests passed
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-eino-logs
+All processes stopped.

@@ -1,0 +1,541 @@
+═══ Egress identity enabler (k8s): 2 variant(s) to verify ═══
+    embedded + bpf + bridge
+    embedded + shm + routed-ipv6
+guest kernel has CONFIG_IPV6 (routed-ipv6 variants OK)
+
+═══════════ VARIANT: embedded + bpf + bridge ═══════════
+═══ [embedded + bpf + bridge] [1/5] Clean start ═══
+═══ [embedded + bpf + bridge] [2/5] Generate enabler ConfigMap ═══
+═══ [embedded + bpf + bridge] [3/5] Deploy (default keep mode: resources stay up for verification) ═══
+[0;32m[→][0m Cleaning previous deployment...
+═══ Sandswap K8s Cleanup ═══
+  Host: test-host
+
+[1/9] K8s namespace
+  ✓ Namespace sandswap does not exist (already clean)
+  ✓ coredns Corefile has no sandswap zone (already clean)
+[2/9] Port-forward processes
+  ✓ Port-forwards cleaned
+[3/9] vsockguard BPF
+  ✓ vsockguard not attached (already clean)
+[4/9] TAP devices + network bridge
+  ✓ No TAP devices to remove
+  ✓ br-sandswap not present
+  ✓ shm binding region removed
+  ✓ bpf binding pin removed
+[5/9] Stale udev rules
+  ✓ No stale udev rules
+[5b/9] Network persistence unit
+  ✓ No stream client certificate to remove
+[6/9] Seccomp profile
+  ✓ No seccomp profile to remove
+[7/9] Host runtime state
+  ✓ /run/sandswap* + /var/lib/sandswap removed (stale harness pidfile only)
+[8/9] Remaining processes
+  ✓ No sandswap processes running
+
+═══ Cleanup Complete ═══
+  K8s namespace:  deleted
+  Port-forwards:  killed
+  vsockguard:     detached
+  TAP devices:    removed
+  br-sandswap:    removed
+  Seccomp:        removed
+  udev rules:     cleaned
+  /run/sandswap:  removed
+  /var/lib/sandswap: removed
+
+
+[0;32m═══ Preflight (all checks reported before any mutation) ═══[0m
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+  Mode:     embedded (sandlot runs as UID 0, privileged — owns VM lifecycle)
+  Agents:   4
+  Pool:     2 VMs per node
+[0;32m[✓][0m LLM backend: deepseek
+[0;32m[✓][0m /dev/kvm present (GID 108)
+[0;32m[✓][0m /dev/vhost-vsock present (GID 987)
+[0;32m[✓][0m BPF LSM active — vsockguard will enforce (allowed UID=0)
+[0;32m[✓][0m no stale vsockguard pin
+[0;32m[✓][0m docker available for image builds
+[0;32m[✓][0m K8s API reachable, 1 node(s) Ready
+[0;32m[✓][0m disk: 401123MB free on /var/lib/sandswap filesystem
+[0;32m[✓][0m memory: 366605MB MemAvailable
+[0;32m[✓][0m Preflight passed (all blocking checks green)
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Checking/installing build + deploy dependencies...
+info: syncing channel updates for 1.99.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-10-15 for version 1.99.1 (58cf8f9c3 2026-10-13)
+info: component clippy is up to date
+info: component rust-src is up to date
+info: component rust-std is up to date
+info: component rust-std for target x86_64-unknown-linux-musl is up to date
+
+  1.99.1-x86_64-unknown-linux-gnu unchanged - rustc 1.99.1 (58cf8f9c3 2026-10-13)
+
+info: checking for self-update (current version: 1.29.3)
+[0;32m[✓][0m Adding Rust musl target (x86_64-unknown-linux-musl) to 1.99.1 for warden...
+info: component rust-std for target x86_64-unknown-linux-musl is up to date
+[0;32m[✓][0m Go go1.26.3 present (/usr/local/go/bin/go)
+[0;32m[✓][0m Installing apt packages: build-essential curl wget git ca-certificates clang libbpf-dev busybox-static cpio libseccomp-dev libcap-ng-dev python3 dnsutils nftables sqlite3 flex bison bc libelf-dev libssl-dev conntrack numactl nfs-common nfs-kernel-server openssl iptables util-linux
+[0;32m[✓][0m bpftool: /usr/local/bin/bpftool
+[0;32m[✓][0m etcd present: /usr/local/bin/etcd (etcd Version: 3.6.13)
+[0;32m[✓][0m etcdctl present: /usr/local/bin/etcdctl (etcdctl version: 3.6.13)
+[0;32m[✓][0m All Sandswap build/deploy/test dependencies present.
+[0;32m[✓][0m Next: bash build/build.sh all && bash deploy/k8s/deploy-k8s-embedded.sh
+[0;32m[✓][0m Dependencies ready
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-leg build check
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Ubuntu rootfs template present: /opt/sandswap-pr38/src/output/rootfs-ubuntu/
+[0;32m[✓][0m Required tools: curl python3 dig
+[0;32m[✓][0m docker available for image builds
+[0;32m[✓][0m k3s already installed
+[0;32m[→][0m Waiting for K8s API server...
+[0;32m[✓][0m K8s API server ready
+[0;32m[→][0m Re-asserting host state (per-run env prep: stale units, /run/sandswap, device owners)...
+    cleaned /run/sandswap (previous topology's state must not leak into this run's pods)
+[0;32m[✓][0m device owners re-asserted: /dev/vhost-vsock sandvmm:600 /dev/vsock sandlot:600 
+[0;32m[✓][0m PVC storage root hardened: /var/lib/rancher/k3s/storage (nosuid,nodev)
+[0;32m[→][0m Deploying artifacts to /var/lib/sandswap ...
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Deploying Ubuntu rootfs template (replacing default busybox)...
+template-tool: /var/lib/sandswap/flat-templates conforms (validate: no findings)
+[0;32m[✓][0m Ubuntu rootfs template deployed (245M)
+[0;32m[→][0m Setting ownership for host-local files...
+[0;32m[✓][0m Host file ownership set
+[0;32m[✓][0m /run/sandswap directory ready
+[0;32m[✓][0m KVM device GIDs: /dev/kvm=108, /dev/vhost-vsock=987
+[0;32m[✓][0m Injected supplementalGroups: /dev/kvm=108, /dev/vhost-vsock=987; SANDSWAP_VMM_UID=987
+[0;32m[→][0m Setting host security sysctls...
+kernel.yama.ptrace_scope = 1
+kernel.perf_event_paranoid = 4
+net.ipv4.ip_forward = 1
+[0;32m[✓][0m Host security sysctls set (/etc/sysctl.d/99-sandswap.conf)
+[0;32m[→][0m Setting up host network bridge...
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/16)
+  subnet : 10.188.0.0/16
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+done. VMs on 10.188.0.0/16 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap
+[0;32m[✓][0m Host network bridge ready
+[0;32m[→][0m Checking host security invariants...
+[1;33m[!][0m Host security invariants NOT met — vsockguard may not be active
+[1;33m[!][0m   Run: sudo bash deploy/k8s/k8s-host-setup.sh --mode embedded (one-time per node)
+[0;32m[✓][0m Host preparation complete
+[0;32m[→][0m Building container images + importing to k3s (embedded mode)...
+docker.io/sandswap/sandlot:latest       	saved	
+application/vnd.oci.image.manifest.v1+json sha256:2cbc3935ff3b43e6b5088b6439701ff4bbc10f44dadd1aca69799aedb42ff3e3
+Importing	elapsed: 0.8 s	total:   0.0 B	(0.0 B/s)	
+docker.io/sandswap/sandlot boxout:latest	saved	
+application/vnd.oci.image.manifest.v1+json sha256:f3b0022badda1100002bc66c413cadd82a0b55227f0a9f1eabb8f67c107b136f
+Importing	elapsed: 0.7 s	total:   0.0 B	(0.0 B/s)	
+docker.io/sandswap/sandns:latest        	saved	
+application/vnd.oci.image.manifest.v1+json sha256:dbf56a713f8d836986fe57efb103a3df334a9d1d97717065bdb255c415bc29e4
+Importing	elapsed: 0.6 s	total:   0.0 B	(0.0 B/s)	
+Images imported to k3s
+[0;32m[✓][0m Container images built and imported
+[0;32m[→][0m Generating K8s TLS certificates...
+[0;32m[✓][0m TLS certificates generated (per-node stream pairs for: test-host )
+[0;32m[→][0m Applying K8s manifests (embedded mode)...
+[0;32m[✓][0m Seccomp profile installed to /var/lib/kubelet/seccomp/sandswap/sandlot-seccomp.json
+namespace/sandswap created
+namespace/sandswap not labeled
+secret/etcd-certs created
+secret/etcd-server-certs created
+secret/gateway-certs created
+secret/sandlot-certs-test-host created
+secret/sandlot-certs-prov created
+[0;32m[✓][0m ConfigMap: injected kvm gid 108 + sandvmm uid/gid 987/987 (sandvmm child device access)
+configmap/gateway-config created
+configmap/human-config created
+configmap/sandlot-config created
+configmap/sandlot-prov-config created
+configmap/sandns-config created
+configmap/gateway-mcp-instructions created
+[0;32m[✓][0m MCP instructions ConfigMap seeded from the gateway default
+[0;32m[✓][0m Volume-name seed restored from /etc/sandswap/volume-seed (post-teardown backup)
+secret/sandswap-volume-seed created
+persistentvolumeclaim/sandswap-volumes created
+persistentvolumeclaim/sandswap-templates created
+statefulset.apps/etcd created
+service/etcd created
+statefulset.apps/gateway created
+service/gateway-exec created
+deployment.apps/sandswap-sandns created
+service/sandswap-sandns created
+daemonset.apps/sandlot created
+deployment.apps/gateway-human created
+service/gateway-human created
+deployment.apps/sandlot-prov created
+networkpolicy.networking.k8s.io/sandswap-default created
+networkpolicy.networking.k8s.io/sandswap-sandns-ingress created
+[0;32m[✓][0m K8s manifests applied
+[0;32m[→][0m Verifying per-node stream certificates...
+[0;32m[✓][0m per-node stream client Secrets present (1 node(s) + the prov singleton)
+[0;32m[→][0m Fetching this node's stream certificate (test-host)...
+[0;32m[✓][0m stream cert materialized on this node: /etc/sandswap/stream-certs (node test-host)
+[0;32m[→][0m Waiting for PVCs to be bound...
+[0;32m[✓][0m PVCs bound (sandswap-volumes, sandswap-templates)
+[0;32m[→][0m Waiting for etcd pod...
+[0;32m[✓][0m etcd pod ready
+[0;32m[→][0m Waiting for gateway pods (StatefulSet)...
+[0;32m[✓][0m Gateway pods ready (1/1)
+[0;32m[→][0m Waiting for sandswap-sandns pods...
+[0;32m[✓][0m sandswap-sandns pods ready (1)
+[0;32m[→][0m Waiting for sandlot pods...
+[0;32m[✓][0m sandlot pods ready (1)
+[0;32m[→][0m Waiting for admin gateway pod...
+[0;32m[✓][0m Human gateway pod ready
+[0;32m[→][0m Waiting for sandlot-prov pod (provision plane)...
+[0;32m[✓][0m sandlot-prov pod ready (provision plane)
+[0;32m[→][0m Seeding flat templates into the templates PVC (via the prov pod)...
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+[0;32m[✓][0m Flat templates seeded (rootfs:v1 inside the shared templates PVC)
+
+NAME                               READY   STATUS    RESTARTS   AGE   IP              NODE                   NOMINATED NODE   READINESS GATES
+etcd-0                             1/1     Running   0          27s   10.42.0.43      test-host   <none>           <none>
+gateway-0                          1/1     Running   0          27s   10.42.0.37      test-host   <none>           <none>
+gateway-human-679db8fd8-pqv6n      1/1     Running   0          27s   10.42.0.41      test-host   <none>           <none>
+sandlot-kwkh2                      1/1     Running   0          27s   192.168.20.69   test-host   <none>           <none>
+sandlot-prov-85669f75ff-88gp2      1/1     Running   0          27s   10.42.0.42      test-host   <none>           <none>
+sandswap-sandns-7666fc9965-8rsc2   1/1     Running   0          27s   10.42.0.38      test-host   <none>           <none>
+
+[0;32m[→][0m Asserting pod-side security invariants...
+[0;32m[✓][0m compute pod stream key: /certs/client.key = 400 0
+[0;32m[✓][0m share root: /sandswap/volumes = 2710 1000
+[0;32m[✓][0m template store: /sandswap/overlay-templates = 2750 1000
+[0;32m[✓][0m prov stream key: /certs/client.key = 400 1000
+[0;32m[✓][0m prov pod: volume-name seed present
+deployment.apps/coredns restarted
+[0;32m[✓][0m CoreDNS: sandfs.sandswap.local → 10.43.215.234 (restarted coredns)
+[0;32m[→][0m Starting human gateway port-forward (3100 → 3100)...
+[0;32m[✓][0m Human gateway port-forward active on :3100 (https://localhost:3100)
+[0;32m[→][0m Waiting for the provisioning plane to register (health.provisioners >= 1)...
+[0;32m[✓][0m provision instance registered (storage plane live)
+[0;32m[✓][0m Exec gateway reachable at https://gateway-0.gateway-exec.sandswap.svc.cluster.local:3000 (host /etc/hosts → 10.42.0.37)
+[0;32m[→][0m Waiting for the sandlot node to register with the gateway...
+[0;32m[✓][0m Compute node registered (node_count=1)
+
+┌─────────────────────────────────────────────────────────┐
+│  Sandswap K8s Deployment READY (embedded mode)
+├─────────────────────────────────────────────────────────┤
+│  K8s Namespace:  sandswap
+│  VM Mode:        embedded (sandlot runs as UID 0, privileged — owns VM lifecycle)
+│  Gateway Pods:   1/1
+│  Sandlot Pods:   1/1
+│  Human Pod:      1/1
+│  LLM Backend:    deepseek
+├─────────────────────────────────────────────────────────┤
+│  The deployment stays RUNNING (default keep mode).
+│
+│  Management API (from this host):
+│    kubectl port-forward -n sandswap deploy/gateway-human 3100:3100
+│    → https://localhost:3100  (agent/SandFS CRUD, /health)
+│
+│  Verify the deployment:
+│    sudo env DEEPSEEK_API_KEY=sk-... bash deploy/k8s/verify-k8s.sh [--failover]
+│
+│  Remove the deployment:
+│    sudo bash deploy/k8s/k8s-cleanup.sh
+│
+│  This run's host-side access aids (human port-forward, the
+│  exec-gateway /etc/hosts pin) are reverted on exit; the CoreDNS
+│  sandfs zone and br-sandswap bridge stay until k8s-cleanup.sh.
+└─────────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m Deployment kept running (default keep mode)
+[0;32m[→][0m Cleaning up...
+    Namespace sandswap preserved (keep mode — verify-k8s.sh / k8s-cleanup.sh next)
+[0;32m[✓][0m Side-effect ledger: reversed 2 leftover mutation(s)
+[0;32m[✓][0m Cleanup done
+═══ [embedded + bpf + bridge] [4/5] Feature verification in cluster ═══
+[0;32m[✓][0m host plane ready (pf pid 2939583, gateway-0.gateway-exec.sandswap.svc.cluster.local → 10.42.0.37)
+[0;32m[✓][0m E2: baseline vm2vm rule present (sandlot container)
+[0;32m[✓][0m test agent ready (agent-5282a177 / sandfs-b618c1c2)
+[0;32m[✓][0m E1/E3: region shows the mount (2433 mounted epoch=1753594661191424 agent=agent-5282a177 sandfs=sandfs-b618c1c2 vm=pool-small-1)
+[0;32m[✓][0m E4: exec ran through the cluster stack (0 net-ok)
+[0;32m[✓][0m E3: after unmount — unbound, epoch preserved (1753594661191424), identity cleared
+═══ [embedded + bpf + bridge] [5/5] Full cleanup (leave no residue) ═══
+[0;32m[✓][0m zero residue after cleanup
+
+═══════════ VARIANT: embedded + shm + routed-ipv6 ═══════════
+═══ [embedded + shm + routed-ipv6] [1/5] Clean start ═══
+═══ [embedded + shm + routed-ipv6] [2/5] Generate enabler ConfigMap ═══
+═══ [embedded + shm + routed-ipv6] [3/5] Deploy (default keep mode: resources stay up for verification) ═══
+[0;32m[→][0m Cleaning previous deployment...
+═══ Sandswap K8s Cleanup ═══
+  Host: test-host
+
+[1/9] K8s namespace
+  ✓ Namespace sandswap does not exist (already clean)
+  ✓ coredns Corefile has no sandswap zone (already clean)
+[2/9] Port-forward processes
+  ✓ Port-forwards cleaned
+[3/9] vsockguard BPF
+  ✓ vsockguard not attached (already clean)
+[4/9] TAP devices + network bridge
+  ✓ No TAP devices to remove
+  ✓ br-sandswap not present
+  ✓ shm binding region removed
+  ✓ bpf binding pin removed
+[5/9] Stale udev rules
+  ✓ No stale udev rules
+[5b/9] Network persistence unit
+  ✓ No stream client certificate to remove
+[6/9] Seccomp profile
+  ✓ No seccomp profile to remove
+[7/9] Host runtime state
+  ✓ /run/sandswap* + /var/lib/sandswap removed (stale harness pidfile only)
+[8/9] Remaining processes
+  ✓ No sandswap processes running
+
+═══ Cleanup Complete ═══
+  K8s namespace:  deleted
+  Port-forwards:  killed
+  vsockguard:     detached
+  TAP devices:    removed
+  br-sandswap:    removed
+  Seccomp:        removed
+  udev rules:     cleaned
+  /run/sandswap:  removed
+  /var/lib/sandswap: removed
+
+
+[0;32m═══ Preflight (all checks reported before any mutation) ═══[0m
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+  Mode:     embedded (sandlot runs as UID 0, privileged — owns VM lifecycle)
+  Agents:   4
+  Pool:     2 VMs per node
+[0;32m[✓][0m LLM backend: deepseek
+[0;32m[✓][0m /dev/kvm present (GID 108)
+[0;32m[✓][0m /dev/vhost-vsock present (GID 987)
+[0;32m[✓][0m BPF LSM active — vsockguard will enforce (allowed UID=0)
+[0;32m[✓][0m no stale vsockguard pin
+[0;32m[✓][0m docker available for image builds
+[0;32m[✓][0m K8s API reachable, 1 node(s) Ready
+[0;32m[✓][0m disk: 401119MB free on /var/lib/sandswap filesystem
+[0;32m[✓][0m memory: 366580MB MemAvailable
+[0;32m[✓][0m Preflight passed (all blocking checks green)
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Checking/installing build + deploy dependencies...
+info: syncing channel updates for 1.99.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-10-15 for version 1.99.1 (58cf8f9c3 2026-10-13)
+info: component clippy is up to date
+info: component rust-src is up to date
+info: component rust-std is up to date
+info: component rust-std for target x86_64-unknown-linux-musl is up to date
+
+  1.99.1-x86_64-unknown-linux-gnu unchanged - rustc 1.99.1 (58cf8f9c3 2026-10-13)
+
+info: checking for self-update (current version: 1.29.3)
+[0;32m[✓][0m Adding Rust musl target (x86_64-unknown-linux-musl) to 1.99.1 for warden...
+info: component rust-std for target x86_64-unknown-linux-musl is up to date
+[0;32m[✓][0m Go go1.26.3 present (/usr/local/go/bin/go)
+[0;32m[✓][0m Installing apt packages: build-essential curl wget git ca-certificates clang libbpf-dev busybox-static cpio libseccomp-dev libcap-ng-dev python3 dnsutils nftables sqlite3 flex bison bc libelf-dev libssl-dev conntrack numactl nfs-common nfs-kernel-server openssl iptables util-linux
+[0;32m[✓][0m bpftool: /usr/local/bin/bpftool
+[0;32m[✓][0m etcd present: /usr/local/bin/etcd (etcd Version: 3.6.13)
+[0;32m[✓][0m etcdctl present: /usr/local/bin/etcdctl (etcdctl version: 3.6.13)
+[0;32m[✓][0m All Sandswap build/deploy/test dependencies present.
+[0;32m[✓][0m Next: bash build/build.sh all && bash deploy/k8s/deploy-k8s-embedded.sh
+[0;32m[✓][0m Dependencies ready
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-leg build check
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Ubuntu rootfs template present: /opt/sandswap-pr38/src/output/rootfs-ubuntu/
+[0;32m[✓][0m Required tools: curl python3 dig
+[0;32m[✓][0m docker available for image builds
+[0;32m[✓][0m k3s already installed
+[0;32m[→][0m Waiting for K8s API server...
+[0;32m[✓][0m K8s API server ready
+[0;32m[→][0m Re-asserting host state (per-run env prep: stale units, /run/sandswap, device owners)...
+    cleaned /run/sandswap (previous topology's state must not leak into this run's pods)
+[0;32m[✓][0m device owners re-asserted: /dev/vhost-vsock sandvmm:600 /dev/vsock sandlot:600 
+[0;32m[✓][0m PVC storage root hardened: /var/lib/rancher/k3s/storage (nosuid,nodev)
+[0;32m[→][0m Deploying artifacts to /var/lib/sandswap ...
+[0;32m[→][0m Deploying to /var/lib/sandswap ...
+    Flat template deployed: /var/lib/sandswap/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Deploying Ubuntu rootfs template (replacing default busybox)...
+template-tool: /var/lib/sandswap/flat-templates conforms (validate: no findings)
+[0;32m[✓][0m Ubuntu rootfs template deployed (245M)
+[0;32m[→][0m Setting ownership for host-local files...
+[0;32m[✓][0m Host file ownership set
+[0;32m[✓][0m /run/sandswap directory ready
+[0;32m[✓][0m KVM device GIDs: /dev/kvm=108, /dev/vhost-vsock=987
+[0;32m[✓][0m Injected supplementalGroups: /dev/kvm=108, /dev/vhost-vsock=987; SANDSWAP_VMM_UID=987
+[0;32m[→][0m Setting host security sysctls...
+kernel.yama.ptrace_scope = 1
+kernel.perf_event_paranoid = 4
+net.ipv4.ip_forward = 1
+[0;32m[✓][0m Host security sysctls set (/etc/sysctl.d/99-sandswap.conf)
+[0;32m[→][0m Setting up host network bridge...
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/16)
+  subnet : 10.188.0.0/16
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+done. VMs on 10.188.0.0/16 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap
+[0;32m[✓][0m Host network bridge ready
+[0;32m[→][0m Checking host security invariants...
+[1;33m[!][0m Host security invariants NOT met — vsockguard may not be active
+[1;33m[!][0m   Run: sudo bash deploy/k8s/k8s-host-setup.sh --mode embedded (one-time per node)
+[0;32m[✓][0m Host preparation complete
+[0;32m[→][0m Building container images + importing to k3s (embedded mode)...
+docker.io/sandswap/sandlot:latest       	saved	
+application/vnd.oci.image.manifest.v1+json sha256:2cbc3935ff3b43e6b5088b6439701ff4bbc10f44dadd1aca69799aedb42ff3e3
+Importing	elapsed: 0.8 s	total:   0.0 B	(0.0 B/s)	
+docker.io/sandswap/sandlot boxout:latest	saved	
+application/vnd.oci.image.manifest.v1+json sha256:f3b0022badda1100002bc66c413cadd82a0b55227f0a9f1eabb8f67c107b136f
+Importing	elapsed: 0.7 s	total:   0.0 B	(0.0 B/s)	
+docker.io/sandswap/sandns:latest        	saved	
+application/vnd.oci.image.manifest.v1+json sha256:dbf56a713f8d836986fe57efb103a3df334a9d1d97717065bdb255c415bc29e4
+Importing	elapsed: 0.6 s	total:   0.0 B	(0.0 B/s)	
+Images imported to k3s
+[0;32m[✓][0m Container images built and imported
+[0;32m[→][0m Generating K8s TLS certificates...
+[0;32m[✓][0m TLS certificates generated (per-node stream pairs for: test-host )
+[0;32m[→][0m Applying K8s manifests (embedded mode)...
+[0;32m[✓][0m Seccomp profile installed to /var/lib/kubelet/seccomp/sandswap/sandlot-seccomp.json
+namespace/sandswap created
+namespace/sandswap not labeled
+secret/etcd-certs created
+secret/etcd-server-certs created
+secret/gateway-certs created
+secret/sandlot-certs-test-host created
+secret/sandlot-certs-prov created
+[0;32m[✓][0m ConfigMap: injected kvm gid 108 + sandvmm uid/gid 987/987 (sandvmm child device access)
+configmap/gateway-config created
+configmap/human-config created
+configmap/sandlot-config created
+configmap/sandlot-prov-config created
+configmap/sandns-config created
+configmap/gateway-mcp-instructions created
+[0;32m[✓][0m MCP instructions ConfigMap seeded from the gateway default
+[0;32m[✓][0m Volume-name seed restored from /etc/sandswap/volume-seed (post-teardown backup)
+secret/sandswap-volume-seed created
+persistentvolumeclaim/sandswap-volumes created
+persistentvolumeclaim/sandswap-templates created
+statefulset.apps/etcd created
+service/etcd created
+statefulset.apps/gateway created
+service/gateway-exec created
+deployment.apps/sandswap-sandns created
+service/sandswap-sandns created
+daemonset.apps/sandlot created
+deployment.apps/gateway-human created
+service/gateway-human created
+deployment.apps/sandlot-prov created
+networkpolicy.networking.k8s.io/sandswap-default created
+networkpolicy.networking.k8s.io/sandswap-sandns-ingress created
+[0;32m[✓][0m K8s manifests applied
+[0;32m[→][0m Verifying per-node stream certificates...
+[0;32m[✓][0m per-node stream client Secrets present (1 node(s) + the prov singleton)
+[0;32m[→][0m Fetching this node's stream certificate (test-host)...
+[0;32m[✓][0m stream cert materialized on this node: /etc/sandswap/stream-certs (node test-host)
+[0;32m[→][0m Waiting for PVCs to be bound...
+[0;32m[✓][0m PVCs bound (sandswap-volumes, sandswap-templates)
+[0;32m[→][0m Waiting for etcd pod...
+[0;32m[✓][0m etcd pod ready
+[0;32m[→][0m Waiting for gateway pods (StatefulSet)...
+[0;32m[✓][0m Gateway pods ready (1/1)
+[0;32m[→][0m Waiting for sandswap-sandns pods...
+[0;32m[✓][0m sandswap-sandns pods ready (1)
+[0;32m[→][0m Waiting for sandlot pods...
+[0;32m[✓][0m sandlot pods ready (1)
+[0;32m[→][0m Waiting for admin gateway pod...
+[0;32m[✓][0m Human gateway pod ready
+[0;32m[→][0m Waiting for sandlot-prov pod (provision plane)...
+[0;32m[✓][0m sandlot-prov pod ready (provision plane)
+[0;32m[→][0m Seeding flat templates into the templates PVC (via the prov pod)...
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+Defaulted container "sandlot-prov" out of: sandlot-prov, certs-copy (init)
+[0;32m[✓][0m Flat templates seeded (rootfs:v1 inside the shared templates PVC)
+
+NAME                               READY   STATUS    RESTARTS   AGE   IP              NODE                   NOMINATED NODE   READINESS GATES
+etcd-0                             1/1     Running   0          26s   10.42.0.55      test-host   <none>           <none>
+gateway-0                          1/1     Running   0          26s   10.42.0.50      test-host   <none>           <none>
+gateway-human-679db8fd8-hccj4      1/1     Running   0          26s   10.42.0.54      test-host   <none>           <none>
+sandlot-prov-85669f75ff-z7bjh      1/1     Running   0          26s   10.42.0.56      test-host   <none>           <none>
+sandlot-pxrqc                      1/1     Running   0          26s   192.168.20.69   test-host   <none>           <none>
+sandswap-sandns-7666fc9965-dq4qk   1/1     Running   0          26s   10.42.0.51      test-host   <none>           <none>
+
+[0;32m[→][0m Asserting pod-side security invariants...
+[0;32m[✓][0m compute pod stream key: /certs/client.key = 400 0
+[0;32m[✓][0m share root: /sandswap/volumes = 2710 1000
+[0;32m[✓][0m template store: /sandswap/overlay-templates = 2750 1000
+[0;32m[✓][0m prov stream key: /certs/client.key = 400 1000
+[0;32m[✓][0m prov pod: volume-name seed present
+deployment.apps/coredns restarted
+[0;32m[✓][0m CoreDNS: sandfs.sandswap.local → 10.43.40.24 (restarted coredns)
+[0;32m[→][0m Starting human gateway port-forward (3100 → 3100)...
+[0;32m[✓][0m Human gateway port-forward active on :3100 (https://localhost:3100)
+[0;32m[→][0m Waiting for the provisioning plane to register (health.provisioners >= 1)...
+[0;32m[✓][0m provision instance registered (storage plane live)
+[0;32m[✓][0m Exec gateway reachable at https://gateway-0.gateway-exec.sandswap.svc.cluster.local:3000 (host /etc/hosts → 10.42.0.50)
+[0;32m[→][0m Waiting for the sandlot node to register with the gateway...
+[0;32m[✓][0m Compute node registered (node_count=1)
+
+┌─────────────────────────────────────────────────────────┐
+│  Sandswap K8s Deployment READY (embedded mode)
+├─────────────────────────────────────────────────────────┤
+│  K8s Namespace:  sandswap
+│  VM Mode:        embedded (sandlot runs as UID 0, privileged — owns VM lifecycle)
+│  Gateway Pods:   1/1
+│  Sandlot Pods:   1/1
+│  Human Pod:      1/1
+│  LLM Backend:    deepseek
+├─────────────────────────────────────────────────────────┤
+│  The deployment stays RUNNING (default keep mode).
+│
+│  Management API (from this host):
+│    kubectl port-forward -n sandswap deploy/gateway-human 3100:3100
+│    → https://localhost:3100  (agent/SandFS CRUD, /health)
+│
+│  Verify the deployment:
+│    sudo env DEEPSEEK_API_KEY=sk-... bash deploy/k8s/verify-k8s.sh [--failover]
+│
+│  Remove the deployment:
+│    sudo bash deploy/k8s/k8s-cleanup.sh
+│
+│  This run's host-side access aids (human port-forward, the
+│  exec-gateway /etc/hosts pin) are reverted on exit; the CoreDNS
+│  sandfs zone and br-sandswap bridge stay until k8s-cleanup.sh.
+└─────────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m Deployment kept running (default keep mode)
+[0;32m[→][0m Cleaning up...
+    Namespace sandswap preserved (keep mode — verify-k8s.sh / k8s-cleanup.sh next)
+[0;32m[✓][0m Side-effect ledger: reversed 2 leftover mutation(s)
+[0;32m[✓][0m Cleanup done
+═══ [embedded + shm + routed-ipv6] [4/5] Feature verification in cluster ═══
+[0;32m[✓][0m host plane ready (pf pid 2959331, gateway-0.gateway-exec.sandswap.svc.cluster.local → 10.42.0.50)
+[0;32m[✓][0m E2: baseline vm2vm rule present (sandlot container)
+[0;32m[✓][0m test agent ready (agent-07b78d1b / sandfs-de76eae1)
+[0;32m[✓][0m E1/E3: region shows the mount (2452 mounted epoch=1753594778618295 agent=agent-07b78d1b sandfs=sandfs-de76eae1 vm=pool-small-0)
+[0;32m[✓][0m E5: identity SNAT map element present (tap-c67bfb4c60)
+[0;32m[✓][0m E4: exec ran through the cluster stack (0 net-ok)
+[0;32m[✓][0m E3: after unmount — unbound, epoch preserved (1753594778618295), identity cleared
+═══ [embedded + shm + routed-ipv6] [5/5] Full cleanup (leave no residue) ═══
+[0;32m[✓][0m zero residue after cleanup
+
+═══ EGRESS IDENTITY ENABLER (k8s): ALL 2 VARIANT(S) PASSED ═══

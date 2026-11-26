@@ -1,0 +1,6 @@
+Attaching vsockguard (allowed uid=985)...
+vsockguard: attached (allowed_uid=985); pins:
+  /sys/fs/bpf/vsockguard/prog
+  /sys/fs/bpf/vsockguard/link
+  /sys/fs/bpf/vsockguard/allowed_uid
+vsockguard attestation written: /run/sandswap/vsockguard.allowed_uid (allowed_uid=985)

@@ -1,0 +1,283 @@
+[1;34m[sandswap][0m [0/8] Preclean + preflight...
+[1;34m[sandswap][0m Preclean: stopping existing services + killing leftovers...
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+[1;34m[sandswap][0m Preclean done
+[1;34m[sandswap][0m Preflight (all blockers reported before any mutation)
+  Host:   test-host  Kernel: 6.8.0-149-generic
+  Mode:   baremetal single-node (systemd gateway+sandlot, MemoryStore)
+[1;34m[sandswap][0m   [ok]    /dev/kvm present
+[1;34m[sandswap][0m   [ok]    /dev/vhost-vsock present
+[1;34m[sandswap][0m   [ok]    /dev/net/tun present
+[1;34m[sandswap][0m   [ok]    BPF LSM active, no stale vsockguard pin
+[1;34m[sandswap][0m   [ok]    disk: 402719MB free on /var/lib
+[1;34m[sandswap][0m   [ok]    memory: 367825MB MemAvailable
+[1;34m[sandswap][0m Preflight passed
+[1;34m[sandswap][0m [1/8] Building artifacts...
+[1;34m[sandswap][0m Round baseline fresh (matrix preflight) — skipping per-row build check
+[1;34m[sandswap][0m [2/8] Preparing host...
+[1;34m[sandswap][0m Setting up host for role: all
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+    volume-name seed minted: /etc/sandswap/volume-seed (KEEP — every volume name derives from it)
+[1;34m[sandswap][0m Directories created: /etc/sandswap, /var/lib/sandswap, /run/sandswap
+[1;34m[sandswap][0m Sysctls installed: /etc/sysctl.d/99-sandswap.conf
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[1;34m[sandswap][0m udev vsock lockdown installed (vhost-vsock sandvmm 0600, vsock sandlot 0600)
+[1;34m[sandswap][0m var/lib/sandswap bind-remounted nosuid,nodev (fstab entry added — survives reboots)
+[1;34m[sandswap][0m tmpfiles.d entry installed (/run/sandswap → root:sandlot 3770, sticky)
+[1;34m[sandswap][0m KVM available: /dev/kvm
+[1;34m[sandswap][0m vhost_vsock module loaded (persistent via /etc/modules-load.d/)
+Sandswap host networking:
+  bridge : br-sandswap  (10.188.0.1/16)
+  subnet : 10.188.0.0/16
+  uplink : bond1
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+done. VMs on 10.188.0.0/16 will be NATed out via bond1.
+verify:  ip -br link show br-sandswap ; sysctl net.ipv4.ip_forward ; nft list table inet sandswap
+[1;34m[sandswap][0m Bridge + NAT ready: br-sandswap (10.188.0.0/16, gw=10.188.0.1)
+[1;34m[sandswap][0m Network persistence unit enabled (bridge + NAT re-created at boot)
+[1;34m[sandswap][0m vsock re-tune unit enabled (device ownership repaired at boot)
+[1;34m[sandswap][0m vsockguard attest helper installed
+Attaching vsockguard (allowed uid=985)...
+vsockguard: attached (allowed_uid=985); pins:
+  /sys/fs/bpf/vsockguard/prog
+  /sys/fs/bpf/vsockguard/link
+  /sys/fs/bpf/vsockguard/allowed_uid
+vsockguard attestation written: /run/sandswap/vsockguard.allowed_uid (allowed_uid=985)
+[1;34m[sandswap][0m vsockguard BPF attached (UID=985, sandlot)
+[1;34m[sandswap][0m udev rules installed (tun → 0660 root:sandlot; kvm/vhost-vsock via kvm group)
+[1;34m[sandswap][0m Provision host setup complete (identities + shared dirs only: no KVM/vsock/bridge duty)
+[1;34m[sandswap][0m Gateway host setup complete (no extra steps needed)
+[1;34m[sandswap][0m Host setup complete for role: all
+[1;34m[sandswap][0m [3/8] Generating TLS certificates (stream mTLS is mandatory)...
+Generating Sandswap bare-metal TLS certificates (validity: 365 days)...
+  Output: /opt/sandswap-pr38/src/output/baremetal-certs/
+  [1/7] CA...
+  [2/7] etcd server cert...
+  [3/7] etcd client cert...
+  [4/7] gateway stream server cert...
+  [5/7] gateway MCP server cert...
+  [6/7] gateway human server cert...
+  [7/7] sandlot client cert (CN=test-host)...
+
+  Certificates generated in /opt/sandswap-pr38/src/output/baremetal-certs/
+total 60
+drwxr-xr-x  2 root root 4096 Nov 26 16:21 .
+drwxr-xr-x 10 root root 4096 Nov 26 16:21 ..
+lrwxrwxrwx  1 root root    9 Nov 26 16:21 admin.crt -> human.crt
+lrwxrwxrwx  1 root root    9 Nov 26 16:21 admin.key -> human.key
+-rw-r--r--  1 root root 1196 Nov 26 16:21 ca.crt
+-rw-r--r--  1 root root 1188 Nov 26 16:21 etcd-client.crt
+-rw-------  1 root root 1704 Nov 26 16:21 etcd-client.key
+-rw-r--r--  1 root root 1224 Nov 26 16:21 etcd-server.crt
+-rw-------  1 root root 1704 Nov 26 16:21 etcd-server.key
+-rw-r--r--  1 root root 1229 Nov 26 16:21 human.crt
+-rw-------  1 root root 1704 Nov 26 16:21 human.key
+-rw-r--r--  1 root root 1224 Nov 26 16:21 mcp.crt
+-rw-------  1 root root 1704 Nov 26 16:21 mcp.key
+-rw-r--r--  1 root root 1277 Nov 26 16:21 sandlot.crt
+-rw-------  1 root root 1704 Nov 26 16:21 sandlot.key
+-rw-r--r--  1 root root 1229 Nov 26 16:21 stream.crt
+-rw-------  1 root root 1704 Nov 26 16:21 stream.key
+
+  Files:
+    ca.crt                       — CA certificate (the private key is removed)
+    etcd-server.crt, .key        — etcd server (TLS)
+    etcd-client.crt, .key        — etcd client (mTLS)
+    stream.crt, .key             — gateway gRPC stream server (mTLS)
+    mcp.crt, .key                — gateway MCP/agent HTTP server (TLS)
+    human.crt, .key              — gateway human HTTP server (TLS)
+    admin.crt, .key              — symlink → human.* (backward compat)
+    sandlot.crt, .key            — sandlot gRPC stream client (mTLS), CN=test-host
+[1;34m[sandswap][0m Stream client cert verified: sandlot.crt CN='test-host' == node id
+[1;34m[sandswap][0m [4/8] Installing gateway...
+[1;34m[sandswap][0m Installed: sandswap-gateway → /usr/local/bin/sandswap-gateway
+[1;34m[sandswap][0m Busybox rootfs template staged (rootfs:v1)
+[1;34m[sandswap][0m Ubuntu rootfs template staged (ubuntu:24.04, 245M)
+template-tool: /var/lib/sandswap/flat-templates normalized (0 entries changed)
+[1;34m[sandswap][0m Gateway config generated: /etc/sandswap/gateway.yaml (mode=single-node)
+[1;34m[sandswap][0m Systemd unit installed: sandswap-gateway.service
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-gateway.service → /etc/systemd/system/sandswap-gateway.service.
+[1;34m[sandswap][0m Service enabled: sandswap-gateway
+[1;34m[sandswap][0m [5/8] Waiting for gateway to start...
+[1;34m[sandswap][0m Waiting for gateway health at https://localhost:3000/health (max 30s)...
+[1;34m[sandswap][0m Gateway is healthy (1s)
+[1;34m[sandswap][0m [6/8] Installing sandlot...
+[1;34m[sandswap][0m Installed: sandswap-sandlot → /usr/local/bin/sandswap-sandlot
+[1;34m[sandswap][0m Installed: sandswap-sandvmm → /usr/local/bin/sandswap-sandvmm
+[1;34m[sandswap][0m Guest TCB installed: /usr/local/lib/sandswap/guest (root:root 0755, SHA256SUMS pinned)
+[1;34m[sandswap][0m Installed: vsockguardctl → /usr/local/bin/vsockguardctl
+[1;34m[sandswap][0m Provision host prepared: templates=/var/lib/sandswap/templates (sandlot-owned, shared-group r-x), prov TLS key ready (from sandlot.key)
+[1;34m[sandswap][0m Sandlot config generated: /etc/sandswap/sandlot.yaml (gateway=localhost:9998, pool=medium:3, roles=exec,prov)
+[1;34m[sandswap][0m Systemd unit installed: sandswap-sandlot.service
+Created symlink /etc/systemd/system/multi-user.target.wants/sandswap-sandlot.service → /etc/systemd/system/sandswap-sandlot.service.
+[1;34m[sandswap][0m Service enabled: sandswap-sandlot
+[1;34m[sandswap][0m [7/8] Waiting for pool to be ready...
+[1;34m[sandswap][0m Waiting for pool ready (CLEAN >= 3) at https://localhost:3100/stats (max 120s)...
+[1;34m[sandswap][0m Pool ready: CLEAN=3 (target=3, 2s)
+[1;34m[sandswap][0m [8/8] Verification...
+[1;34m[sandswap][0m Service status:
+● sandswap-gateway.service - Sandswap Gateway (single-node)
+     Loaded: loaded (/etc/systemd/system/sandswap-gateway.service; enabled; vendor preset: enabled)
+     Active: active (running) since Thu 2026-11-26 16:21:07 CST; 4s ago
+   Main PID: 3003395 (sandswap-gatewa)
+      Tasks: 30 (limit: 4096)
+     Memory: 9.6M
+        CPU: 53ms
+     CGroup: /system.slice/sandswap-gateway.service
+             └─3003395 /usr/local/bin/sandswap-gateway -config /etc/sandswap/gateway.yaml -allow-anonymous-human
+
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.616363469+08:00","level":"INFO","msg":"storage plane: provision instances over the node stream (ops are a named 503 until one connects)","opDeadline":300000000000}
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.616398662+08:00","level":"INFO","msg":"stream server listening for sandlot connections","addr":"0.0.0.0:9998"}
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.616463225+08:00","level":"WARN","msg":"HUMAN LISTENER STARTING WITHOUT AUTHENTICATION (-allow-anonymous-human): every human endpoint — agent-key minting, sandfs CRUD, template ops, the fleet switches — is ANONYMOUS; anyone who can reach this listener has full control. Scope it by network policy (ACL/NetworkPolicy) or configure authn.issuer"}
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.616760318+08:00","level":"INFO","msg":"agent HTTP TLS enabled","addr":"0.0.0.0:3000","mtls":false}
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.616996498+08:00","level":"INFO","msg":"config hot-reload watcher started","path":"/etc/sandswap/gateway.yaml"}
+Nov 26 16:21:07 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:07.61703774+08:00","level":"INFO","msg":"human HTTP listening","addr":"127.0.0.1:3100","tls":true,"mtls":false}
+Nov 26 16:21:10 test-host sandswap-gateway[3003395]: 2026/11/26 16:21:10 [stream] node "test-host" connected (version=0.0.0-dev, cpus=96, mem=385384MB, roles=[exec prov])
+Nov 26 16:21:10 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:10.348798611+08:00","level":"INFO","msg":"sandlot node connected","nodeID":"test-host","version":"0.0.0-dev","roles":["exec","prov"]}
+Nov 26 16:21:10 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:10.348823185+08:00","level":"INFO","msg":"node registered","nodeID":"test-host"}
+Nov 26 16:21:10 test-host sandswap-gateway[3003395]: {"time":"2026-11-26T16:21:10.348836982+08:00","level":"INFO","msg":"node pool target","nodeID":"test-host","poolTarget":3,"reported":3,"liveVMs":3}
+● sandswap-sandlot.service - Sandswap Sandlot (embedded)
+     Loaded: loaded (/etc/systemd/system/sandswap-sandlot.service; enabled; vendor preset: enabled)
+    Drop-In: /etc/systemd/system/sandswap-sandlot.service.d
+             └─sandprov.conf
+     Active: active (running) since Thu 2026-11-26 16:21:09 CST; 2s ago
+    Process: 3003598 ExecStartPre=/usr/local/bin/sandswap-vsockguard-attest (code=exited, status=0/SUCCESS)
+   Main PID: 3003604 (sandswap-sandlo)
+      Tasks: 89 (limit: 8192)
+     Memory: 405.6M
+        CPU: 993ms
+     CGroup: /system.slice/sandswap-sandlot.service
+             ├─3003604 /usr/local/bin/sandswap-sandlot -config /etc/sandswap/sandlot.yaml
+             ├─3003800 /usr/local/bin/sandswap-sandvmm --api-socket /run/sandswap/vm/pool-medium-0/sandvmm.sock --seccomp true --log-stderr --sandswap-allowed-root /var/lib/sandswap/volumes --sandswap-allowed-root /usr/local/lib/sandswap/guest --sandswap-allowed-root /run/sandswap/vm/pool-medium-0 --api-gid 985 --api-allowed-uid 985 --api-token-fd 3
+             ├─3003896 /usr/local/bin/sandswap-sandvmm --api-socket /run/sandswap/vm/pool-medium-1/sandvmm.sock --seccomp true --log-stderr --sandswap-allowed-root /var/lib/sandswap/volumes --sandswap-allowed-root /usr/local/lib/sandswap/guest --sandswap-allowed-root /run/sandswap/vm/pool-medium-1 --api-gid 985 --api-allowed-uid 985 --api-token-fd 3
+             └─3003925 /usr/local/bin/sandswap-sandvmm --api-socket /run/sandswap/vm/pool-medium-2/sandvmm.sock --seccomp true --log-stderr --sandswap-allowed-root /var/lib/sandswap/volumes --sandswap-allowed-root /usr/local/lib/sandswap/guest --sandswap-allowed-root /run/sandswap/vm/pool-medium-2 --api-gid 985 --api-allowed-uid 985 --api-token-fd 3
+
+Nov 26 16:21:10 test-host sandswap-sandlot[3003925]: sandvmm --- 127 --- WARN --- <vcpu3> virtio-devices/src/transport/pci_common_config.rs:303 -- invalid ack_features (page 2, value 0x0)
+Nov 26 16:21:10 test-host sandswap-sandlot[3003925]: sandvmm --- 127 --- WARN --- <vcpu3> virtio-devices/src/transport/pci_common_config.rs:303 -- invalid ack_features (page 3, value 0x0)
+Nov 26 16:21:10 test-host sandswap-sandlot[3003925]: sandvmm --- 130 --- WARN --- <vcpu0> virtio-devices/src/transport/pci_common_config.rs:303 -- invalid ack_features (page 2, value 0x0)
+Nov 26 16:21:10 test-host sandswap-sandlot[3003925]: sandvmm --- 130 --- WARN --- <vcpu0> virtio-devices/src/transport/pci_common_config.rs:303 -- invalid ack_features (page 3, value 0x0)
+Nov 26 16:21:10 test-host sandswap-sandlot[3003925]: sandvmm --- 140 --- WARN --- <vcpu1> devices/src/legacy/debug_port.rs:76 -- [Debug I/O port: Kernel code 0x41] 0.125355 seconds
+Nov 26 16:21:10 test-host sandswap-sandlot[3003604]: 2026/11/26 16:21:10 [sandlot/test-host] pre-created 3 VM(s) from pool spec
+Nov 26 16:21:10 test-host sandswap-sandlot[3003604]: 2026/11/26 16:21:10 [sandlot/test-host] ResizePool: target=map[medium:3] (was map[medium:3])
+Nov 26 16:21:10 test-host sandswap-sandlot[3003604]: {"time":"2026-11-26T16:21:10.342731676+08:00","level":"INFO","msg":"config hot-reload watcher started","path":"/etc/sandswap/sandlot.yaml"}
+Nov 26 16:21:10 test-host sandswap-sandlot[3003604]: 2026/11/26 16:21:10 [sandlot/test-host] connecting to gateway at 127.0.0.1:9998 (3 live VM(s))
+Nov 26 16:21:10 test-host sandswap-sandlot[3003604]: 2026/11/26 16:21:10 [sandlot/test-host] connected to gateway at 127.0.0.1:9998 (gateway_id=single-test-host)
+[1;34m[sandswap][0m Health check:
+{"status":"ok"}
+{"gateways":[{"gateway_id":"single-test-host","healthy":true,"gateway_url":"","stream_addr":"","node_count":1,"clean_vms":3,"total_vms":3,"agg_duty_long":0,"self_cpu_pct":0,"self_mem_pct":0,"self_inflight":0,"self_pressured":false,"stale_sec":0,"nodes":[{"node_id":"test-host","duty_long":0,"duty_short":0,"duty_daily":0,"duty_var":0,"host_cpu_pct":0,"host_mem_avail_mb":0,"active_sandfs":0,"clean_vms":3,"total_vms":3,"peak_concurrent_execs":0,"slot_wait_ms":0,"slot_wait_events":0,"recycle_triggers":0,"stranded_reservations_mb":0,"stranded_cids":0}]}],"totals":{"clean_vms":3,"total_vms":3,"in_use_vms":0,"node_count":1,"gateway_count":1},"maintenance":{"refusing":false},"rotation":{"refusing":false},"prov_seeds":[{"node_id":"test-host","generation":"6f2ce10f","age_sec":1}],"egress_bindings":[{"node_id":"test-host","binding":"none"}]}
+[1;34m[sandswap][0m Waiting for pool ready (CLEAN >= 3) at https://localhost:3100/stats (max 120s)...
+[1;34m[sandswap][0m Pool ready: CLEAN=3 (target=3, 0s)
+[1;34m[sandswap][0m Client contract written: /etc/sandswap/sandctl.env (public URLs + CA only)
+[1;34m[sandswap][0m ============================================
+[1;34m[sandswap][0m   Sandswap single-node deployment complete!
+[1;34m[sandswap][0m ============================================
+[1;34m[sandswap][0m 
+[1;34m[sandswap][0m   Gateway:  /etc/sandswap/gateway.yaml
+[1;34m[sandswap][0m   Sandlot:  /etc/sandswap/sandlot.yaml
+[1;34m[sandswap][0m   Pool:     medium:3
+[1;34m[sandswap][0m   TLS:      HTTP enabled; stream mTLS always
+[1;34m[sandswap][0m 
+[1;34m[sandswap][0m   Commands:
+[1;34m[sandswap][0m     systemctl status sandswap-gateway
+[1;34m[sandswap][0m     systemctl status sandswap-sandlot
+[1;34m[sandswap][0m     journalctl -u sandswap-gateway -f
+[1;34m[sandswap][0m     journalctl -u sandswap-sandlot -f
+[1;34m[sandswap][0m 
+[1;34m[sandswap][0m   Hot-reload pool:
+[1;34m[sandswap][0m     sed -i 's/pool: "medium:3"/pool: "medium:5"/' /etc/sandswap/sandlot.yaml
+[1;34m[sandswap][0m 
+[1;34m[sandswap][0m   Graceful restart (verifies re-adopt):
+[1;34m[sandswap][0m     systemctl restart sandswap-sandlot
+═══ Sandswap Bare-Metal Uninstall ═══
+  Host: test-host
+  Keep data: no
+
+[1/11] Systemd services
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+  ✓ Systemd services stopped
+[1b/11] Side-effect ledger replay
+  ✓ EPHEMERAL entries reversed (ledger retained as .done)
+[2/11] Processes
+  ✓ No leftover processes
+[3/11] vsockguard BPF
+vsockguard: detached; removed pins /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/allowed_uid
+  ✓ vsockguard detached
+[4/11] TAP devices + bridge
+  ✓ br-sandswap removed
+  ✓ Network cleanup done (0 TAP removed)
+[5/11] Overlay mounts
+  ✓ Unmounted 0 overlay(s) + shared storage
+[6/11] Config files
+  ✓ /etc/sandswap removed
+[7/11] Binaries
+  ✓ Binaries removed
+[8/11] Runtime state
+  ✓ /var/lib/sandswap removed
+[9/11] Systemd units
+  ✓ Systemd units removed
+  ⚠ k8s-managed host detected: keeping the udev vsock rule + device modes (k8s-cleanup owns them)
+[10/11] udev rules + sysctl
+ ⚠ k8s-managed host: leaving /dev/vsock + /dev/net/tun modes as k8s set them 
+* Applying /etc/sysctl.d/10-console-messages.conf ...
+kernel.printk = 4 4 1 7
+* Applying /etc/sysctl.d/10-ipv6-privacy.conf ...
+net.ipv6.conf.all.use_tempaddr = 2
+net.ipv6.conf.default.use_tempaddr = 2
+* Applying /etc/sysctl.d/10-kernel-hardening.conf ...
+kernel.kptr_restrict = 1
+* Applying /etc/sysctl.d/10-magic-sysrq.conf ...
+kernel.sysrq = 176
+* Applying /etc/sysctl.d/10-network-security.conf ...
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.all.rp_filter = 2
+* Applying /etc/sysctl.d/10-ptrace.conf ...
+kernel.yama.ptrace_scope = 1
+* Applying /etc/sysctl.d/10-zeropage.conf ...
+vm.mmap_min_addr = 65536
+* Applying /usr/lib/sysctl.d/50-default.conf ...
+kernel.core_uses_pid = 1
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.default.promote_secondaries = 1
+net.ipv4.ping_group_range = 0 2147483647
+net.core.default_qdisc = fq_codel
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+fs.protected_regular = 1
+fs.protected_fifos = 1
+* Applying /usr/lib/sysctl.d/50-pid-max.conf ...
+kernel.pid_max = 4194304
+* Applying /usr/lib/sysctl.d/99-protect-links.conf ...
+fs.protected_fifos = 1
+fs.protected_hardlinks = 1
+fs.protected_regular = 2
+fs.protected_symlinks = 1
+* Applying /etc/sysctl.d/99-sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+* Applying /etc/sysctl.d/zz-sandswap-claude-ports.conf ...
+net.ipv4.ip_local_port_range = 32768 60999
+* Applying /etc/sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+  ✓ restored net.ipv4.ip_forward=0 (no other sysctl file sets it)
+  ✓ udev + sysctl + tmpfiles cleaned
+[11/11] Etcd data
+  ✓ Removed 0 etcd data dir(s)
+
+═══ Uninstall Complete ═══
+
+  Verification:
+    Remaining processes: 0
+    Port 3000/3001/3100/9998/9997 in use: 0
+    Remaining unit files / drop-in dirs: 0
+    Loaded sandswap slices: 0
+    Remaining installed-lib artifacts (guest TCB / runtime helpers): 0
+    Remaining sandswap mounts: 0
+
+  ✓ Environment is clean

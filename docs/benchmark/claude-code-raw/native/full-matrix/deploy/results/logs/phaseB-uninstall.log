@@ -1,0 +1,90 @@
+═══ Sandswap Bare-Metal Uninstall ═══
+  Host: test-host
+  Keep data: no
+
+[1/11] Systemd services
+[1;34m[sandswap][0m Stopping Sandswap systemd services...
+[1;34m[sandswap][0m Sandswap systemd services stopped + disabled
+  ✓ Systemd services stopped
+[1b/11] Side-effect ledger replay
+  ✓ EPHEMERAL entries reversed (ledger retained as .done)
+[2/11] Processes
+  killed leftover pid 2869339 (unit-cgroup)
+  killed leftover pid 2869310 (unit-cgroup)
+  ✓ Killed 2 process type(s), vhost_vsock reloaded
+[3/11] vsockguard BPF
+vsockguard: detached; removed pins /sys/fs/bpf/vsockguard/link /sys/fs/bpf/vsockguard/prog /sys/fs/bpf/vsockguard/allowed_uid
+  ✓ vsockguard detached
+[4/11] TAP devices + bridge
+  ✓ br-sandswap removed
+  ✓ Network cleanup done (2 TAP removed)
+[5/11] Overlay mounts
+  ✓ Unmounted 0 overlay(s) + shared storage
+[6/11] Config files
+  ✓ /etc/sandswap removed
+[7/11] Binaries
+  ✓ Binaries removed
+[8/11] Runtime state
+  ✓ /var/lib/sandswap removed
+[9/11] Systemd units
+  ✓ co-located etcd data removed (host etcd binary left in place)
+  ✓ Systemd units removed
+  ⚠ k8s-managed host detected: keeping the udev vsock rule + device modes (k8s-cleanup owns them)
+[10/11] udev rules + sysctl
+ ⚠ k8s-managed host: leaving /dev/vsock + /dev/net/tun modes as k8s set them 
+* Applying /etc/sysctl.d/10-console-messages.conf ...
+kernel.printk = 4 4 1 7
+* Applying /etc/sysctl.d/10-ipv6-privacy.conf ...
+net.ipv6.conf.all.use_tempaddr = 2
+net.ipv6.conf.default.use_tempaddr = 2
+* Applying /etc/sysctl.d/10-kernel-hardening.conf ...
+kernel.kptr_restrict = 1
+* Applying /etc/sysctl.d/10-magic-sysrq.conf ...
+kernel.sysrq = 176
+* Applying /etc/sysctl.d/10-network-security.conf ...
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.all.rp_filter = 2
+* Applying /etc/sysctl.d/10-ptrace.conf ...
+kernel.yama.ptrace_scope = 1
+* Applying /etc/sysctl.d/10-zeropage.conf ...
+vm.mmap_min_addr = 65536
+* Applying /usr/lib/sysctl.d/50-default.conf ...
+kernel.core_uses_pid = 1
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.default.promote_secondaries = 1
+net.ipv4.ping_group_range = 0 2147483647
+net.core.default_qdisc = fq_codel
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+fs.protected_regular = 1
+fs.protected_fifos = 1
+* Applying /usr/lib/sysctl.d/50-pid-max.conf ...
+kernel.pid_max = 4194304
+* Applying /usr/lib/sysctl.d/99-protect-links.conf ...
+fs.protected_fifos = 1
+fs.protected_hardlinks = 1
+fs.protected_regular = 2
+fs.protected_symlinks = 1
+* Applying /etc/sysctl.d/99-sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+* Applying /etc/sysctl.d/zz-sandswap-claude-ports.conf ...
+net.ipv4.ip_local_port_range = 32768 60999
+* Applying /etc/sysctl.conf ...
+net.ipv4.conf.all.accept_redirects = 0
+  ✓ restored net.ipv4.ip_forward=0 (no other sysctl file sets it)
+  ✓ udev + sysctl + tmpfiles cleaned
+[11/11] Etcd data
+  ✓ Removed 0 etcd data dir(s)
+
+═══ Uninstall Complete ═══
+
+  Verification:
+    Remaining processes: 0
+    Port 3000/3001/3100/9998/9997 in use: 0
+    Remaining unit files / drop-in dirs: 0
+    Loaded sandswap slices: 0
+    Remaining installed-lib artifacts (guest TCB / runtime helpers): 0
+    Remaining sandswap mounts: 0
+
+  ✓ Environment is clean

@@ -1,0 +1,43 @@
+── leg: --maintenance on (rc=0) ──
+[rotate-seed] maintenance ON — agent traffic is refused cluster-wide
+── leg: --stage (rc=0) ──
+template-tool: seed written to /etc/sandswap/volume-seed-next-20261126T075931Z-2872144 (keep it — every volume name derives from it)
+[rotate-seed] staged next generation: /etc/sandswap/volume-seed-next-20261126T075931Z-2872144
+[rotate-seed] staged AND adopted by the running instance (fingerprint b3914a09; creation is frozen until promote)
+── leg: --run (rc=0) ──
+[rotate-seed] live adoption verified: the running instance is staged on b3914a09
+[rotate-seed] listing records…
+[rotate-seed] action=run total=4 moved=4 skipped=0 failed=0
+── leg: --promote (rc=0) ──
+volumes root:        /var/lib/sandswap/volumes
+current generation:  19ca9b1a (0 volume(s))
+staged generation:   b3914a09 (4 volume(s))
+sampled:             4 (partial runs skipped: 0, unreadable stamps: 0, unauthenticated stamps: 0)
+no usable stamp:     0 unstamped + 0 pre-generation
+unconfigured:        0
+PROMOTE GATE: PASS — no volume still carries the current generation
+[rotate-seed] promoted staged seed (re-pointed volume_seed_file; cleared staged keys: True)
+[rotate-seed] promoted AND adopted by the running instance (fingerprint b3914a09)
+── leg: --maintenance off (rc=0) ──
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=2s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=5s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=8s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=11s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=14s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=17s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=20s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=23s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=26s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+  laggard: node=sandlot-prov generation=19ca9b1a staged=False age=29s
+[rotate-seed] waiting for the prov fleet to report b3914a09 (the fleet view lags a heartbeat)…
+[rotate-seed] fleet converged: every connected prov instance derives names from b3914a09
+[rotate-seed] maintenance OFF — agent traffic resumed

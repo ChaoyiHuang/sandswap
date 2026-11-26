@@ -1,0 +1,140 @@
+{
+  "redaction": "Credentials and client filesystem identifiers; no private Claude configuration files exported.",
+  "files": [
+    {
+      "file": "run-1/before.json",
+      "source_sha256": "0ea3f5275d3176e8f1fe4ea978238edf47bc00f39a24862673318aa2a4f7bd3f",
+      "published_sha256": "0ea3f5275d3176e8f1fe4ea978238edf47bc00f39a24862673318aa2a4f7bd3f"
+    },
+    {
+      "file": "run-1/after.json",
+      "source_sha256": "d60fc13a2ef8c00312ff9e8d07660fa19f5e2651fe1c531e18d62d1e96426885",
+      "published_sha256": "d60fc13a2ef8c00312ff9e8d07660fa19f5e2651fe1c531e18d62d1e96426885"
+    },
+    {
+      "file": "run-1/independent-checks.json",
+      "source_sha256": "f9aab89d0d2992148dcfefb02f1cc0171c5a3fcb3de53fb13d40bd16e2162886",
+      "published_sha256": "f9aab89d0d2992148dcfefb02f1cc0171c5a3fcb3de53fb13d40bd16e2162886"
+    },
+    {
+      "file": "run-1/summary.json",
+      "source_sha256": "c8c436aad64f0878e6ac98a4facbdea27935fb2b7d006f8b7aa945ea22dc1e9d",
+      "published_sha256": "c8c436aad64f0878e6ac98a4facbdea27935fb2b7d006f8b7aa945ea22dc1e9d"
+    },
+    {
+      "file": "run-1/invocation.json",
+      "source_sha256": "7803b3c84b8adb8b90bfd94d44111ae2d161ab899d2444ce8e0792dc88153744",
+      "published_sha256": "7dde1447974f35fcedd5566bba3bb2a9083b607addc0abd61960ee115eba12e7"
+    },
+    {
+      "file": "run-1/stream.jsonl",
+      "source_sha256": "cb67bb850da8749a26009871397473b94251d3ecb5eb334b91a0d7074edc626a",
+      "published_sha256": "9d6c753ad15cf2877e10276e6c570de16367314afcdeca9ce160d62fa148434d"
+    },
+    {
+      "file": "run-1/analysis.txt",
+      "source_sha256": "ad9d8361d41239ea69e3627d4ee911f26eb0aaf46e197d2b98376d3013697d44",
+      "published_sha256": "ad9d8361d41239ea69e3627d4ee911f26eb0aaf46e197d2b98376d3013697d44"
+    },
+    {
+      "file": "run-1/stderr.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "run-1/transcript.jsonl",
+      "source_sha256": "35d37f3237a50fc638f7dc45ccf99edc3ea5e7cbf4f3990bb464a968226ce98f",
+      "published_sha256": "5802d8384c8878a87b2dba247836d774df2b7f4ab8730055607d92f7a73578fc"
+    },
+    {
+      "file": "run-2/before.json",
+      "source_sha256": "ab457e6846345b55d24adbe765e548b4f10ad330c5e369a25a4350e5254940d6",
+      "published_sha256": "ab457e6846345b55d24adbe765e548b4f10ad330c5e369a25a4350e5254940d6"
+    },
+    {
+      "file": "run-2/after.json",
+      "source_sha256": "66b56fb14e8d88d59510b41e95c0c0bab7540ddfc361ee170930406f439e453b",
+      "published_sha256": "66b56fb14e8d88d59510b41e95c0c0bab7540ddfc361ee170930406f439e453b"
+    },
+    {
+      "file": "run-2/independent-checks.json",
+      "source_sha256": "995c60ad0620c1f9036e5deab5b6268d14363f2a79b4e5b552c0bdf2f1805fe0",
+      "published_sha256": "995c60ad0620c1f9036e5deab5b6268d14363f2a79b4e5b552c0bdf2f1805fe0"
+    },
+    {
+      "file": "run-2/summary.json",
+      "source_sha256": "7b552c09ea69cbf08d8b448ede926b3640b7171d1a28a9c2eff746113920e290",
+      "published_sha256": "7b552c09ea69cbf08d8b448ede926b3640b7171d1a28a9c2eff746113920e290"
+    },
+    {
+      "file": "run-2/invocation.json",
+      "source_sha256": "0c34780bd364f8dc31a0acbba075c2b62b38b61645a9a34cff965a8886f0c6d9",
+      "published_sha256": "8bd0dcfbeff2cb4f8b4b77db54447c2dd2682fea64f9fbfce12f60ce07f58f00"
+    },
+    {
+      "file": "run-2/stream.jsonl",
+      "source_sha256": "c0707fd93b1ca81a1f1948c7cc6e829d2f3c88e18b19e8d220ffa440d9e44096",
+      "published_sha256": "efb1dfe88ffd88a2fb9b5bd135c1ff38a3a3d0639b3daa797251ccc19733e4fe"
+    },
+    {
+      "file": "run-2/analysis.txt",
+      "source_sha256": "28422b5f82f2461bb5b320b0baad310de16132f2b3782eb993424fafd7d47c90",
+      "published_sha256": "28422b5f82f2461bb5b320b0baad310de16132f2b3782eb993424fafd7d47c90"
+    },
+    {
+      "file": "run-2/stderr.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "run-2/transcript.jsonl",
+      "source_sha256": "7f063e5a9348781c26c3ca1d8c91456b84a71588ed6eec2754e3340d855c1761",
+      "published_sha256": "124c950664fc0e054e023f0141f5b8415502cdb73276848663e13d9788be3dba"
+    },
+    {
+      "file": "run-3/before.json",
+      "source_sha256": "01de0ad65dc4b509d1b0771d429466fa5464a88f8a511562c96a10daf461155e",
+      "published_sha256": "01de0ad65dc4b509d1b0771d429466fa5464a88f8a511562c96a10daf461155e"
+    },
+    {
+      "file": "run-3/after.json",
+      "source_sha256": "ee6fb6a010b12b7b584ee0034dd1b21269673353ce78d77eacdbab2b8f5509e6",
+      "published_sha256": "ee6fb6a010b12b7b584ee0034dd1b21269673353ce78d77eacdbab2b8f5509e6"
+    },
+    {
+      "file": "run-3/independent-checks.json",
+      "source_sha256": "55372720c10b1eee8e69e0470d407b47949cac878f480a929c9f8058c080e9e5",
+      "published_sha256": "55372720c10b1eee8e69e0470d407b47949cac878f480a929c9f8058c080e9e5"
+    },
+    {
+      "file": "run-3/summary.json",
+      "source_sha256": "6824743e7e1b651f65d9a0f54d379503ac94ceb5d4d600cb1aa97516537f1fd6",
+      "published_sha256": "6824743e7e1b651f65d9a0f54d379503ac94ceb5d4d600cb1aa97516537f1fd6"
+    },
+    {
+      "file": "run-3/invocation.json",
+      "source_sha256": "f50ef8eee8d0f5dbeadc0fb6938dca16f5b08842a2dd8e279b6a1b9d84cd91d5",
+      "published_sha256": "96caf4e06c357be7c4ae71f3d4ee3425581fdb068fec3997def01a1a0cea09a5"
+    },
+    {
+      "file": "run-3/stream.jsonl",
+      "source_sha256": "e41b1f85f2001ed513087b33162aaa74980e65c22333e181a2ec79f53ccca901",
+      "published_sha256": "df80143c96d39f470d4fcc7c012acd7ad27a83904c466586aefdc5facca2de9e"
+    },
+    {
+      "file": "run-3/analysis.txt",
+      "source_sha256": "a56c85ab9c48c2a097d6c891d4eb607ee4958669f139d9b2d460f78ba3e4f8fd",
+      "published_sha256": "a56c85ab9c48c2a097d6c891d4eb607ee4958669f139d9b2d460f78ba3e4f8fd"
+    },
+    {
+      "file": "run-3/stderr.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "published_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "run-3/transcript.jsonl",
+      "source_sha256": "323c29615dc2e00e7ce6bd36c914d419b02805f4dadec746ad3dcb406680a27e",
+      "published_sha256": "0fa5f974766e81bbedabcce7bcbb5977724e929a051f6cd69ea83aea37b544f9"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "tests_run": 5,
+  "failures": 0,
+  "errors": 0,
+  "output": "test_ints (test_calc.TestAdd.test_ints) ... ok\ntest_negatives (test_calc.TestAdd.test_negatives) ... ok\ntest_base (test_calc.TestFib.test_base) ... ok\ntest_rejects_negative (test_calc.TestFib.test_rejects_negative) ... ok\ntest_sequence (test_calc.TestFib.test_sequence) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 0.000s\n\nOK\n",
+  "test_sha256": "0e79b17432c425f2b03036a2c641a820e0d597397e2f4d5b4c3acfa8022ae091",
+  "commits": [
+    "fix calc",
+    "add failing calc suite"
+  ],
+  "head": "2a1f18680058ac72c6ddef7c69129b215d2c4bb7",
+  "status": "",
+  "core_committed": true
+}

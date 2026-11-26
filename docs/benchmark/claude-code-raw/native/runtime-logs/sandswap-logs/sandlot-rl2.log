@@ -1,0 +1,3 @@
+WARNING: -allow-insecure-volumes set — guest-planted setuid bits and device nodes on the volumes tree are LIVE (invariant 8 violated). Dev/test only.
+2026/11/26 15:14:23 vsockguard: running as root — pin check skipped (root is a trust root and the BPF hook admits root)
+2026/11/26 15:14:23 role-lock: node_id "mi-a" is already running on this host (pid 2617776) — node ids must be unique; on a single-sandlot host the id is the hostname

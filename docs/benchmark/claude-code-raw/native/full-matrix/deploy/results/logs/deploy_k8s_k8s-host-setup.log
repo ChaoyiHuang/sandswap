@@ -1,0 +1,11 @@
+═══ Sandswap K8s Host Setup ═══
+  Host:   test-host
+  Kernel: 6.8.0-149-generic
+
+[1/6] bpf LSM (required for vsockguard enforcement)
+  ✓ bpf LSM already active: lockdown,capability,landlock,yama,apparmor,bpf
+[2/6] Dedicated sandlot service UID (anti-sniff invariant #3)
+  ✗ 'sandlot' exists with UID=985 — the boxout manifests and vsockguard pin the reserved sandbox uid 65536
+    A different uid breaks the reserved-identity scheme (the pod cannot read a key owned by another uid, and
+    whoever holds 65536 instead is not the fenced identity the deploy asserts).
+    Fix: usermod -u 65536 sandlot && bash deploy/k8s/k8s-host-setup.sh --stream-certs-only

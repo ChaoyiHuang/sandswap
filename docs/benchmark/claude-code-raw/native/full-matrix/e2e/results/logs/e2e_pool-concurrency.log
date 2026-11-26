@@ -1,0 +1,82 @@
+
+[0;32m═══ Phase 0: Pre-flight Checks ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Deploy & Generate Config ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+[0;32m[✓][0m Sandlot config written to /tmp/sandswap-logs/sandlot.yaml
+
+[0;32m═══ Phase 2: Start Stack & Batch Pre-create ═══[0m
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2752573)
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2752620)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 3, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 3 CLEAN VM(s)
+[0;32m[✓][0m pool pre-create used concurrency=3
+[0;32m[✓][0m pool pre-created 3 VMs
+
+[0;32m═══ Phase 3: Hot-Reload Scale-Down to Zero ═══[0m
+[0;32m[✓][0m Sandlot config written to /tmp/sandswap-logs/sandlot.yaml
+[0;32m[✓][0m scale-down reached 0 CLEAN VMs
+[0;32m[✓][0m scale-down destroyed idle VMs in batch
+
+[0;32m═══ Phase 4: Hot-Reload Scale-Up Again ═══[0m
+[0;32m[✓][0m Sandlot config written to /tmp/sandswap-logs/sandlot.yaml
+[0;32m[✓][0m scale-up restored the 3-VM pool
+
+[0;32m═══ Phase 5: No VM Churn or Crashes ═══[0m
+[0;32m[✓][0m no dirty VMs during batch create/destroy
+[0;32m[✓][0m no VMM crashes
+
+[0;32m═══ Results Summary ═══[0m
+
+  ┌──────────────────────────────────────────────────────┐
+  │     Sandswap Pool Concurrency E2E Test Results       │
+  ├──────────────────────────────────────────────────────┤
+  │ Create concurrency: TESTED (3 workers, 3 VMs)        │
+  │ Destroy concurrency: TESTED (4 workers, scale-down)  │
+  │ Scale-down to zero:  TESTED (hot-reload pool="")      │
+  │ Scale-up again:      TESTED (hot-reload small:3)      │
+  ├──────────────────────────────────────────────────────┤
+  │ Tests:  7 passed   0 failed                             │
+  └──────────────────────────────────────────────────────┘
+
+[0;32m[✓][0m All 7 tests passed
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 6 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

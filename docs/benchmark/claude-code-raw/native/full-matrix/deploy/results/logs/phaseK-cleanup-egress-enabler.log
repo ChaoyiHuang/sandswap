@@ -1,0 +1,37 @@
+═══ Sandswap K8s Cleanup ═══
+  Host: test-host
+
+[1/9] K8s namespace
+  ✓ Namespace sandswap does not exist (already clean)
+  ✓ coredns Corefile has no sandswap zone (already clean)
+[2/9] Port-forward processes
+  ✓ Port-forwards cleaned
+[3/9] vsockguard BPF
+  ✓ vsockguard not attached (already clean)
+[4/9] TAP devices + network bridge
+  ✓ No TAP devices to remove
+  ✓ br-sandswap not present
+  ✓ shm binding region removed
+  ✓ bpf binding pin removed
+[5/9] Stale udev rules
+  ✓ No stale udev rules
+[5b/9] Network persistence unit
+  ✓ No stream client certificate to remove
+[6/9] Seccomp profile
+  ✓ No seccomp profile to remove
+[7/9] Host runtime state
+  ✓ /run/sandswap* + /var/lib/sandswap removed (stale harness pidfile only)
+[8/9] Remaining processes
+  ✓ No sandswap processes running
+
+═══ Cleanup Complete ═══
+  K8s namespace:  deleted
+  Port-forwards:  killed
+  vsockguard:     detached
+  TAP devices:    removed
+  br-sandswap:    removed
+  Seccomp:        removed
+  udev rules:     cleaned
+  /run/sandswap:  removed
+  /var/lib/sandswap: removed
+

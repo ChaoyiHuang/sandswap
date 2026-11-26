@@ -1,0 +1,93 @@
+
+[0;32m═══ Phase 0: Pre-flight ═══[0m
+[0;32m[✓][0m Running as root
+  Host:     test-host
+  Arch:     x86_64
+  Kernel:   6.8.0-149-generic
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m Round baseline fresh (matrix preflight) — skipping per-row freshness check
+[0;32m[✓][0m Required tools: curl python3 python3
+[0;32m[✓][0m All 5 artifacts present in output/
+[0;32m[✓][0m KVM available (/dev/kvm is readable)
+    KVM module: kvm_intel
+[0;32m[→][0m Ensuring essential device nodes and kernel modules...
+[0;32m[✓][0m Device nodes and vhost_vsock ready
+[0;32m[→][0m Setting up host networking (bridge br-sandswap, subnet 10.188.0.0/16, NAT via bond1)...
+[0;32m[✓][0m nftables masquerade installed (10.188.0.0/16 -> bond1); guest->host default-deny allowlist, IPv4+IPv6 (DNS only by default)
+[0;32m[✓][0m guest FORWARD policy installed for 10.188.0.0/16 (metadata dropped, uplink-scoped accept, terminal drop)
+[0;32m[✓][0m Host bridge br-sandswap ready (10.188.0.1/16)
+
+[0;32m═══ Phase 1: Deploy (Ubuntu template — needs python3 in-guest) ═══[0m
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+[0;32m[→][0m Deploying to /var/lib/sandswap-e2e ...
+    Flat template deployed: /var/lib/sandswap-e2e/flat-templates/rootfs/v1/ (ref: rootfs:v1)
+[0;32m[✓][0m Artifacts deployed (all copies verified, sizes match build output)
+    Volumes:  /var/lib/sandswap-e2e/volumes
+    Logs:     /tmp/sandswap-logs
+[0;32m[→][0m Generating mTLS certs for gateway<->sandlot stream...
+[0;32m[✓][0m mTLS certs ready in /var/lib/sandswap-e2e/certs (keys scoped per service identity)
+
+[0;32m═══ Phase 2: Stack up (one VM) ═══[0m
+[0;32m[→][0m Attaching vsockguard (BPF LSM vsock guard)...
+[0;32m[✓][0m vsockguard attached (allowed uid=985)
+[0;32m[→][0m Starting gateway (HTTP :3001, stream :9998)...
+[0;32m[✓][0m Gateway running (PID 2599479)
+[0;32m[→][0m Starting sandlot (connects to gateway gRPC :9998)...
+[0;32m[✓][0m Sandlot running (PID 2599515)
+    Waiting for gateway HTTP health check...
+[0;32m[✓][0m Gateway healthy: {"status":"ok"}
+    Waiting for sandlot pool pre-creation (target: 1, stats: http://localhost:3100)...
+[0;32m[✓][0m Pool ready: 1 CLEAN VM(s)
+[0;32m[✓][0m agents A/B created (single-VM pool, flat ubuntu template)
+[0;32m[✓][0m mqueue-seccomp-probe helper uploaded to A and B (static glibc mqueue probe)
+
+[0;32m═══ Phase 3: Agent A plants kernel-object residue ═══[0m
+    A plant output: PLANT msg:OK shm:OK mq:EPERM shmfile:OK key:EPERM pid1prlimit:EPERM tcp:PLANTED:1
+[0;32m[✓][0m A planted 1 TIME_WAIT row(s) — the tcp:CLEAN probe is discriminating
+[0;32m[✓][0m A's POSIX mqueue creation DENIED by seccomp (whole family blocked)
+[0;32m[✓][0m prlimit64 targeting PID 1 is denied (EPERM) — the same-owner retune channel is closed
+[0;32m[✓][0m A's keyring plant DENIED by seccomp (add_key denied)
+
+[0;32m═══ Phase 4: Switch to agent B (same VM) and probe ═══[0m
+    B probe output: PROBE msg:GONE shm:GONE mq:EPERM key:EPERM kmsg:MASKED shmfile:GONE kcore:ABSENT kallsyms:MASKED keys:MASKED slabinfo:MASKED kpagecount:MASKED kpageflags:MASKED pagetypeinfo:MASKED buddyinfo:MASKED zoneinfo:MASKED proc:RO core_pattern:RO oom_score_adj:RO cgroup_kill:ABSENT devmem:ABSENT vsock:UNREACHABLE tcp:CLEAN diag:TW:0
+[0;32m[✓][0m same tinyVM served A then B (sandvmm pid 2599682) — the GONE verdicts are meaningful
+[0;32m[✓][0m B: msg:GONE
+[0;32m[✓][0m B: shm:GONE
+[0;32m[✓][0m B: shmfile:GONE
+[0;32m[✓][0m B: mq:EPERM
+[0;32m[✓][0m B: key:EPERM
+[0;32m[✓][0m B: kmsg:MASKED
+[0;32m[✓][0m B: kallsyms:MASKED
+[0;32m[✓][0m B: keys:MASKED
+[0;32m[✓][0m B: proc:RO
+[0;32m[✓][0m B: core_pattern:RO
+[0;32m[✓][0m B: oom_score_adj:RO
+[0;32m[✓][0m B: devmem:ABSENT
+[0;32m[✓][0m B: tcp:CLEAN
+[0;32m[✓][0m B: kcore masked or absent
+[0;32m[✓][0m B: cgroup.kill absent or read-only
+[0;32m[✓][0m B: slabinfo masked or absent
+[0;32m[✓][0m B: kpagecount masked or absent
+[0;32m[✓][0m B: kpageflags masked or absent
+[0;32m[✓][0m B: pagetypeinfo masked or absent
+[0;32m[✓][0m B: buddyinfo masked or absent
+[0;32m[✓][0m B: zoneinfo masked or absent
+[0;32m[✓][0m B: warden vsock port unreachable from inside the guest (no loopback, no cross-VM routing)
+[0;32m[✓][0m B functional after switch
+
+[0;32m═══ RESULT ═══[0m
+[0;32m[✓][0m cross-tenant residue channels closed (SysV swept at unmount; mqueue seccomp-denied; keyring denied)
+
+[0;32m═══ Shutdown ═══[0m
+    [trap-cleanup] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [trap-cleanup] no sandswap processes running
+[0;32m[✓][0m KEEP_LOGS=1: logs + 2 guest log files (serial+console) kept in /tmp/sandswap-logs
+All processes stopped.

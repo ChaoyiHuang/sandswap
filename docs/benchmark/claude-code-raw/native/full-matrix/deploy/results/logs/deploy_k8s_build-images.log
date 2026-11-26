@@ -1,0 +1,134 @@
+docker daemon down — starting docker.socket + docker.service
+Building Sandswap container images (mode=all)...
+  Building sandswap/gateway:latest (ubuntu)...
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon    502MB
+Step 1/5 : FROM ubuntu:22.04
+ ---> f64b2ffc2f10
+Step 2/5 : RUN apt-get -o Acquire::Retries=5 update &&     apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates &&     rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> d5276fa488bb
+Step 3/5 : COPY gateway /gateway
+ ---> efb6286fb13b
+Step 4/5 : EXPOSE 3000 9998
+ ---> Running in e87cd38d9937
+ ---> Removed intermediate container e87cd38d9937
+ ---> f4fca7bb294c
+Step 5/5 : ENTRYPOINT ["/gateway"]
+ ---> Running in 0b9a60411835
+ ---> Removed intermediate container 0b9a60411835
+ ---> 795829ba371d
+Successfully built 795829ba371d
+Successfully tagged sandswap/gateway:latest
+  Building sandswap/sandlot:latest (ubuntu+iproute2)...
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon    502MB
+Step 1/10 : FROM ubuntu:22.04
+ ---> f64b2ffc2f10
+Step 2/10 : RUN apt-get -o Acquire::Retries=5 update &&     apt-get -o Acquire::Retries=5 install -y --no-install-recommends iproute2 nftables util-linux &&     rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> ca6a2be1f8dc
+Step 3/10 : COPY sandlot /sandlot
+ ---> 8383ba4d459f
+Step 4/10 : COPY sandvmm /sandvmm
+ ---> f7320c21790e
+Step 5/10 : COPY vsockguard.bpf.o /sandswap/vsockguard.bpf.o
+ ---> 2962412fdce4
+Step 6/10 : COPY vsockguardctl /sandswap/vsockguardctl
+ ---> 83d886ca1ff8
+Step 7/10 : COPY bindregdump /sandswap/bindregdump
+ ---> 56ac47834af1
+Step 8/10 : COPY sandlot-entrypoint.sh /entrypoint.sh
+ ---> bc9ec3b3b5a0
+Step 9/10 : RUN chmod 0755 /entrypoint.sh
+ ---> Running in cdedd60e3909
+ ---> Removed intermediate container cdedd60e3909
+ ---> 8b9b6a6a181b
+Step 10/10 : ENTRYPOINT ["/entrypoint.sh"]
+ ---> Running in c194031877ad
+ ---> Removed intermediate container c194031877ad
+ ---> 2cbc3935ff3b
+Successfully built 2cbc3935ff3b
+Successfully tagged sandswap/sandlot:latest
+  Building sandswap/boxout:latest (ubuntu+iproute2)...
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon    502MB
+Step 1/10 : FROM ubuntu:22.04
+ ---> f64b2ffc2f10
+Step 2/10 : RUN apt-get -o Acquire::Retries=5 update &&     apt-get -o Acquire::Retries=5 install -y --no-install-recommends iproute2 nftables util-linux &&     rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> ca6a2be1f8dc
+Step 3/10 : COPY boxout /boxout
+ ---> aa4260f57b68
+Step 4/10 : COPY sandvmm /sandvmm
+ ---> 7307ceabbdee
+Step 5/10 : COPY vsockguard.bpf.o /sandswap/vsockguard.bpf.o
+ ---> 8398e519d65f
+Step 6/10 : COPY vsockguardctl /sandswap/vsockguardctl
+ ---> 3046d652a0c7
+Step 7/10 : COPY bindregdump /sandswap/bindregdump
+ ---> 3cc1867dc672
+Step 8/10 : COPY boxout-entrypoint.sh /entrypoint.sh
+ ---> 5cc1b2f0118f
+Step 9/10 : RUN chmod 0755 /entrypoint.sh
+ ---> Running in 22df81ca780d
+ ---> Removed intermediate container 22df81ca780d
+ ---> e2d6ba6d2ec4
+Step 10/10 : ENTRYPOINT ["/entrypoint.sh"]
+ ---> Running in 8c4f2416c009
+ ---> Removed intermediate container 8c4f2416c009
+ ---> b0b44488c220
+Successfully built b0b44488c220
+Successfully tagged sandswap/boxout:latest
+  Building sandswap/sandlot-boxout:latest (ubuntu)...
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon    502MB
+Step 1/5 : FROM ubuntu:22.04
+ ---> f64b2ffc2f10
+Step 2/5 : RUN apt-get -o Acquire::Retries=5 update &&     apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates &&     rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> d5276fa488bb
+Step 3/5 : COPY sandlot /sandlot
+ ---> f4efa496aa84
+Step 4/5 : COPY bindregdump /sandswap/bindregdump
+ ---> 9001faa43342
+Step 5/5 : ENTRYPOINT ["/sandlot"]
+ ---> Running in 5418ad4b6818
+ ---> Removed intermediate container 5418ad4b6818
+ ---> f3b0022badda
+Successfully built f3b0022badda
+Successfully tagged sandswap/sandlot-boxout:latest
+  Building sandswap/sandns:latest (ubuntu)...
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon    502MB
+Step 1/4 : FROM ubuntu:22.04
+ ---> f64b2ffc2f10
+Step 2/4 : COPY sandns /sandns
+ ---> d3f136780171
+Step 3/4 : EXPOSE 53
+ ---> Running in c1dcc663da1d
+ ---> Removed intermediate container c1dcc663da1d
+ ---> aa4719e34c21
+Step 4/4 : ENTRYPOINT ["/sandns"]
+ ---> Running in fe8288ebdf87
+ ---> Removed intermediate container fe8288ebdf87
+ ---> dbf56a713f8d
+Successfully built dbf56a713f8d
+Successfully tagged sandswap/sandns:latest
+
+Images built:

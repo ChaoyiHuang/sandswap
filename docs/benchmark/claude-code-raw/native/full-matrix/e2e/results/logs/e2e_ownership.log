@@ -1,0 +1,75 @@
+[0;32m[→][0m Cleaning up all stale sandswap processes...
+    [pre-test] reloaded vhost_vsock module (freed stale CIDs)
+[0;32m[✓][0m [pre-test] no sandswap processes running
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[✓][0m Environment clean (old logs purged)
+[0;32m[✓][0m No sandswap processes running — safe to copy binaries
+
+[0;32m═══ Ownership E2E (real etcd, no KVM) ═══[0m
+[0;32m[✓][0m etcd binary: /usr/local/bin/etcd
+[0;32m[✓][0m identity resolution persisted to /etc/sandswap/identity.env
+[0;32m[✓][0m service identities resolved: sandlot=985 sandserv=986 sandvmm=987 sandprov=983 (strict=0)
+[0;32m[→][0m Starting etcd (ownership-e2e, data=/tmp/sandswap-ownership-e2e-etcd-data, endpoint=http://127.0.0.1:2379, user=sandserv)...
+[0;32m[✓][0m etcd started (PID=2503754)
+
+[0;32m═══ Building gateway ═══[0m
+[0;32m[✓][0m gateway build succeeded
+
+[0;32m═══ Running ownership E2E tests ═══[0m
+2026/11/26 15:01:44 WARNING: [core] [Server #3] grpc: Server.processUnaryRPC failed to write status: connection error: desc = "transport is closing"
+--- PASS: TestMigratedTakeoverAllowedNilClient (0.00s)
+--- PASS: TestLookupOwnerGatewayIDNilClient (0.00s)
+--- PASS: TestOwnershipCloseIdempotent (0.00s)
+--- PASS: TestOwnerStalenessE2E (0.02s)
+--- PASS: TestSelfHealthyStalenessE2E (0.01s)
+--- PASS: TestOwnerDeadStalenessE2E (0.01s)
+--- PASS: TestStalenessAlertScanE2E (0.03s)
+--- PASS: TestClaimDeadIdleWritesCandidatePlacementE2E (2.52s)
+--- PASS: TestClaimDeadIdlePreservesNonEmptyPlacementE2E (2.52s)
+--- PASS: TestClaimDeadIdleTimeGuardE2E (2.51s)
+--- PASS: TestClaimDeadIdleRevivalClearsClockE2E (0.02s)
+--- PASS: TestReapStuckOwnershipE2E (0.03s)
+--- PASS: TestReapStuckNodeOwnershipE2E (0.02s)
+--- PASS: TestClaimCorruptValueOverwriteE2E (0.01s)
+--- PASS: TestClaimNoOwnerRacesE2E (0.15s)
+--- PASS: TestReapDeleteCAS_SkipsMovedRecord (0.01s)
+--- PASS: TestClaimRefreshPreservesDispatching (0.01s)
+--- PASS: TestCASClaim (0.02s)
+--- PASS: TestOwnershipNoLeasePersists (2.01s)
+--- PASS: TestMigratedTakeoverBlocked (6.02s)
+--- PASS: TestMigratedTakeoverAfterMigration (6.03s)
+--- PASS: TestWatchConflict (2.02s)
+--- PASS: TestFaultStateOwnerTolerated (1.01s)
+--- PASS: TestNodeIDLifecycle (0.01s)
+--- PASS: TestOwnerReleaseThreePartChain (2.23s)
+--- PASS: TestOwnerReleaseCanceledOnReconnect (3.21s)
+--- PASS: TestSandfsByAgentReverseIndex (5.03s)
+--- PASS: TestSandfsByAgentWatchSync (14.03s)
+--- PASS: TestListAllSandFSDeepCopy (5.01s)
+--- PASS: TestOwnershipCloseIdempotent (0.01s)
+--- PASS: TestLookupOwnerGatewayIDNoOwner (0.00s)
+--- PASS: TestLookupOwnerGatewayIDCorruptOwner (0.00s)
+--- PASS: TestLookupOwnerGatewayIDEmptyGatewayID (0.00s)
+--- PASS: TestLookupOwnerGatewayIDHappyPath (0.00s)
+--- PASS: TestOwnerGatewayURLFromRegistry (0.02s)
+--- PASS: TestPresenceKeyLifecycle (6.22s)
+--- PASS: TestOwnershipPersistsAcrossRestart (0.02s)
+--- PASS: TestHealthKeyPublishesNodeCount (0.01s)
+--- PASS: TestHealthKeyPublishesFaultImmediately (1.01s)
+--- PASS: TestRegistryDecouplingPublishesAddressesInRegisterOnly (0.01s)
+--- PASS: TestWatchKeepaliveResubscribeDeliversNewEventsE2E (3.06s)
+--- PASS: TestWatchDeleteCompensatesMountedEntryE2E (1.01s)
+--- PASS: TestPublishForeignRecordCompensatesE2E (0.01s)
+--- PASS: TestReleaseOwnershipCAS (0.02s)
+ok  	gateway/lease	67.180s
+[0;32m[✓][0m ownership E2E suite passed
+
+[0;32m═══ Summary ═══[0m
+  Total time: 88s
+
+[0;32m[✓][0m All ownership E2E tests PASSED
+{"level":"error","ts":"2026-11-26T15:02:26.482971+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"mux: server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:02:26.482951+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"http: Server closed","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*serveCtx).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/serve.go:90"}
+{"level":"error","ts":"2026-11-26T15:02:26.483250+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2379: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}
+{"level":"error","ts":"2026-11-26T15:02:26.483738+0800","caller":"embed/etcd.go:912","msg":"setting up serving from embedded etcd failed.","error":"accept tcp 127.0.0.1:2380: use of closed network connection","stacktrace":"go.etcd.io/etcd/server/v3/embed.(*Etcd).errHandler\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:912\ngo.etcd.io/etcd/server/v3/embed.(*Etcd).startHandler.func1\n\tgo.etcd.io/etcd/server/v3/embed/etcd.go:906"}

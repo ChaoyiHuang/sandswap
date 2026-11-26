@@ -1,0 +1,20 @@
+{
+  "http_status": 200,
+  "model": "glm-5.3-flash",
+  "usage": {
+    "completion_tokens": 32,
+    "completion_tokens_details": {
+      "reasoning_tokens": 29
+    },
+    "prompt_tokens": 16,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 48
+  },
+  "finish_reason": "stop",
+  "elapsed_s": 5.421976773999631,
+  "probe_address_family": "IPv4",
+  "ca_file": "/etc/ssl/certs/ca-certificates.crt",
+  "certificate_verification": true
+}

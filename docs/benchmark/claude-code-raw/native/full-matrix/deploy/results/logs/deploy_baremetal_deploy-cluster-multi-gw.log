@@ -1,0 +1,58 @@
+[1;34m[sandswap][0m Production Cluster Deployment
+[1;34m[sandswap][0m [1/9] Building artifacts...
+[1;34m[sandswap][0m   (dry-run: would run build.sh all)
+[1;34m[sandswap][0m [2/9] Generating TLS certificates with multi-node SANs...
+[1;34m[sandswap][0m   (dry-run: would generate certs with SANs: DNS=sandswap.local,sandswap-stream.local,*.sandfs.sandswap.local IP=10.0.1.10
+10.0.1.11, one client pair per node id)
+[1;34m[sandswap][0m [3/9] Generating per-node configs → /opt/sandswap-pr38/src/output/baremetal-prod
+[1;34m[sandswap][0m   exec gateway gw-exec-1 (host=gw1.example.com ip=10.0.1.10 agent_port=3000 stream_port=9998)
+[1;34m[sandswap][0m Gateway config generated: /opt/sandswap-pr38/src/output/baremetal-prod/gateway-exec-1.yaml (mode=exec)
+[1;34m[sandswap][0m   exec gateway gw-exec-2 (host=gw2.example.com ip=10.0.1.11 agent_port=3000 stream_port=9998)
+[1;34m[sandswap][0m Gateway config generated: /opt/sandswap-pr38/src/output/baremetal-prod/gateway-exec-2.yaml (mode=exec)
+[1;34m[sandswap][0m   human gateway (host=gw1.example.com)
+[1;34m[sandswap][0m Gateway config generated: /opt/sandswap-pr38/src/output/baremetal-prod/gateway-human.yaml (mode=human)
+[1;34m[sandswap][0m   sandns (host=dns1.example.com)
+[1;34m[sandswap][0m   sandlot sandlot-1 (host=sandlot1.example.com pool=medium:5)
+[1;33m[warn][0m guest TCB vmlinux.bin resolves to the LEGACY location /var/lib/sandswap/vmlinux.bin — that directory is traversable by the service identities; run the current deployer to install it under root-only /usr/local/lib/sandswap/guest
+[1;34m[sandswap][0m Sandlot config generated: /opt/sandswap-pr38/src/output/baremetal-prod/sandlot-sandlot-1.yaml (gateway=sandswap-stream.local:9998, pool=medium:5, roles=exec)
+[1;34m[sandswap][0m   sandlot sandlot-2 (host=sandlot2.example.com pool=medium:5)
+[1;33m[warn][0m guest TCB vmlinux.bin resolves to the LEGACY location /var/lib/sandswap/vmlinux.bin — that directory is traversable by the service identities; run the current deployer to install it under root-only /usr/local/lib/sandswap/guest
+[1;34m[sandswap][0m Sandlot config generated: /opt/sandswap-pr38/src/output/baremetal-prod/sandlot-sandlot-2.yaml (gateway=sandswap-stream.local:9998, pool=medium:5, roles=exec)
+[1;34m[sandswap][0m   prov instance (host=gw1.example.com, storage plane)
+[1;33m[warn][0m guest TCB vmlinux.bin resolves to the LEGACY location /var/lib/sandswap/vmlinux.bin — that directory is traversable by the service identities; run the current deployer to install it under root-only /usr/local/lib/sandswap/guest
+[1;34m[sandswap][0m Sandlot config generated: /opt/sandswap-pr38/src/output/baremetal-prod/sandlot-prov.yaml (gateway=gw1.example.com:9996, pool=medium:3, roles=prov)
+[1;34m[sandswap][0m [8/9] Validating generated configs...
+  [OK] /opt/sandswap-pr38/src/output/baremetal-prod/gateway-exec-1.yaml → gateway_id=gw-exec-1 gateway_url=https://10.0.1.10:3000 stream_addr=10.0.1.10:9998
+  [OK] /opt/sandswap-pr38/src/output/baremetal-prod/gateway-exec-2.yaml → gateway_id=gw-exec-2 gateway_url=https://10.0.1.11:3000 stream_addr=10.0.1.11:9998
+[1;34m[sandswap][0m Config validation PASSED (2 exec GWs, 2 unique ids, sandfs zone enabled)
+[1;34m[sandswap][0m [4/9]-[7/9] Per-node install commands (scp /opt/sandswap-pr38/src/output/baremetal-prod/* + certs, then):
+[1;34m[sandswap][0m  PROV HOST PREP: on the prov (storage) host run setup-host with
+[1;34m[sandswap][0m   SS_PROV_USER=sandprov — the merged-dev default (sandlot) breaks the
+[1;34m[sandswap][0m   dedicated prov instance's volume writes after any re-prep.
+[1;34m[sandswap][0m  CERT SCOPING (stream identity): ship ca.key to NO node (the CA
+[1;34m[sandswap][0m   signing key stays on the deploy host — it can mint fleet-trusted certs); each
+[1;34m[sandswap][0m   node gets exactly ca.crt + ITS OWN client pair (sandlot.<crt,key> for the first
+[1;34m[sandswap][0m   config entry, else sandlot-<node_id>.<crt,key>) — the gateway binds a stream
+[1;34m[sandswap][0m   hello's node_id to the client cert's CN by exact match, so a pair shipped to
+[1;34m[sandswap][0m   the wrong host is refused at the handshake by name; the prov host additionally
+[1;34m[sandswap][0m   gets its prov pair + the prov.key copy; the volume-seed file ships ONLY to
+[1;34m[sandswap][0m   prov hosts; the registry credential never rides argv (config file 0640
+[1;34m[sandswap][0m   root:<group>).
+[1;34m[sandswap][0m   exec gateway:    gateway-exec-<i>.yaml → /etc/sandswap/gateway-exec.yaml; sandswap-gateway@exec
+[1;34m[sandswap][0m   human gateway:   gateway-human.yaml → /etc/sandswap/; sandswap-gateway@human
+[1;34m[sandswap][0m   sandns:    sandns.yaml → /etc/sandswap/; sandswap-sandns.service
+[1;34m[sandswap][0m   sandlot:         sandlot-<node>.yaml → /etc/sandswap/sandlot.yaml; sandswap-sandlot.service
+[1;34m[sandswap][0m   prov (STORAGE):  sandlot-prov.yaml → HUMAN GW HOST /etc/sandswap/; sandswap-sandlot-prov.service
+[1;34m[sandswap][0m                    (copy certs/sandlot-sandlot-prov.key → certs/prov.key chown sandprov 0640 and ship
+[1;34m[sandswap][0m                     certs/sandlot-sandlot-prov.crt + certs/ca.crt — the config's cert line names that
+[1;34m[sandswap][0m                     pair; mkdir -p
+[1;34m[sandswap][0m                     /mnt/sandswap/templates chown sandprov:sandlot chmod 2750; install the
+[1;34m[sandswap][0m                     sandlot binary; the human gw host must have the shared storage mounted)
+[1;34m[sandswap][0m                    chown root:sandprov /etc/sandswap/sandlot-prov.yaml && chmod 0640 —
+[1;34m[sandswap][0m                    the config may carry an OCI registry credential (scp does not
+[1;34m[sandswap][0m                    preserve the staged file's mode).
+[1;34m[sandswap][0m   (Follow docs/deployment/install-baremetal.md for the full SSH flow; configs are ready in /opt/sandswap-pr38/src/output/baremetal-prod/)
+[1;34m[sandswap][0m Dry run COMPLETE: configs generated + validated in /opt/sandswap-pr38/src/output/baremetal-prod (PKI generation skipped).
+[1;34m[sandswap][0m [9/9] Agent DNS configuration: point agent hosts at the sandns IP and use
+[1;34m[sandswap][0m       MCP base URL https://<sandfs_id>.sandfs.sandswap.local:3000/mcp
+[1;34m[sandswap][0m       (dnsmasq: server=/sandswap.local/<sandns-ip> covers the *.sandswap.local subdomains)

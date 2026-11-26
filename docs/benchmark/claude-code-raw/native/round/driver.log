@@ -1,0 +1,12 @@
+
+[0;32m═══ ROUND 20261126T070037Z — trees: e2e deploy ═══[0m
+    logs: /var/tmp/sandswap-claude-evidence/round
+
+[0;32m═══ TREE e2e — e2e/run-matrix.sh ═══[0m
+[0;31m[✗][0m tree e2e: gate FAIL rc=1 (log /var/tmp/sandswap-claude-evidence/round/e2e.log)
+
+[0;32m═══ TREE deploy — deploy/run-matrix.sh ═══[0m
+[0;32m[✓][0m tree deploy: gate PASS (log /var/tmp/sandswap-claude-evidence/round/deploy.log)
+FAIL rows (e2e) — log: /var/tmp/sandswap-claude-evidence/round/e2e.log
+  e2e/multi-instance-orphan-safety.sh  — rc=1
+  e2e/seccomp.sh  — rc=1

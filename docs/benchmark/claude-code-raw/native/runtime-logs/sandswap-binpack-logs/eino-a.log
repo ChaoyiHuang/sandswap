@@ -1,0 +1,23 @@
+Sandswap Eino agent ready: sandswap-agent
+  MCP endpoint: https://127.0.0.1:3000/mcp
+  LLM backend:  deepseek
+  Model:        glm-5.3-flash
+  Tools:        Sandswap MCP (12 tools discovered)
+
+Type a message and press Enter. Press Ctrl+C to exit.
+
+You: [sandswap-agent] >>> user prompt: Use the execute tool to run this shell command: echo binpack_eino_a_ok
+[sandswap-agent] <<< LLM tool call: execute({"code":"echo binpack_eino_a_ok","language":"shell","sandfs_id":"sandfs-67f1f669"})
+[sandswap-agent] >>> tool result [execute]: {"content":[{"type":"text","text":"{\"exec_duration_ns\":2175694,\"exec_id\":\"\",\"exit_code\":0,\"gateway_duration_ns\":3787562,\"sandlot_duration_ns\":2587174,\"status\":\"done\",\"stderr\":\"\",\"stdout\":\"binpack_eino_a_ok\\n\"}"}]}
+[sandswap-agent] <<< LLM response: The command ran successfully:\n\n```\nbinpack_eino_a_ok\n```\n\n- **Exit code:** 0\n- **stderr:** (empty)\n- **Duration:** ~2.2 ms
+Agent: The command ran successfully:
+
+```
+binpack_eino_a_ok
+```
+
+- **Exit code:** 0
+- **stderr:** (empty)
+- **Duration:** ~2.2 ms
+
+You: 
