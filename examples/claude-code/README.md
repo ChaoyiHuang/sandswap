@@ -328,13 +328,17 @@ commit, and additional arithmetic/Fibonacci checks outside the seeded suite.
 
 Each output directory is new and private. It contains raw CLI stream output,
 the isolated session transcript, before/after checks, invocation metadata and
-`summary.json`. A nonzero exit is a failed validation. Review and redact logs
-before publishing them; model credentials and sandbox keys must never be
-committed. To check the validator's rejection paths without a model:
+`summary.json`. A nonzero exit is a failed validation. Keep these generated
+records local; publish a reviewed, sanitized summary of relevant results.
+Model credentials and sandbox keys must never be committed. To check the
+validator's rejection paths without a model:
 
 ```bash
 python3 -m unittest discover -s . -p 'test_validate.py' -v
 ```
+
+See the measured [Mac + GLM validation summary](../../docs/benchmark/claude-code.md)
+for coding results, timing boundaries, fixes, and the full repository test round.
 
 ### See where the time went
 
@@ -353,7 +357,11 @@ It picks the newest transcript for this directory whose first prompt is the
 pass a `.jsonl` path to choose one) and prints the turn as the loop it is:
 every round's **thinking, what it said, how long it thought, then the tool
 it called and how long that took — each `execute` split into its measured
-layers**. A real interactive run:
+layers**. The tables below are an older interactive snapshot. The current
+analyzer includes the initial prompt wait, groups provider message IDs, counts
+parallel tool waits once, and labels unmeasured transport/client overhead as a
+residual. See the linked Mac + GLM summary for corrected measurements.
+The historical interactive run:
 
 **Table 1 — the loop, in time order.** Each LLM call, then the tools it
 called, with every `execute`'s command spelled out one `&&`-step per line.

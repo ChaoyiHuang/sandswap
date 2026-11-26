@@ -95,7 +95,7 @@ EXEC_FLOOR_MS = None   # measured once per run: median exec of `sh -c :` on the 
 
 def measure_exec_floor() -> float:
     """The sandbox's fixed per-exec cost on THIS deployment: the median
-    exec_duration_ns of `sh -c :` over 30 warm calls. Everything a command
+    exec_duration_ns of `sh -c :` over 30 calls on the same SandFS. Everything a command
     pays before its own work — guest mount bookkeeping, fork+execve, shell
     start — and therefore Sandswap's, not the command's. Returns 0.0 when it
     cannot be measured (no stack / no ids exported), in which case the whole
@@ -167,7 +167,7 @@ def main():
         sys.exit(f"{path} is not a run of the {TASK_MARKER} task (first user prompt: {first[:60]!r}) "
                  f"— the analysis only makes sense for this example's task")
 
-    # Group assistant blocks by requestRef: one LLM round-trip = one thinking
+    # Group assistant blocks by requestRef or provider message id: one LLM round-trip = one thinking
     # block (optional) + text blocks + tool_use blocks. The transcript carries
     # one row per block, so the group is the unit that answers "how many times
     # did the model think, and what did each round do?".
