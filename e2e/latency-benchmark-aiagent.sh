@@ -195,6 +195,9 @@ cleanup() {
     # Self-clean the artifacts THIS benchmark deployed (surgical: never the
     # shared $DEPLOY_DIR itself — see tc_cleanup_deployed_artifacts).
     tc_cleanup_deployed_artifacts
+    # …and this benchmark's own sandlot config, which that helper does not
+    # know about (same as latency-benchmark-load.sh does for its own).
+    rm -f "$DEPLOY_DIR/sandlot-aiagent.yaml" 2>/dev/null || true
     # …and this benchmark's etcd DATA DIR. This call used to be
     # `tc_cleanup_deployed_artifacts "$ETCD_DATA"`: the argument was silently
     # ignored (that function takes none), so the artifacts were cleaned but

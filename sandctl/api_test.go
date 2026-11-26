@@ -304,3 +304,26 @@ func TestAPIKeyFromSources(t *testing.T) {
 		t.Fatalf("missing key file: err = %v, want a named error", err)
 	}
 }
+
+// TestDryRunPagedLists pins: the two paged list commands honor --dry-run like
+// every other command — the request line is printed, nothing is sent, and the
+// empty body request() returns is not mistaken for a broken page.
+func TestDryRunPagedLists(t *testing.T) {
+	// Nothing listens there: a send would fail the test instead of passing silently.
+	g := Global{HumanURL: "http://127.0.0.1:1", RunDir: t.TempDir(), DryRun: true}
+	for _, tc := range []struct {
+		name string
+		call func()
+		path string
+	}{
+		{"agent list", func() { apiAgent(g, []string{"list"})}, "/human/agent"},
+		{"sandfs list", func() { apiSandFS(g, []string{"list"})}, "/human/sandfs"},
+	} {
+		if out := captureStdout(t, tc.call); strings.TrimSpace(out) != "" {
+			t.Errorf("%s: --dry-run printed a body: %q", tc.name, out)
+		}
+		if errs := captureStderr(t, tc.call); !strings.Contains(errs, "GET "+g.HumanURL+tc.path) {
+			t.Errorf("%s: --dry-run did not print the request, got %q", tc.name, errs)
+		}
+	}
+}
