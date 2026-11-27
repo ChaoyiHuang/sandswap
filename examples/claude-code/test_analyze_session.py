@@ -64,7 +64,35 @@ class TranscriptAnalysisTest(unittest.TestCase):
         self.assertIn("turn: 6.00 s, 2 LLM calls, 2 tool calls", text)
         self.assertRegex(text, r"LLM \(all calls\)\s+4.00 s")
         self.assertRegex(text, r"parallel calls counted once\)\s+2.00 s")
-        self.assertRegex(text, r"sum of individual durations\)\s+3.00 s")
+        self.assertRegex(text, r"sum of individual durations\)\s+4.00 s")
+        self.assertRegex(text, r"union; may overlap model emission\)\s+3.00 s")
+
+    def test_tool_result_before_final_streamed_block(self):
+        rows = [row("user", 0, "Complete TASK.md"),
+                row("assistant", 1, [{"type": "tool_use", "id": "a", "name": "mcp__sandswap__file_read"}], "one"),
+                row("user", 2, [{"type": "tool_result", "tool_use_id": "a", "content": "{}"}]),
+                row("assistant", 3, [{"type": "text", "text": "inspected"}], "one"),
+                row("assistant", 4, [{"type": "text", "text": "done"}], "two")]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "session.jsonl"
+            path.write_text("\n".join(json.dumps(r) for r in rows))
+            output = io.StringIO()
+            with patch("sys.argv", ["analyze_session.py", str(path)]), \
+                    patch.object(analyzer, "measure_exec_floor", return_value=0), \
+                    contextlib.redirect_stdout(output):
+                analyzer.main()
+        text = output.getvalue()
+        self.assertIn("turn: 4.00 s, 2 LLM calls, 1 tool calls", text)
+        self.assertRegex(text, r"LLM \(all calls\)\s+4.00 s")
+        self.assertRegex(text, r"parallel calls counted once\)\s+0.00 s")
+        self.assertRegex(text, r"sum of individual durations\)\s+1.00 s")
+        self.assertRegex(text, r"union; may overlap model emission\)\s+1.00 s")
+
+    def test_union_handles_nested_disjoint_and_empty_intervals(self):
+        at = lambda second: analyzer.ts(row("user", second, ""))
+        self.assertEqual(analyzer.interval_union_seconds([]), 0)
+        self.assertEqual(analyzer.interval_union_seconds([
+            (at(5), at(8)), (at(0), at(3)), (at(1), at(2)), (at(4), at(4)), (at(6), at(9))]), 7)
 
     def test_exec_floor_uses_tunnel_and_trusted_ca(self):
         connection = MagicMock()

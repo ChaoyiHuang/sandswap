@@ -222,6 +222,18 @@ def ts(r):
     return datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
 
 
+def interval_union_seconds(intervals):
+    """Elapsed time covered by intervals, counting overlaps only once."""
+    end = None
+    total = 0.0
+    for start, stop in sorted(intervals):
+        if stop <= start:
+            continue
+        total += max(0.0, (stop - max(start, end or start)).total_seconds())
+        end = max(stop, end or stop)
+    return total
+
+
 def main():
     if len(sys.argv) > 1:
         path = sys.argv[1]
@@ -270,9 +282,9 @@ def main():
                     # put the shell script in `code` and the target in `path`
                     arg = (arg.get("command") or arg.get("code") or arg.get("file_path")
                            or arg.get("path") or "")
-                    t["tools"].append({"name": b["name"], "arg": str(arg), "id": b["id"],
+                    t["tools"].append({"name": b["name"], "arg": str(arg), "id": b["id"], "t_use": ts(r),
                                        "ms": None, "out": "", "err": False})
-                    tool_owner[b["id"]] = (len(turns) - 1, len(t["tools"]) - 1)
+                    tool_owner[b["id"]] = (turns.index(t), len(t["tools"]) - 1)
         else:
             for b in blocks:
                 if b.get("type") == "tool_result":
@@ -285,7 +297,8 @@ def main():
                     if own:
                         ti, pi = own
                         tool = turns[ti]["tools"][pi]
-                        tool["ms"] = (ts(r) - turns[ti]["t_end"]).total_seconds() * 1000
+                        tool["t_result"] = ts(r)
+                        tool["ms"] = (ts(r) - tool["t_use"]).total_seconds() * 1000
                         # keep enough of a Sandswap execute result to read its timing fields
                         keep = 400 if "exec_duration_ns" in (out or "") else 70
                         tool["out"] = (out or "")[:keep].replace("\n", " ")
@@ -298,7 +311,7 @@ def main():
                         if m:
                             gw[k] = int(m.group(1)) / 1e6
                     tool["gw"] = gw
-                    turns[ti]["t_last_result"] = ts(r)
+                    turns[ti]["t_last_result"] = max(ts(r), turns[ti].get("t_last_result", ts(r)))
                 elif b.get("type") == "text" and b.get("text", "").strip() and prompt_at is None:
                     prompt_at = ts(r)
                     prompt_text = b["text"][:70].replace("\n", " ")
@@ -330,7 +343,7 @@ def main():
         sys.exit("transcript has no assistant turns for this task")
     first_t0 = prompt_at or turns[0]["t_start"]
     last = turns[-1]
-    last_end = last.get("t_last_result", last["t_end"]) if last["tools"] else last["t_end"]
+    last_end = max(last["t_end"], last.get("t_last_result", last["t_end"]))
     span = (last_end - first_t0).total_seconds()
     wait_total = emit_total = 0.0
     llm_rows = []                  # (call, wait_s, emit_s, think_ms, tools)
@@ -350,12 +363,15 @@ def main():
                               "sandswap": tool["name"].startswith("mcp__sandswap__"),
                               "arg": plain(tool["arg"]), "ms": tool["ms"] or 0.0,
                               "gw": tool.get("gw") or {}, "err": tool["err"]})
-        prev_end = t.get("t_last_result", t["t_end"]) if t["tools"] else t["t_end"]
+        prev_end = max(t["t_end"], t.get("t_last_result", t["t_end"]))
     tool_total = sum(r["ms"] for r in tool_rows)
-    # Parallel tools overlap. Their summed durations are useful per-call data,
-    # but the wall-time decomposition counts each round's result window once.
+    # Tools can run while later blocks of the same model response arrive.
+    # Count only the post-emission wait in the additive task decomposition;
+    # also report the union of full tool intervals, which may overlap the model.
     tool_wall = sum(max(0.0, (t.get("t_last_result", t["t_end"]) - t["t_end"]).total_seconds())
                     for t in turns)
+    tool_union = interval_union_seconds((p["t_use"], p["t_result"])
+                                       for t in turns for p in t["tools"] if "t_result" in p)
     n_tools = len(tool_rows)
     n_sw = sum(1 for r in tool_rows if r["sandswap"])
     floor = EXEC_FLOOR_MS or 0.0
@@ -420,7 +436,8 @@ def main():
                 print(f"{'':>4}  {'':<5} {name} {arg[:38]:<38} {timecol}")
     rule()
     print(f"{'':>4}  {'LLM (all calls)':<52} {wait_total + emit_total:>8.2f} s")
-    print(f"{'':>4}  {'tools (wall time; parallel calls counted once)':<52} {tool_wall:>8.2f} s")
+    print(f"{'':>4}  {'tools (exclusive wait; parallel calls counted once)':<52} {tool_wall:>8.2f} s")
+    print(f"{'':>4}  {'tool intervals (union; may overlap model emission)':<52} {tool_union:>8.2f} s")
     print(f"{'':>4}  {'tools (sum of individual durations)':<52} {tool_total/1000:>8.2f} s")
     print(f"{'':>4}  {'turn total':<52} {span:>8.2f} s")
 
@@ -436,7 +453,7 @@ def main():
     print()
     print(f"  before first token  (includes the initial prompt wait)           {wait_total:>7.2f} s  {wait_total/span*100:5.1f}%")
     print(f"  emitting blocks     (thinking + text + tool_use reach the client) {emit_total:>7.2f} s  {emit_total/span*100:5.1f}%")
-    print(f"  tools               (wall time, including parallel calls once)   {tool_wall:>7.2f} s  {tool_wall/span*100:5.1f}%")
+    print(f"  tools               (exclusive wait after model emission)        {tool_wall:>7.2f} s  {tool_wall/span*100:5.1f}%")
     print(f"  {'sum':<70} {span:>7.2f} s  100.0%")
 
     # ── Table 3: tool execution ───────────────────────────────────────────
@@ -450,8 +467,7 @@ def main():
                   f"{g['gateway_duration_ns']-g['sandlot_duration_ns']:>7.1f}ms "
                   f"{g['sandlot_duration_ns']-g['exec_duration_ns']:>7.1f}ms {fl:>9.1f}ms {g['exec_duration_ns']-fl:>7.1f}ms")
         elif r["sandswap"]:
-            # a file tool / list call: no command, the gateway reports no layers —
-            # all of it is Sandswap's (transport + warden floor)
+            # File/list calls have no separate server timings.
             print(f"{r['call']:>4}  {r['name']:<12} {r['ms']:>7.1f}ms {'':>9} {'':>9} {'':>9} {'(no command)':>11} {'':>9}")
         else:
             print(f"{r['call']:>4}  {r['name']:<12} {r['ms']:>7.1f}ms  (local tool, not Sandswap)")
@@ -465,6 +481,7 @@ def main():
         print(f"  non-Sandswap tools ({n_tools - n_sw}): {non_sw_total/1000:.2f} s")
     print("  residual = client interval minus gateway time: client scheduling/serialization + transport;")
     print("  it is not a direct HTTP/TLS measurement (an SSH tunnel also contributes when used).")
+    print("  client interval = recorded tool_use to its tool_result; this may overlap model emission.")
     if floor:
         print(f"  exec floor = median exec of `sh -c :` on this sandbox ({floor:.1f} ms): guest mount bookkeeping + fork/execve + shell start,")
         print(f"  charged to Sandswap; 'command' = exec − floor.")

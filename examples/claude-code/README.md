@@ -341,9 +341,12 @@ python3 examples/claude-code/analyze_session.py <session.jsonl>
 
 The analyzer prints the coding loop, the model-response intervals, and tool
 execution by layer. It includes the initial prompt wait, groups streamed
-blocks by provider message ID, and counts parallel tool waits once in wall
-time. The per-call durations are also shown separately; their sum can exceed
-the elapsed tool window.
+blocks by provider message ID, and counts parallel tool waits once. Each
+client interval starts at its own recorded `tool_use` and ends at its result.
+Tools can run while later model blocks arrive, so the additive task breakdown
+counts only tool wait **after model emission**. The analyzer also shows the
+union of complete tool intervals (which may overlap model time) and the sum
+of individual durations (which can double-count parallel calls).
 
 For `execute`, the gateway reports gateway, sandlot and guest durations. The
 analyzer measures 30 `sh -c :` calls on the same sandbox to estimate the guest
