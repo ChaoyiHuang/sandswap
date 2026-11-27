@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Sandswap sandbox",
+    "description": "Runs coding tasks inside Sandswap tinyVM sandboxes over MCP, with local shell and file-write tools disabled.",
+    "detail": "docs/DETAIL.md"
+  }
+}
