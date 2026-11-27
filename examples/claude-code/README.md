@@ -369,6 +369,43 @@ A Mac→SSH→remote-host run is a useful integration check, but its client/tool
 ratios are specific to that network path. Do not compare them directly with
 a same-host server-latency benchmark.
 
+### Bare-metal, same-host example
+
+On 2026-11-27, source `22cbfdc` passed three runs of the headless variant above
+with **Claude Code 2.1.77 + real GLM-5.3-flash** on the SandSwap host. The setup
+followed the clean single-node deployment, `setup.sh`, then `seed.sh` before
+each run with a fresh isolated CLI configuration. All **16 MCP calls** succeeded;
+each run passed the five unchanged tests, independent function checks, the
+requested `fix calc` commit, and a clean Git worktree. No local tools or
+permission denials occurred.
+
+Environment: two Xeon Gold 6248R CPUs (48 cores / 96 threads), Linux
+`6.8.0-149-generic`, no host virtualization; a `medium:3` pool (4 vCPUs / 1 GiB
+per VM), flat Ubuntu 24.04 SandFS requesting 2 vCPUs / 512 MiB. MCP used
+`https://localhost:3000/mcp` with CA/hostname verification and no SSH tunnel.
+The model API remained external. CLI connection reuse was not instrumented;
+CPU affinity and cache state were not controlled.
+
+| Run | MCP calls | CLI wall | Transcript span | Model wait + emission | Exclusive tool wait |
+|---|---:|---:|---:|---:|---:|
+| 1 | 6 | 31.35 s | 30.86 s | 30.50 s | 0.36 s |
+| 2 | 5 | 32.15 s | 31.66 s | 31.35 s | 0.31 s |
+| 3 | 5 | 42.81 s | 42.36 s | 42.06 s | 0.30 s |
+
+Each run had six model responses. CLI wall includes process startup/teardown
+outside the transcript. The union of full tool intervals was **0.74 / 0.31 /
+0.30 s**; run 1 overlapped model emission, so only 0.36 s enters the additive
+tool-wait column. These three coding loops are an example, not a latency
+percentile or capacity benchmark.
+
+In run 1, the two Python/Git `execute` calls took **90 / 115 ms** at the client,
+with **3.8 / 4.0 ms** client–gateway residuals. The separately measured guest
+`sh -c :` floor rounded to **2.5 ms** in each run. Run 1's estimated server
+overhead was about **3.2 ms per execute**, including that floor and excluding
+the actual command, file/list operations and client residual. This is not the
+cost of every MCP call. Different generated commands and provider conditions
+also prevent treating the older Mac results as a controlled speedup comparison.
+
 ### Historical nested-virtualization example
 
 The earlier upstream interactive example used the Ubuntu template in nested
