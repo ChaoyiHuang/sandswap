@@ -254,7 +254,7 @@ default is the single source of truth — no second copy in deploy templates):
 
 ## 9. Examples
 
-### 9.1 Claude Code — an agent with no SDK
+### 9.1 Claude Code
 
 [`examples/claude-code`](../../examples/claude-code/README.md) (shipped in
 the release package under `examples/claude-code/`) is the reference for
@@ -305,7 +305,22 @@ has no `pipefail` — `cmd | tail` masks `cmd`'s exit code, so an `&&`
 chain after a piped test run commits on red. Run the suite unpiped and
 let its exit code gate the chain.
 
-### 9.2 Framework clients (Go SDK)
+### 9.2 DeepSeek Harness
+
+[examples/dsh](../../examples/dsh) is the DeepSeek Harness (DSH) instance
+of the zero-code shape: one installable **plugin bundle** that does for DSH
+what §9.1's two config files do for Claude Code. Installing the bundle
+mounts the POST /mcp connection (both auth headers on every request) and
+applies the sandbox policy as DSH tool restrictions — the agent's local
+shell and file-write tools are hidden and denied, and a system-prompt
+section routes the whole edit-run-fix loop through the 12 tools. The three
+rules of §9.1 apply the same way: set SANDSWAP_AGENT_API_KEY before
+starting DSH, trust the deployment CA on TLS (NODE_EXTRA_CA_CERTS), and
+open a new session so the policy applies at agent creation. See the
+example's README for the step-by-step, including the endpoint shapes of
+§4/§5.
+
+### 9.3 Framework clients (Go SDK)
 
 - **[examples/eino-sandswap](https://github.com/ChaoyiHuang/sandswap/tree/main/examples/eino-sandswap)**
   — CloudWeGo Eino: MCP tool discovery → OpenAI-style tool schema, two
@@ -314,7 +329,7 @@ let its exit code gate the chain.
   — official OpenAI SDKs; `SANDSWAP_BENCH_MODE=mcp` benchmarks the whole
   agent loop through MCP tool calls.
 
-### 9.3 Beyond coding: any agent that drives tools through a shell
+### 9.4 Beyond coding
 
 "Coding" is the first instance, not the limit — the same recipe serves
 every agent whose loop sends commands to a tool running in the sandbox,

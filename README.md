@@ -216,7 +216,7 @@ network/vsockguard/  BPF LSM vsock transport guard (C)
 initramfs/    minimal initramfs: warden + busybox
 kernel/       guest kernel: pinned source tree + hardening
 templates/    rootfs templates (busybox base, sqlite, …)
-examples/     example agents: Claude Code, Eino, openai-go, keepalive client
+examples/     example agents: Claude Code, DeepSeek Harness, Eino, openai-go, keepalive client
 e2e/          self-contained end-to-end test scripts
 build/        build scripts (all components + freshness check)
 deploy/       deployment scripts (baremetal + k8s)
