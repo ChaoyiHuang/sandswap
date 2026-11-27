@@ -18,6 +18,30 @@ def row(kind, second, content, message_id=None):
 
 
 class TranscriptAnalysisTest(unittest.TestCase):
+    def test_isolated_config_with_special_project_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = str(Path(directory) / "work_tree+demo")
+            projects = Path(directory) / "config" / "projects"
+            project = projects / analyzer.project_key(cwd)
+            project.mkdir(parents=True)
+            session = project / "task.jsonl"
+            session.write_text(json.dumps({**row("user", 0, "Complete TASK.md"), "cwd": cwd}))
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(projects.parent)}):
+                self.assertEqual(analyzer.newest_task_session(cwd), str(session))
+
+    def test_hashed_project_path_falls_back_to_recorded_cwd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = str(Path(directory) / ("long-project_" * 20))
+            projects = Path(directory) / "projects"
+            project = projects / "truncated-project-hash"
+            project.mkdir(parents=True)
+            session = project / "task.jsonl"
+            session.write_text(json.dumps({**row("user", 0, "Complete TASK.md"), "cwd": cwd}))
+            unrelated = project / "unrelated.jsonl"
+            unrelated.write_text(json.dumps({**row("user", 1, "Complete TASK.md"), "cwd": "/another/project"}))
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": directory}):
+                self.assertEqual(analyzer.newest_task_session(cwd), str(session))
+
     def test_message_ids_initial_wait_and_parallel_wall_time(self):
         rows = [row("user", 0, "Complete TASK.md"),
                 row("assistant", 1, [{"type": "thinking", "thinking": "inspect"}], "one"),
@@ -44,6 +68,7 @@ class TranscriptAnalysisTest(unittest.TestCase):
 
     def test_exec_floor_uses_tunnel_and_trusted_ca(self):
         connection = MagicMock()
+        connection.getresponse.return_value.status = 200
         connection.getresponse.return_value.read.return_value = b'{"exec_duration_ns": 2000000}'
         env = {"CLAUDE_CODE_AGENT_ID": "agent-test", "CLAUDE_CODE_SANDFS_ID": "sandfs-test",
                "CLAUDE_CODE_SANDBOX_API_KEY": "test-only", "NODE_EXTRA_CA_CERTS": "/trusted/ca.crt",
@@ -58,6 +83,31 @@ class TranscriptAnalysisTest(unittest.TestCase):
         connection.close.assert_called_once()
         self.assertNotIn("verify_mode", context.return_value.__dict__)
         self.assertNotIn("check_hostname", context.return_value.__dict__)
+
+    def test_missing_measurement_reports_refusal_and_closes_connection(self):
+        connection = MagicMock()
+        connection.getresponse.return_value.status = 401
+        connection.getresponse.return_value.read.return_value = b'{"error":"unauthorized"}'
+        env = {"CLAUDE_CODE_AGENT_ID": "agent-test", "CLAUDE_CODE_SANDFS_ID": "sandfs-test",
+               "CLAUDE_CODE_SANDBOX_API_KEY": "test-only", "CLAUDE_CODE_SANDBOX_MCP_URL": "http://localhost:33001/mcp"}
+        with patch.dict(os.environ, env), patch("http.client.HTTPConnection", return_value=connection):
+            self.assertEqual(analyzer.measure_exec_floor(), 0)
+        self.assertIn("HTTP 401", analyzer.EXEC_FLOOR_WHY)
+        self.assertIn("no longer valid", analyzer.EXEC_FLOOR_WHY)
+        connection.close.assert_called_once()
+
+    def test_tls_failure_reports_actual_endpoint_without_insecure_fallback(self):
+        connection = MagicMock()
+        connection.connect.side_effect = OSError("certificate verify failed")
+        env = {"CLAUDE_CODE_AGENT_ID": "agent-test", "CLAUDE_CODE_SANDFS_ID": "sandfs-test",
+               "CLAUDE_CODE_SANDBOX_API_KEY": "test-only", "CLAUDE_CODE_SANDBOX_MCP_URL": "https://localhost:34443/mcp"}
+        with patch.dict(os.environ, env), patch("ssl.create_default_context"), \
+                patch("http.client.HTTPSConnection", return_value=connection):
+            self.assertEqual(analyzer.measure_exec_floor(), 0)
+        self.assertIn("localhost:34443", analyzer.EXEC_FLOOR_WHY)
+        self.assertIn("certificate verify failed", analyzer.EXEC_FLOOR_WHY)
+        connection.request.assert_not_called()
+        connection.close.assert_called_once()
 
 
 if __name__ == "__main__":

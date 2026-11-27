@@ -31,11 +31,13 @@ Usage:
   python3 analyze_session.py                 # newest session for this directory
   python3 analyze_session.py <session.jsonl> # a specific transcript
 """
+import glob
 import json
 import os
 import re
 import ssl
 import sys
+import textwrap
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -46,51 +48,87 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TASK_MARKER = "TASK.md"   # the task prompt names this file; only such sessions count
 
 
-def first_user_text(path: str):
-    """The first user-typed text of a transcript, or '' if there is none."""
+def transcript_head(path: str):
+    """(first user-typed text, recorded cwd) of a transcript — ('', '') when
+    it has neither. Reads only as far as the rows that carry them: the first
+    user row has both."""
+    text = cwd = ""
     try:
         for line in Path(path).read_text().splitlines():
             if not line.strip():
                 continue
             r = json.loads(line)
-            if r.get("type") != "user":
-                continue
-            c = r.get("message", {}).get("content")
-            if isinstance(c, str) and c.strip():
-                return c
-            if isinstance(c, list):
-                for b in c:
-                    if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip():
-                        return b["text"]
+            cwd = cwd or r.get("cwd") or ""
+            if not text and r.get("type") == "user":
+                c = r.get("message", {}).get("content")
+                if isinstance(c, str) and c.strip():
+                    text = c
+                elif isinstance(c, list):
+                    for b in c:
+                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip():
+                            text = b["text"]
+                            break
+            if text and cwd:
+                break
     except (OSError, json.JSONDecodeError):
         pass
-    return ""
+    return text, cwd
+
+
+def first_user_text(path: str) -> str:
+    """The first user-typed text of a transcript, or '' if there is none."""
+    return transcript_head(path)[0]
+
+
+def project_key(cwd: str) -> str:
+    """The name Claude Code gives the directory it files `cwd`'s transcripts
+    in: EVERY character that is not a letter or a digit becomes '-' — '/'
+    and '.', but also '_', '+', '~', '@', a space…, so /home/alice_smith/x
+    lands in '-home-alice-smith-x'. A name over 200 characters is cut and
+    given a hash suffix, which this does not reproduce (sessions_for then
+    falls back to the transcripts' own `cwd`)."""
+    return re.sub(r"[^a-zA-Z0-9]", "-", cwd)
+
+
+def sessions_for(cwd: str):
+    """(transcripts recorded for `cwd`, newest first; where they were looked
+    for): the directory project_key(cwd) names — or, when that does not
+    exist, every transcript whose own `cwd` row names this directory."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude"))
+    root = os.path.join(config, "projects")
+    proj = os.path.join(root, project_key(cwd))
+    if os.path.isdir(proj):
+        found = [os.path.join(proj, f) for f in os.listdir(proj) if f.endswith(".jsonl")]
+        return sorted(found, key=os.path.getmtime, reverse=True), f"looked in {proj}"
+    want, found = os.path.realpath(cwd), []
+    for p in glob.glob(os.path.join(root, "*", "*.jsonl")):
+        rec = transcript_head(p)[1]
+        if rec and os.path.realpath(rec) == want:
+            found.append(p)
+    return (sorted(found, key=os.path.getmtime, reverse=True),
+            f"looked for a transcript under {root} recorded in it")
 
 
 def newest_task_session(cwd: str) -> str:
     """The newest transcript for `cwd` that is a run of THIS example's task.
 
-    Claude Code keys transcripts by cwd ('/' and '.' → '-'). Any session in
-    the directory would match by mtime alone — including one where the user
-    only ran `cd ..` — so require the first user prompt to be the TASK.md
-    task, newest first.
+    Any session in the directory would match by mtime alone — including one
+    where the user only ran `cd ..` — so require the first user prompt to be
+    the TASK.md task, newest first.
     """
-    key = cwd.replace("/", "-").replace(".", "-")
-    config = os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude"))
-    proj = os.path.join(config, "projects", key)
-    if not os.path.isdir(proj):
-        sys.exit(f"no Claude Code sessions recorded for {cwd} (looked in {proj})")
-    sessions = [os.path.join(proj, f) for f in os.listdir(proj) if f.endswith(".jsonl")]
-    sessions.sort(key=os.path.getmtime, reverse=True)
+    sessions, where = sessions_for(cwd)
+    if not sessions:
+        sys.exit(f"no Claude Code sessions recorded for {cwd} ({where})")
     for path in sessions:
         if TASK_MARKER in first_user_text(path):
             return path
-    sys.exit(f"none of the {len(sessions)} session(s) in {proj} is a run of the "
+    sys.exit(f"none of the {len(sessions)} session(s) recorded for {cwd} is a run of the "
              f"{TASK_MARKER} task (first prompt must mention it) — run the task first, "
              f"or pass a .jsonl path")
 
 
 EXEC_FLOOR_MS = None   # measured once per run: median exec of `sh -c :` on the demo sandbox
+EXEC_FLOOR_WHY = ""    # why it could not be measured, when it could not (shown in the header)
 
 
 def measure_exec_floor() -> float:
@@ -98,48 +136,79 @@ def measure_exec_floor() -> float:
     exec_duration_ns of `sh -c :` over 30 calls on the same SandFS. Everything a command
     pays before its own work — guest mount bookkeeping, fork+execve, shell
     start — and therefore Sandswap's, not the command's. Returns 0.0 when it
-    cannot be measured (no stack / no ids exported), in which case the whole
-    exec layer is reported as the command's, as before.
+    cannot be measured — the reason goes into EXEC_FLOOR_WHY — in which case
+    the whole exec layer is reported as the command's, as before.
     """
-    import http.client, statistics
+    global EXEC_FLOOR_WHY
+    import http.client, statistics, time
+    EXEC_FLOOR_WHY = ""
     agent = os.environ.get("CLAUDE_CODE_AGENT_ID", "")
     sandfs = os.environ.get("CLAUDE_CODE_SANDFS_ID", "")
     key = os.environ.get("CLAUDE_CODE_SANDBOX_API_KEY", "")
     if not (agent and sandfs and key):
+        EXEC_FLOOR_WHY = ("CLAUDE_CODE_AGENT_ID, CLAUDE_CODE_SANDFS_ID and CLAUDE_CODE_SANDBOX_API_KEY "
+                          "are not all exported in this shell; export the three to measure it")
         return 0.0
-    url = urlsplit(os.environ.get("CLAUDE_CODE_SANDBOX_MCP_URL", "https://localhost:3000/mcp"))
-    if url.scheme not in ("http", "https") or not url.hostname:
+    try:
+        url = urlsplit(os.environ.get("CLAUDE_CODE_SANDBOX_MCP_URL", "https://localhost:3000/mcp"))
+        if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password:
+            raise ValueError("expected HTTP(S) without embedded credentials")
+        port = url.port  # validate before connecting
+    except ValueError:
+        EXEC_FLOOR_WHY = "CLAUDE_CODE_SANDBOX_MCP_URL must be HTTP(S) with a valid port and no embedded credentials"
         return 0.0
     hdr = {"Authorization": f"Bearer {key}", "X-Sandswap-Api-Key": key,
            "Content-Type": "application/json"}
+    c = None
     try:
         if url.scheme == "https":
             ca = os.environ.get("NODE_EXTRA_CA_CERTS")
             if not ca and os.path.isfile("/etc/sandswap/certs/ca.crt"):
                 ca = "/etc/sandswap/certs/ca.crt"
             ctx = ssl.create_default_context(cafile=ca)
-            c = http.client.HTTPSConnection(url.hostname, url.port, context=ctx, timeout=10)
+            c = http.client.HTTPSConnection(url.hostname, port, context=ctx, timeout=10)
         else:
-            c = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
+            c = http.client.HTTPConnection(url.hostname, port, timeout=10)
         c.connect()
-    except OSError:
+    except OSError as e:
+        if c is not None:
+            c.close()
+        EXEC_FLOOR_WHY = f"cannot reach the gateway on {url.hostname}:{port or (443 if url.scheme == 'https' else 80)} ({e})"
         return 0.0
     xs = []
+    status, d = None, {}
     for _ in range(30):
         try:
             path = url.path.removesuffix("/mcp").rstrip("/") + "/agent/execute"
             c.request("POST", path, headers=hdr,
                       body=json.dumps({"sandfs_id": sandfs, "language": "shell", "code": ":"}))
-            d = json.loads(c.getresponse().read())
-        except (OSError, ValueError, http.client.HTTPException):
+            resp = c.getresponse()
+            raw = resp.read()
+        except (OSError, http.client.HTTPException) as e:
+            EXEC_FLOOR_WHY = f"the gateway connection failed ({e})"
             break
-        if "exec_duration_ns" in d:
+        status = resp.status
+        try:
+            d = json.loads(raw)
+        except ValueError:            # not JSON (a bare 503 carries no body)
+            d = {}
+        if not isinstance(d, dict):
+            d = {}
+        if status == 200 and "exec_duration_ns" in d:
             xs.append(d["exec_duration_ns"] / 1e6)
-        elif d.get("retryable"):
-            import time
+        elif d.get("retryable"):      # mid-recycle: a transient, probe again
             time.sleep(d.get("retry_after_ms", 2000) / 1000)
+        else:                         # a refusal — a deleted agent's key is a 401
+            break
     c.close()
-    return statistics.median(xs) if xs else 0.0
+    if xs:
+        return statistics.median(xs)
+    if not EXEC_FLOOR_WHY:
+        gone = " — exported ids or key that are no longer valid" if status in (401, 404) else ""
+        EXEC_FLOOR_WHY = ("the sandbox answered busy on all 30 probes" if d.get("retryable") else
+                          f"the gateway answered HTTP {status} {d.get('error', '')} for agent {agent} "
+                          f"/ sandfs {sandfs}{gone}")
+    return 0.0
 
 
 def plain(text: str) -> str:
@@ -318,9 +387,11 @@ def main():
     if EXEC_FLOOR_MS:
         print(f"exec floor on this sandbox (sh -c :, median of 30): {EXEC_FLOOR_MS:.1f} ms")
     else:
-        print("exec floor: NOT MEASURED (no live sandbox reached via CLAUDE_CODE_SANDBOX_*; export the")
-        print("            three variables to measure it) — the whole exec layer is reported as the")
-        print("            command's, which UNDERSTATES Sandswap's own share by ~the floor per execute.")
+        print(textwrap.fill(f"exec floor: NOT MEASURED ({EXEC_FLOOR_WHY}) — the whole exec layer is "
+                            "reported as the command's, which UNDERSTATES Sandswap's own share by ~the "
+                            "floor per execute.",
+                            width=96, subsequent_indent=" " * 12,
+                            break_long_words=False, break_on_hyphens=False))
 
     # ── Table 1: the loop ─────────────────────────────────────────────────
     head(f"Table 1  the loop, in time order   (turn: {span:.2f} s, {len(turns)} LLM calls, {n_tools} tool calls)")

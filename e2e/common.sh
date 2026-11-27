@@ -464,6 +464,14 @@ tc_cleanup_deployed_artifacts() {
     # The seed is battery-minted; drop it so the next suite re-mints with ITS
     # provision user (a stale owner is an EACCES for a different identity).
     rm -f "$DEPLOY_DIR/volume-seed" 2>/dev/null || true
+    # The ops token is minted per run when absent (tc_start_gateway); drop it
+    # only when THIS run minted it — a pre-existing file at that path belongs
+    # to whoever put it there (e.g. a co-located deployment's own token).
+    # Callers run this after tc_cleanup_default stopped the gateway: a live
+    # token gate reloads the file and revokes the token when it disappears.
+    if [[ "${TC_OPS_TOKEN_MINTED:-}" == "1" && -n "${TC_OPS_TOKEN_FILE:-}" ]]; then
+        rm -f "$TC_OPS_TOKEN_FILE" 2>/dev/null || true
+    fi
     # Never rmdir $DEPLOY_DIR itself (bind mount point / shared root).
 }
 
@@ -830,6 +838,9 @@ tc_start_gateway() {
         (umask 027; openssl rand -hex 24 > "$TC_OPS_TOKEN_FILE") >/dev/null 2>&1 \
             || { tc_log_error "ops token mint failed"; exit 1; }
         chown "root:$SS_SERVICE_USER_GW" "$TC_OPS_TOKEN_FILE" 2>/dev/null || true
+        # Minted here, so tc_cleanup_deployed_artifacts removes it again; a
+        # file that was already there belongs to whoever put it there.
+        TC_OPS_TOKEN_MINTED=1
     fi
     export TC_OPS_TOKEN="$(cat "$TC_OPS_TOKEN_FILE")"
     extra_flags+=(-ops-token-file "$TC_OPS_TOKEN_FILE")

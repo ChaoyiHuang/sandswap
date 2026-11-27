@@ -106,17 +106,24 @@ sudo bash e2e/latency-benchmark-aiagent.sh http single
 # distributed topology (etcd + exec/human gateways)
 sudo bash e2e/latency-benchmark-aiagent.sh http distributed
 # mcp mode — additionally times the LLM and MCP tool round trips
-DEEPSEEK_API_KEY=sk-... sudo bash e2e/latency-benchmark-aiagent.sh mcp single
-DEEPSEEK_API_KEY=sk-... sudo bash e2e/latency-benchmark-aiagent.sh mcp distributed
+sudo env DEEPSEEK_API_KEY=sk-... bash e2e/latency-benchmark-aiagent.sh mcp single
+sudo env DEEPSEEK_API_KEY=sk-... bash e2e/latency-benchmark-aiagent.sh mcp distributed
 # per-sample detail (the report appendix tables)
-BENCH_VERBOSE=1 sudo bash e2e/latency-benchmark-aiagent.sh http single
+sudo env BENCH_VERBOSE=1 bash e2e/latency-benchmark-aiagent.sh http single
 
 # Unmount full-path latency (baseline + 16 MiB cache + 16 MiB dirty workloads)
 sudo bash e2e/latency-benchmark-unmount.sh all
 # single scenario, or a cache-size curve via the workload file size
 sudo bash e2e/latency-benchmark-unmount.sh cache16m
-FILE_MB=128 sudo bash e2e/latency-benchmark-unmount.sh cache16m
+sudo env FILE_MB=128 bash e2e/latency-benchmark-unmount.sh cache16m
 ```
+
+Variables go after `sudo`, through `env`: sudoers' default `env_reset`
+drops the assignments written in front of `sudo`, and `sudo -E` does not
+help there (without a `SETENV` grant sudo ignores it) — `mcp` mode would
+exit with "mcp mode requires an LLM API key", and `FILE_MB=128` would
+silently run at the default. A root shell omits `sudo env` altogether:
+`DEEPSEEK_API_KEY=sk-... bash e2e/latency-benchmark-aiagent.sh mcp single`.
 
 ## 5. Load benchmarks (tinyVM reuse capacity)
 
@@ -133,30 +140,30 @@ sudo bash e2e/latency-benchmark-aiagent.sh http distributed
 # (auto-sized, or named per role with PIN_STACK_LAYOUT) and gives the rest to
 # the tinyVM pool. Pass the baseline's four P95s so the latency tiers are
 # measured.
-PIN_MODE=1 PIN_RESERVE_CORES=auto PIN_SLICE_CPUS=2 POOL_SIZE=<remaining cores> \
+sudo env PIN_MODE=1 PIN_RESERVE_CORES=auto PIN_SLICE_CPUS=2 POOL_SIZE=<remaining cores> \
 LOADTEST_AGENT_LEVELS="<agent levels>" LOADTEST_LATENCY_TIERS="1.0 2.0" \
 SKIP_ESTIMATE_BENCH=1 \
 WARM_GW_P95_MS=<warm-gw-p95> COLD_GW_P95_MS=<cold-gw-p95> \
 WARM_CLIENT_P95_MS=<warm-client-p95> COLD_CLIENT_P95_MS=<cold-client-p95> \
-  sudo -E bash e2e/latency-benchmark-load.sh
+  bash e2e/latency-benchmark-load.sh
 
 # optional capability tests:
 # ideal — ideal paced-lane test: one lane per tinyVM, no between-turn think
 #         gap (the collision-free ceiling)
 # shaped — traffic-shaped test: a full agent population queued per lane, one
 #          in-flight request per VM (the realistic version of that ceiling)
-POOL_SIZE=2 LOADTEST_WORKLOAD=ideal LOADTEST_LANES=2 \
+sudo env POOL_SIZE=2 LOADTEST_WORKLOAD=ideal LOADTEST_LANES=2 \
   LOADTEST_TURN_PERIODS_MS="14 16 18 20 22 24" \
   SKIP_ESTIMATE_BENCH=1 \
   WARM_GW_P95_MS=<...> COLD_GW_P95_MS=<...> \
   WARM_CLIENT_P95_MS=<...> COLD_CLIENT_P95_MS=<...> \
-  sudo -E bash e2e/latency-benchmark-load.sh
-POOL_SIZE=2 LOADTEST_WORKLOAD=shaped LOADTEST_LANES=2 \
+  bash e2e/latency-benchmark-load.sh
+sudo env POOL_SIZE=2 LOADTEST_WORKLOAD=shaped LOADTEST_LANES=2 \
   LOADTEST_TURN_PERIODS_MS="14 16 18 20 24 28" LOADTEST_SHAPED_HOLD_MS=auto \
   SKIP_ESTIMATE_BENCH=1 \
   WARM_GW_P95_MS=<...> COLD_GW_P95_MS=<...> \
   WARM_CLIENT_P95_MS=<...> COLD_CLIENT_P95_MS=<...> \
-  sudo -E bash e2e/latency-benchmark-load.sh
+  bash e2e/latency-benchmark-load.sh
 ```
 
 The two tinyVM reuse capacity reports ran this same script on their own

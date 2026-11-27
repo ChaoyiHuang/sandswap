@@ -17,7 +17,7 @@ out of the box.
 This example has two points. The first is the wiring: a Claude Code →
 Sandswap integration is **one `.mcp.json` file**. The second is efficiency:
 what a tool call costs and how to make an agent's loop fast — measured on
-this exact setup, at the end of [Step 8](#step-8--run-the-task).
+this exact setup, in [Step 9](#step-9--see-where-the-time-went).
 
 ```text
  Claude Code (your machine)                Sandswap (one node)
@@ -39,6 +39,7 @@ this exact setup, at the end of [Step 8](#step-8--run-the-task).
 | `seed.sh` | puts TASK.md's failing project into the sandbox's `/workspace` (step 6) |
 | `lib.sh` | `sx_exec`: run a command in the sandbox through `sandctl`, retrying the gateway's retryable busy states |
 | `setup.sh` | does steps 3–5 in one command and writes `.env.sh` |
+| `validate.py` | repeat the real-model task headlessly and verify tool use and sandbox state |
 | `analyze_session.py` | after the run: rebuilds the turn from Claude Code's own transcript as thinking→tool rounds, and splits the time into LLM / tools / Sandswap |
 
 ## Step 0 — Before you start
@@ -50,28 +51,50 @@ window — three separate programs, none nested:
 |---|---|---|
 | **Terminal A** | a normal system terminal | `sandctl`, `seed.sh`, and *launching* `claude` in step 7 |
 | **Claude Code** | the interactive UI terminal A launches in step 7 | step 8 only: give the task, watch the tool calls |
-| **Terminal B** | a second normal terminal | step 8, verifying from outside while Claude Code stays open |
+| **Terminal B** | a second normal terminal | step 8, verifying from outside while Claude Code stays open; step 9, if you run the analyzer from here |
 
 > **Do not run any command below inside an existing Claude Code session —
 > and above all not `claude`.** That is Claude Code inside Claude Code; it
 > hangs. Copy every command into your own terminal instead.
 
-All commands run from the **Sandswap root** — which one depends on how you
-got Sandswap:
+**Get Sandswap — two ways.** Every command below runs from the **Sandswap
+root** and uses the artifacts under `output/`; pick one way, the steps are
+the same from either:
 
-| You have | Root | Build step |
+| Way | Sandswap root | Build |
 |---|---|---|
-| a source checkout | the repository root | step "build" below, when source changed |
-| a release package (`sandswap-<ver>-linux-amd64.tar.gz`) unpacked at `/opt/sandswap` | `/opt/sandswap` | none — everything is prebuilt, `build/` is not shipped |
+| **A. Release package** — everything prebuilt, no toolchain | the extracted `sandswap-<ver>-linux-amd64/` | none (`build/` is not shipped) |
+| **B. Source checkout** — you build it | the repository root | `build.sh all` |
+
+**A. Release package** — download, verify, extract, as in the repository
+README's [quick start](../../README.md#quick-start):
 
 ```bash
-cd /opt/sandswap        # release package; or: cd <your checkout>
+# resolve the latest release tag (or pin one, e.g. VER=v0.1.0)
+VER=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+    https://github.com/ChaoyiHuang/sandswap/releases/latest | awk -F/ '{print $NF}')
+echo "latest release: ${VER}"
+
+# download + verify + extract
+curl -fLO "https://github.com/ChaoyiHuang/sandswap/releases/download/${VER}/sandswap-${VER}-linux-amd64.tar.gz"
+curl -fLO "https://github.com/ChaoyiHuang/sandswap/releases/download/${VER}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+tar xzf "sandswap-${VER}-linux-amd64.tar.gz" && cd "sandswap-${VER}-linux-amd64"
 ```
 
-**Prerequisites.** A KVM host with the artifacts under `output/` (a
-release package has them; a checkout builds them); the `claude` CLI
-installed and logged in (`claude --version`). Source checkout only — if the
-source changed since the last build:
+**B. Source checkout** — clone, install the toolchain, build:
+
+```bash
+git clone https://github.com/ChaoyiHuang/sandswap.git
+cd sandswap
+sudo bash build/install-deps.sh    # one-time toolchain
+sudo bash build/build.sh all       # kernel → warden → initramfs → vmm → go (+ rootfs chroot)
+```
+
+**Prerequisites.** A KVM host (`/dev/kvm`, `/dev/vhost-vsock`); the
+`claude` CLI installed and logged in (`claude --version`). Build
+prerequisites for B: [Building](../../docs/building/index.md). Source
+checkout only — if the source changed since the last build:
 
 ```bash
 bash build/build.sh check            # all [FRESH] → nothing to do
@@ -209,7 +232,7 @@ output/sandctl api execute --agent "$CLAUDE_CODE_AGENT_ID" --sandfs "$CLAUDE_COD
 The second call is several times cheaper, on the identical Sandswap path.
 That difference is **process startup inside the guest** (the interpreters
 and tools the first call starts), not Sandswap — and it is the whole story
-of making an agent fast here (Step 8).
+of making an agent fast here (Step 9).
 
 ## Step 6 — Seed the demo task
 
@@ -263,7 +286,7 @@ read `calc/core.py` with `file_read`, fix it with `file_write`, and re-run
 the suite + commit with **one** more `execute` — all through the MCP tools,
 with your local shell and editor denied the whole time. `TASK.md` asks for
 that shape on purpose: it is the efficient one, and the point of the
-example (the analyzer at the end of this step shows what it saves).
+example (the analyzer in the next step shows what it saves).
 
 Verify from the outside when it finishes (another terminal; Claude Code
 stays open):
@@ -276,227 +299,113 @@ output/sandctl api execute --agent <agent id> --sandfs <sandfs id> \
 Expected: `OK`, and two commits — `fix calc` on top of `add failing calc
 suite`.
 
-### Repeatable headless validation (including a Mac client)
+### Repeatable headless validation
 
-`validate.py` runs the same task with the installed **Claude Code CLI** and a
-real model. Run `setup.sh` on the Linux SandSwap host first. Before each repeat,
-run `seed.sh` there: it resets the example's disposable `/workspace`.
-
-The CLI can stay on your Mac. Forward the Linux gateway through SSH, copy its
-CA certificate and the example's `.env.sh` into a private local directory, then
-source that environment. For example, from this directory on the Mac (replace
-`HOST`, `SSH_PORT`, and `REMOTE_REPO` with your deployment):
+After steps 1–6, run the installed Claude Code CLI on the **same Linux host**
+as Sandswap when collecting timings. Supply model credentials through
+`ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`. For example, with a key authorized
+for GLM's [Claude-compatible endpoint](https://docs.bigmodel.cn/cn/coding-plan/tool/claude):
 
 ```bash
-mkdir -p .work/connection
-chmod 700 .work/connection
-scp -P "$SSH_PORT" "root@$HOST:/etc/sandswap/certs/ca.crt" .work/connection/
-scp -P "$SSH_PORT" "root@$HOST:$REMOTE_REPO/examples/claude-code/.env.sh" .work/connection/
-chmod 600 .work/connection/.env.sh
-source .work/connection/.env.sh
-export CLAUDE_CODE_SANDBOX_MCP_URL=https://localhost:34443/mcp
-export NODE_EXTRA_CA_CERTS="$PWD/.work/connection/ca.crt"
-ssh -N -o ExitOnForwardFailure=yes -p "$SSH_PORT" \
-    -L 127.0.0.1:34443:127.0.0.1:3000 "root@$HOST"
-```
-
-Keep the tunnel open in that terminal. In another terminal, source the same
-environment and export the same MCP URL and CA path. Supply model credentials
-through `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`. For GLM, use the
-[official Claude-compatible endpoint](https://docs.bigmodel.cn/cn/coding-plan/tool/claude)
-and a key authorized for it:
-
-```bash
+source examples/claude-code/.env.sh   # written by setup.sh; or keep the exports from steps 3–4
+export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt
 export ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
 export ANTHROPIC_MODEL=glm-5.3-flash
-python3 validate.py --output-dir .work/validation-1
+python3 examples/claude-code/validate.py --output-dir examples/claude-code/.work/validation-1
 ```
 
-The validator creates an isolated Claude configuration, loads only this
-example's MCP configuration, disables built-in tools with `--tools ''`, and
-allows only `mcp__sandswap` in `dontAsk` mode. Personal settings are not loaded;
-no permission bypass is required. It supplies `TASK.md` as the prompt, so the
-model does not need local `Read`. See the official
-[headless](https://code.claude.com/docs/en/headless) and
-[CLI](https://code.claude.com/docs/en/cli-reference) documentation.
+Before another run, reset the disposable example with `seed.sh` and choose a
+new output directory. `validate.py` uses isolated Claude configuration, strict
+MCP configuration, `--tools ''`, and `--allowedTools mcp__sandswap` in `dontAsk`
+mode. It supplies `TASK.md` directly and requires actual discovery, execute,
+read and write calls with successful results. Independent sandbox checks
+require 5/5 unchanged tests, the `fix calc` commit, and additional function
+checks. A nonzero exit means validation failed. Keep generated records local;
+publish only a reviewed, sanitized summary, without credentials or sandbox keys.
+See Claude Code's [headless documentation](https://code.claude.com/docs/en/headless).
 
-PASS requires a connected MCP server, actual discovery/execute/read/write
-calls, matching tool results, no local tool calls or permission denials, and a
-successful CLI result. Independent MCP checks also require the initial 3/5
-failures to become 5/5 passes, an unchanged test file, the requested `fix calc`
-commit, and additional arithmetic/Fibonacci checks outside the seeded suite.
+The output directory also contains the isolated CLI session under
+`claude-config/projects/`. Pass its task `.jsonl` file to the analyzer in step 9,
+or export that run's `CLAUDE_CONFIG_DIR` to let it find the transcript.
 
-Each output directory is new and private. It contains raw CLI stream output,
-the isolated session transcript, before/after checks, invocation metadata and
-`summary.json`. A nonzero exit is a failed validation. Keep these generated
-records local; publish a reviewed, sanitized summary of relevant results.
-Model credentials and sandbox keys must never be committed. To check the
-validator's rejection paths without a model:
+## Step 9 — See where the time went
+
+Claude Code records each LLM response and tool result with timestamps. After
+running the task, use a normal terminal with the sandbox exports from steps
+3–4 (or source `examples/claude-code/.env.sh`):
 
 ```bash
-python3 -m unittest discover -s . -p 'test_validate.py' -v
+python3 examples/claude-code/analyze_session.py             # newest TASK.md session here
+python3 examples/claude-code/analyze_session.py <session.jsonl>
 ```
 
-See the measured [Mac + GLM validation summary](../../docs/benchmark/claude-code.md)
-for coding results, timing boundaries, fixes, and the full repository test round.
+The analyzer prints the coding loop, the model-response intervals, and tool
+execution by layer. It includes the initial prompt wait, groups streamed
+blocks by provider message ID, and counts parallel tool waits once in wall
+time. The per-call durations are also shown separately; their sum can exceed
+the elapsed tool window.
 
-### See where the time went
+For `execute`, the gateway reports gateway, sandlot and guest durations. The
+analyzer measures 30 `sh -c :` calls on the same sandbox to estimate the guest
+process-start floor. Without usable sandbox exports or a reachable gateway,
+it prints `NOT MEASURED` with the reason instead of assuming a baseline.
+Certificate and hostname verification remain enabled; set `NODE_EXTRA_CA_CERTS`
+to the deployment CA and `CLAUDE_CODE_SANDBOX_MCP_URL` to the actual endpoint.
 
-Claude Code records every session under `~/.claude/projects/`: each LLM
-call's thinking time, every tool call and its result, all timestamped. The
-model itself cannot see its own thinking time, so the analysis is done from
-the transcript, after the run. Back in the shell (after `/exit`, or from
-another terminal):
+**Timing boundaries.** Client time minus gateway time is a residual containing
+client scheduling, serialization, connection handling and transport. It is
+not an independently measured network RTT or TLS handshake. File/list tools
+have no separate server timing fields, so their client intervals cannot be
+attributed wholly to Sandswap. Model API time includes the external provider
+path even when Claude Code and Sandswap share a host.
 
-```bash
-python3 examples/claude-code/analyze_session.py
-```
+For repeatable comparisons, record client/server placement, virtualization,
+transport (HTTP/HTTPS, direct/SSH), connection reuse, model/version, task and
+sandbox template. Measure network RTT separately if attributing network cost.
+A Mac→SSH→remote-host run is a useful integration check, but its client/tool
+ratios are specific to that network path. Do not compare them directly with
+a same-host server-latency benchmark.
 
-It picks the newest transcript for this directory whose first prompt is the
-`TASK.md` task (a session where you only ran something else is skipped;
-pass a `.jsonl` path to choose one) and prints the turn as the loop it is:
-every round's **thinking, what it said, how long it thought, then the tool
-it called and how long that took — each `execute` split into its measured
-layers**. The tables below are an older interactive snapshot. The current
-analyzer includes the initial prompt wait, groups provider message IDs, counts
-parallel tool waits once, and labels unmeasured transport/client overhead as a
-residual. See the linked Mac + GLM summary for corrected measurements.
-The historical interactive run:
+### Historical nested-virtualization example
 
-**Table 1 — the loop, in time order.** Each LLM call, then the tools it
-called, with every `execute`'s command spelled out one `&&`-step per line.
-Six calls, each deciding the next tool from the previous result (the two
-`file_read`s go out in parallel inside one call); the 27-second call that
-finds the two bugs is the task. The first line is the sandbox's exec
-floor, measured live before the analysis (see Table 3).
+The earlier upstream interactive example used the Ubuntu template in nested
+virtualization. Its two `execute` calls took **250 / 321 ms** at the client,
+and its measured 30-call guest exec floor was **8.7 ms**. It used six model
+responses, six MCP calls, and one local `Read` of the task prompt.
 
-```text
-prompt : Complete the task in TASK.md using only the sandswap tools
-exec floor on this sandbox (sh -c :, median of 30): 8.7 ms
+That snapshot came from an older analyzer which omitted the initial model
+wait and summed overlapping tool intervals. Its reported 64.92 s task span
+is therefore not directly comparable with the current accounting. The old
+`http/tls` column was a client–gateway residual, not a network measurement.
+Use the current analyzer on your own transcript for a consistent comparison.
 
-Table 1  the loop, in time order   (turn: 64.92 s, 6 LLM calls, 7 tool calls)
---------------------------------------------------------------------
-call  LLM call / tool                                            time
---------------------------------------------------------------------
-   1  think The user wants me to complete the task in TASK     0.33 s
-            Read         TASK.md                                    35.0 ms
-            list_sandfs                                             15.0 ms
-   2  think The sandbox is claude-code with id sandfs-bc00     5.46 s
-            execute                                                250.0 ms
-                           cd /workspace
-                           git log --oneline
-                           echo ---
-                           ls -R calc tests
-                           echo ---
-                           python3 -m unittest discover -s tests -v 2>&1 | tail -15
-   3  think 3 failures out of 5 tests. The tail cut off th     8.23 s
-            file_read    core.py                                    22.0 ms
-            file_read    test_calc.py                               20.0 ms
-   4  think Now let me find the bugs: Bug 1: add — return     27.35 s
-            file_write   core.py                                    30.0 ms
-   5  call  Now re-running the suite and committing in one     6.93 s
-            execute                                                321.0 ms
-                           cd /workspace
-                           python3 -m unittest discover -s tests
-                           git add -A
-                           git -c user.email=agent@sandswap -c user.name=agent commit
-                           -qm "fix calc"
-                           git log --oneline
-   6  think All 5 tests pass and the commit is in place. L    15.97 s
---------------------------------------------------------------------
-      LLM (all calls)                                         64.28 s
-      tools (all calls)                                        0.69 s
-      turn total                                              64.92 s
-```
+### Sandbox startup is a separate measurement
 
-**Table 2 — where the LLM's time goes.** The wait before the first token
-is 79.5% of the turn and emitting blocks 19.6%; the explicit thinking
-blocks alone are a third of the total. The model spends four times longer
-thinking than speaking.
+The 2026-11-26 bare-metal supplement below used source `6126eb8`, 30 successful
+samples per case after one excluded warmup, median P50 and nearest-rank P95.
+These are sandbox measurements without a model in the loop.
 
-```text
-Table 2  where the LLM's time goes
---------------------------------------------------------------------
-call   before first token  emitting blocks   of which thinking  what it decided
---------------------------------------------------------------------
-   1            (first)           0.33 s              5.23 s  The user wants me to complete the 
-   2               4.43 s           1.03 s              0.64 s  The sandbox is claude-code with id
-   3               7.03 s           1.21 s              1.91 s  3 failures out of 5 tests. The tai
-   4              23.93 s           3.43 s             19.72 s  Now let me find the bugs: Bug 1: a
-   5               6.23 s           0.70 s              0.00 s  Now re-running the suite and commi
-   6               9.97 s           6.00 s              6.04 s  All 5 tests pass and the commit is
---------------------------------------------------------------------
-                  51.59 s          12.69 s             33.53 s
+| Operation | P50 | P95 |
+|---|---:|---:|
+| New VM → verified warden readiness, 1 vCPU / 256 MiB | 153.599 ms | 173.676 ms |
+| New VM → verified warden readiness, 2 vCPUs / 512 MiB | 155.451 ms | 156.721 ms |
+| Ready pool: BusyBox flat SandFS create → first command result | 7.614 ms | 8.397 ms |
+| Ready pool: Ubuntu 24.04 flat SandFS create → first command result | 556.918 ms | 571.432 ms |
 
-  before first token  (prompt → first block: queueing + thinking)     51.59 s   79.5%
-  emitting blocks     (thinking + text + tool_use reach the client)   12.69 s   19.6%
-  tools               (Table 3)                                        0.69 s    1.1%
-  sum                                                                      64.92 s  100.0%
-```
+VM timing covers `CreateVerifiedVM` through authenticated warden readiness;
+each VM was destroyed before the next sample. Guests were offline, so TAP/NAT
+setup is excluded. The ready-pool measurements use three 4-vCPU/1024-MiB VMs,
+same-host HTTP, and `POST /human/sandfs` followed by `execute` (`printf ready`).
+They exclude agent registration, downloads and VM boot. Host cache was not
+dropped and CPU/NUMA was not manually pinned. Ubuntu's flat-template
+materialization dominated creation (P95 **566.656 ms**); its first command
+alone was **5.863 ms**. These are not MCP or Claude Code latency percentiles.
 
-**Table 3 — tool execution, by layer.** Every call split into the layers
-the gateway measured: HTTP/TLS on Claude Code's side, the gateway's
-processing, Sandswap's dispatch, the exec floor, and only then the command
-itself.
+For native warm/cold command and load measurements, see the
+[benchmark reports](../../docs/benchmark/index.md). A cold SandFS mount on a
+ready VM is different from starting a new guest kernel.
 
-```text
-Table 3  tool execution, by layer
---------------------------------------------------------------------
-call  tool            client  http/tls   gateway  dispatch  exec floor   command
---------------------------------------------------------------------
-   1  Read            35.0ms  (local tool, not Sandswap)
-   1  list_sandfs     15.0ms                               (no command)          
-   2  execute        250.0ms     9.6ms     0.7ms     1.0ms       8.7ms   230.0ms
-   3  file_read       22.0ms                               (no command)          
-   3  file_read       20.0ms                               (no command)          
-   4  file_write      30.0ms                               (no command)          
-   5  execute        321.0ms     9.4ms     0.6ms     1.1ms       8.7ms   301.2ms
---------------------------------------------------------------------
-  Sandswap calls (6): 0.66 s   of which Sandswap itself 0.11 s (18.0 ms per call), the commands 0.53 s
-  non-Sandswap tools (1): 0.04 s
-  exec floor = median exec of `sh -c :` on this sandbox (8.7 ms): guest mount bookkeeping + fork/execve + shell start,
-  charged to Sandswap; 'command' = exec − floor.
-```
-
-What counts as Sandswap's own share needs care. The `exec` layer the warden
-reports is **not** "the command": it also carries the sandbox's fixed
-per-exec floor — guest mount bookkeeping, fork+execve, the shell start —
-paid whatever the command is. That floor is exactly what the benchmark
-reports' `exec (warden)` rows measure with a busybox `echo` (≈1.6 ms bare
-metal, ≈5 ms nested); here the analyzer measures it live on the demo
-sandbox as the median of `sh -c :` (**8.7 ms** on the Ubuntu template —
-its dynamic `dash` costs more than busybox's static shell) and charges it
-to Sandswap. Over the whole turn Sandswap's own share is **0.11 s across 6
-calls (≈18 ms per call, ≈10 ms of an `execute`)** against 0.53 s of actual
-command work — and the HTTP/TLS hop alone is 9.6 ms per call, about as
-much as all of Sandswap's share of that call: the integration overhead
-lives in the client's transport as much as in the sandbox. Everything else
-is the interpreter the command starts, which is the whole argument for
-batching: one merged `execute` is one fewer row in Table 1.
-
-The absolute numbers depend on your host (bare metal vs. nested
-virtualization differ by ~4×; see the
-[benchmark reports](../../docs/benchmark/index.md)), so read the ratios,
-which hold everywhere. To see the ratios yourself without a model in the
-loop, time the rows directly — every `execute` response carries
-`exec_duration_ns`:
-
-```bash
-sx() { output/sandctl --raw api execute --agent "$CLAUDE_CODE_AGENT_ID" --sandfs "$CLAUDE_CODE_SANDFS_ID" \
-    --language shell --code "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["exec_duration_ns"]/1e6, "ms")'; }
-sx 'cd /workspace && cat calc/core.py'                                      # shell: the baseline
-sx 'cd /workspace && python3 -c "print(open(\"calc/core.py\").read())"'   # interpreter for the same job
-sx 'cd /workspace && python3 -c "import calc.core as m; print(m.add(2,3))"'  # one probe
-sx 'cd /workspace && python3 -c "import calc.core as m; print(m.add(2,3)); print(m.fib(6)); print(m.add(-1,1))"'  # three probes, ONE start
-```
-
-Measured here: `cat` ≈ 1×, `python3` for the same read ≈ 3.5×, three
-separate `python3 -c` probes ≈ 10×, the same three probes in one `python3`
-≈ 3.5×. The batching win is the interpreter starts you did not pay — and,
-with a model in the loop, one fewer thinking→tool round-trip (see the
-analyzer above).
-
-## Step 9 — Clean up
+## Step 10 — Clean up
 
 ```bash
 output/sandctl api sandfs delete "$CLAUDE_CODE_SANDFS_ID"
@@ -542,6 +451,34 @@ cd examples/claude-code && claude "Complete the task in TASK.md using only the s
   start regardless of template — close to the shell, far from an
   interpreter — if you ship one in the template.
 
+### Mac or another remote Claude Code client
+
+Remote use is supported. Complete provisioning and `seed.sh` on the Linux host,
+then, from this example directory on the client, copy the deployment CA and
+example environment to a private local directory. Replace `HOST`, `SSH_PORT`
+and `REMOTE_REPO` with your deployment:
+
+```bash
+mkdir -p .work/connection
+chmod 700 .work/connection
+scp -P "$SSH_PORT" "root@$HOST:/etc/sandswap/certs/ca.crt" .work/connection/
+scp -P "$SSH_PORT" "root@$HOST:$REMOTE_REPO/examples/claude-code/.env.sh" .work/connection/
+chmod 600 .work/connection/.env.sh
+source .work/connection/.env.sh
+export CLAUDE_CODE_SANDBOX_MCP_URL=https://localhost:34443/mcp
+export NODE_EXTRA_CA_CERTS="$PWD/.work/connection/ca.crt"
+ssh -N -o ExitOnForwardFailure=yes -p "$SSH_PORT" \
+    -L 127.0.0.1:34443:127.0.0.1:3000 "root@$HOST"
+```
+
+Keep the tunnel open. In another terminal, repeat the environment exports,
+supply model authentication, and run `claude` or
+`python3 validate.py --output-dir .work/validation-remote-1`.
+Three Mac + GLM-5.3-flash coding runs passed this route
+on 2026-11-26, with 17 MCP calls and independent sandbox checks. This confirms
+integration; SSH/network distance and jitter make the observed client timing
+specific to that route. Use the same-host setup in step 9 for timing analysis.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
@@ -549,13 +486,14 @@ cd examples/claude-code && claude "Complete the task in TASK.md using only the s
 | `/mcp` shows `sandswap` **failed** | `CLAUDE_CODE_SANDBOX_API_KEY` not exported in the shell that launched `claude`; or, on a TLS deploy, `NODE_EXTRA_CA_CERTS` unset (Node refuses the deployer's CA); or the URL scheme does not match the deployment (see Variants). |
 | Claude asks to approve the MCP server | launched from a directory other than `examples/claude-code` (settings not loaded) — `cd` there first. |
 | `Ignoring permissions… this workspace has not been trusted` | accept the trust dialog on the first interactive launch; project settings (including the MCP auto-approval) are ignored in an untrusted workspace. |
-| `execute` returns `unknown sandbox` / 404 | wrong `sandfs_id` — the tool schema's `sandfs_id` enum lists the agent's SandFS instances; `list_sandfs` is the source of truth. |
+| `execute` returns `404 sandfs not found` | wrong `sandfs_id` — the tool schema's `sandfs_id` enum lists the agent's SandFS instances; `list_sandfs` is the source of truth. |
 | `sandctl api execute` prints `HTTP 503`, or Claude's `execute` returns `SANDBOX_CLEANING` / `NO_AVAILABLE_SANDBOX` with `retryable: true` | the sandbox is mid-recycle (its previous unmount is still finishing, or the pool is handing over a VM) — a transient of a few ms, not a failure. Run the command again; Claude Code retries on `retryable: true` per the tool contract (the scripts' `sx_exec` already does). |
 | After a host reboot the pool shows 0 nodes / sandlot will not start | vsockguard is a BPF program and does not survive a reboot; the sandlot's attest step refuses to start (fail-closed). Re-run step 1 (the deployer re-attaches it), or by hand: `sudo bash security/vsockguard-attach.sh && sudo systemctl reset-failed sandswap-sandlot && sudo systemctl restart sandswap-sandlot`. |
 | `HTTP 401 invalid api key` from `sandctl --agent …`, yet the key is right | a `SANDSWAP_API_KEY` left in the shell by something else — sandctl prefers that env var over `--agent` for every call. `unset SANDSWAP_API_KEY` (this example never sets it; it uses `CLAUDE_CODE_SANDBOX_API_KEY`). |
 | the key is gone | it is shown once at creation; `cat run/agents.json` has the copy `sandctl` cached (pick the entry by `agent_id` — old agents accumulate there across reinstalls). Otherwise delete the agent and create a new one. |
 | `ubuntu:24.04` missing from `template list` | deployed with `--skip-build` before `output/rootfs-ubuntu` existed — `sudo bash build/build.sh ubuntu-rootfs` and redeploy, or register by hand ([Building Templates](../../docs/building/templates.md)). |
 | `git: ... dubious ownership` or commit refused | the sandbox runs as root and owns `/workspace`; the task passes `-c user.email/-c user.name` on commit. Add a global identity with `execute` if you prefer. |
+| `analyze_session.py` prints `exec floor: NOT MEASURED (…)` | the three exports are missing from this shell (`export` is per-terminal — export them again, or `source examples/claude-code/.env.sh` when `setup.sh` wrote it for this run) or no longer valid — the parentheses say which: `HTTP 401` once the run's agent was deleted, `HTTP 404` its sandbox. The tables are still printed; only Table 3's floor/command split is lost, the whole exec layer landing under `command`. |
 
 ## License
 

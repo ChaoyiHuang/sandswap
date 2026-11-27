@@ -40,7 +40,7 @@ for AI Agents:
 In bare-metal KVM benchmarks, a single tinyVM can be reused ideally up to
 183 times per second. An agent's reasoning takes seconds while commands
 run in milliseconds ([measured on a real Claude Code
-run](examples/claude-code/README.md#see-where-the-time-went): 64.3 s of
+run](examples/claude-code/README.md#step-9--see-where-the-time-went): 64.3 s of
 LLM time against 0.69 s of tool calls), so one tinyVM rotates across
 50–100 agents — cutting sandbox cost by 50–100x.
 
@@ -71,7 +71,7 @@ download the prebuilt release (no Go/Rust toolchain), deploy, watch real
 AI agents work against it, then uninstall:
 
 ```bash
-# resolve the latest release tag (or pin one, e.g. VER=v0.1.0)
+# resolve the latest release tag (or pin one, e.g. VER=v0.1.2)
 VER=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
     https://github.com/ChaoyiHuang/sandswap/releases/latest | awk -F/ '{print $NF}')
 echo "latest release: ${VER}"
@@ -216,7 +216,7 @@ network/vsockguard/  BPF LSM vsock transport guard (C)
 initramfs/    minimal initramfs: warden + busybox
 kernel/       guest kernel: pinned source tree + hardening
 templates/    rootfs templates (busybox base, sqlite, …)
-examples/     example agents: Claude Code, Eino, openai-go, keepalive client
+examples/     example agents: Claude Code, DeepSeek Harness, Eino, openai-go, keepalive client
 e2e/          self-contained end-to-end test scripts
 build/        build scripts (all components + freshness check)
 deploy/       deployment scripts (baremetal + k8s)

@@ -134,6 +134,9 @@ cleanup() {
     # Self-clean the artifacts THIS benchmark deployed (surgical: never the
     # shared $DEPLOY_DIR itself — see tc_cleanup_deployed_artifacts).
     tc_cleanup_deployed_artifacts
+    # …and this benchmark's own sandlot config, which that helper does not
+    # know about (same as latency-benchmark-load.sh does for its own).
+    rm -f "$DEPLOY_DIR/sandlot-unmount.yaml" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
