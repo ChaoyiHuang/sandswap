@@ -260,7 +260,7 @@ Three values printed → go on. (Lost the key? It is shown once at creation;
 ```bash
 cd examples/claude-code
 export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt      # TLS deploy: trust the deployer's CA (covers localhost / 127.0.0.1)
-claude "Complete the task in TASK.md using only the sandswap tools."
+claude "Read the local TASK.md, then complete the task using only the sandswap tools for sandbox work."
 ```
 
 The prompt can also be typed once Claude Code is up — what matters is that
@@ -277,7 +277,7 @@ If you launched Claude Code with the prompt above it is already running;
 otherwise type (or paste `TASK.md`):
 
 ```text
-Complete the task in TASK.md using only the sandswap tools.
+Read the local TASK.md, then complete the task using only the sandswap tools for sandbox work.
 ```
 
 Claude Code will `list_sandfs`, survey the project with **one** `execute`,
@@ -292,7 +292,7 @@ stays open):
 
 ```bash
 output/sandctl api execute --agent <agent id> --sandfs <sandfs id> \
-    --language shell --code 'cd /workspace && python3 -m unittest discover -s tests 2>&1 | tail -1 && git log --oneline'
+    --language shell --code 'cd /workspace && python3 -m unittest discover -s tests && git log --oneline'
 ```
 
 Expected: `OK`, and two commits — `fix calc` on top of `add failing calc
@@ -300,38 +300,161 @@ suite`.
 
 ## Step 9 — See where the time went
 
-Claude Code records every session under `~/.claude/projects/`: each LLM
-call's thinking time, every tool call and its result, all timestamped. The
-model itself cannot see its own thinking time, so the analysis is done from
-the transcript, after the run. Back in the shell (after `/exit`, or from
-another terminal):
+Claude Code records each LLM response and tool result with timestamps. After
+running the task, use a normal terminal with the sandbox exports from steps
+3–4 (or source `examples/claude-code/.env.sh`):
 
 ```bash
-python3 examples/claude-code/analyze_session.py
+python3 examples/claude-code/analyze_session.py             # newest TASK.md session here
+python3 examples/claude-code/analyze_session.py <session.jsonl>
 ```
 
-It picks the newest transcript for this directory whose first prompt is the
-`TASK.md` task (a session where you only ran something else is skipped;
-pass a `.jsonl` path to choose one) and prints the turn as the loop it is:
-every round's **thinking, what it said, how long it thought, then the tool
-it called and how long that took — each `execute` split into its measured
-layers**.
+The analyzer prints the coding loop, the model-response intervals, and tool
+execution by layer. It includes the initial prompt wait, groups streamed
+blocks by provider message ID, and counts parallel tool waits once. Each
+client interval starts at its own recorded `tool_use` and ends at its result.
+Tools can run while later model blocks arrive, so the additive task breakdown
+counts only tool wait **after model emission**. The analyzer also shows the
+union of complete tool intervals (which may overlap model time) and the sum
+of individual durations (which can double-count parallel calls).
 
-The exec floor (the first line) is measured live on the run's sandbox, so
-the shell you run the analyzer in needs the three exports of steps 3–4 —
-from another terminal, export them again, or `source
-examples/claude-code/.env.sh` when `setup.sh` wrote it for this run.
-Without them the line reads `NOT MEASURED` with the reason, and Table 3
-charges the whole exec layer to the command.
+For `execute`, the gateway reports gateway, sandlot and guest durations. The
+analyzer measures 30 `sh -c :` calls on the same sandbox to estimate the guest
+process-start floor. Without usable sandbox exports or a reachable gateway,
+it prints `NOT MEASURED` with the reason instead of assuming a baseline.
+Certificate and hostname verification remain enabled; set `NODE_EXTRA_CA_CERTS`
+to the deployment CA and `CLAUDE_CODE_SANDBOX_MCP_URL` to the actual endpoint.
 
-A real interactive run:
+**Timing boundaries.** Client time minus gateway time is a residual containing
+client scheduling, serialization, connection handling and transport. It is
+not an independently measured network RTT or TLS handshake. File/list tools
+have no separate server timing fields, so their client intervals cannot be
+attributed wholly to Sandswap. Model API time includes the external provider
+path even when Claude Code and Sandswap share a host.
 
-**Table 1 — the loop, in time order.** Each LLM call, then the tools it
-called, with every `execute`'s command spelled out one `&&`-step per line.
-Six calls, each deciding the next tool from the previous result (the two
-`file_read`s go out in parallel inside one call); the 27-second call that
-finds the two bugs is the task. The first line is the sandbox's exec
-floor, measured live before the analysis (see Table 3).
+For repeatable comparisons, record client/server placement, virtualization,
+transport (HTTP/HTTPS, direct/SSH), connection reuse, model/version, task and
+sandbox template. Measure network RTT separately if attributing network cost.
+A Mac→SSH→remote-host run is a useful integration check, but its client/tool
+ratios are specific to that network path. Do not compare them directly with
+a same-host server-latency benchmark.
+
+### Bare metal
+
+On 2026-11-28, the interactive steps 7–8 ran on the SandSwap host using
+Claude Code 2.1.77 and GLM-5.3-flash, with source `22cbfdc`. The normal project
+settings allowed local `Read` of `TASK.md`; all sandbox work used MCP. Five
+MCP calls succeeded, the five original tests remained unchanged and passed,
+independent function checks passed, and `fix calc` was committed with a clean
+worktree.
+
+The host had two Xeon Gold 6248R CPUs (48 cores / 96 threads), Linux
+`6.8.0-149-generic`, and no host virtualization. The single-node deployment
+used a `medium:3` pool (4 vCPUs / 1 GiB per VM) and flat Ubuntu 24.04 SandFS.
+MCP connected to `https://localhost:3000/mcp` with CA/hostname verification;
+the model endpoint remained external. Connection reuse was not instrumented,
+and CPU affinity/cache state were not controlled.
+
+**Table 1 — the loop, in time order.** The local prompt read, then the sandbox coding loop.
+
+```text
+Table 1  the loop, in time order   (turn: 14.74 s, 7 LLM calls, 6 tool calls)
+--------------------------------------------------------------------
+call  LLM call / tool                                            time
+--------------------------------------------------------------------
+   1  call  (no reasoning text)                                2.01 s
+            Read         TASK.md                                    37.0 ms
+   2  call  (no reasoning text)                                0.93 s
+            list_sandfs                                             33.0 ms
+   3  call  (no reasoning text)                                1.33 s
+            execute                                                 92.0 ms
+                           cd /workspace
+                           git log --oneline
+                           echo ---
+                           ls -R calc tests
+                           echo ---
+                           python3 -m unittest discover -s tests -v 2>&1 | tail -15
+   4  call  (no reasoning text)                                1.08 s
+            file_read    core.py                                   187.0 ms
+   5  call  Bugs: add returns a-b instead of a+b. fib: loo     3.70 s
+            file_write   core.py                                    13.0 ms
+   6  call  (no reasoning text)                                1.44 s
+            execute                                                130.0 ms
+                           cd /workspace
+                           python3 -m unittest discover -s tests
+                           git add -A
+                           git -c user.email=agent@sandswap -c user.name=agent commit
+                           -qm "fix calc"
+                           git log --oneline
+   7  call  Done — 3 execute calls total, as intended. Fai     3.76 s
+--------------------------------------------------------------------
+      LLM (all calls)                                         14.25 s
+      tools (exclusive wait; parallel calls counted once)      0.49 s
+      tool intervals (union; may overlap model emission)       0.49 s
+      tools (sum of individual durations)                      0.49 s
+      turn total                                              14.74 s
+```
+
+**Table 2 — where the LLM's time goes.** This provider did not report thinking
+durations; `0.00 s` in that column means unavailable, not zero reasoning.
+
+```text
+Table 2  where the LLM's time goes
+--------------------------------------------------------------------
+call   before first token  emitting blocks   of which thinking  what it decided
+--------------------------------------------------------------------
+   1               2.01 s           0.00 s              0.00 s  (no reasoning text)
+   2               0.93 s           0.00 s              0.00 s  (no reasoning text)
+   3               1.33 s           0.00 s              0.00 s  (no reasoning text)
+   4               1.08 s           0.00 s              0.00 s  (no reasoning text)
+   5               1.95 s           1.75 s              0.00 s  Bugs: add returns a-b instead of a
+   6               1.44 s           0.00 s              0.00 s  (no reasoning text)
+   7               3.76 s           0.00 s              0.00 s  Done — 3 execute calls total, as i
+--------------------------------------------------------------------
+                  12.49 s           1.75 s              0.00 s
+
+  before first token  (includes the initial prompt wait)             12.49 s   84.8%
+  emitting blocks     (thinking + text + tool_use reach the client)    1.75 s   11.9%
+  tools               (exclusive wait after model emission)           0.49 s    3.3%
+  sum                                                                      14.74 s  100.0%
+```
+
+**Table 3 — tool execution, by layer.** The guest shell floor was measured
+live as the median of 30 calls: **2.4 ms**.
+
+```text
+Table 3  tool execution, by layer
+--------------------------------------------------------------------
+call  tool            client  residual   gateway  dispatch  exec floor   command
+--------------------------------------------------------------------
+   1  Read            37.0ms  (local tool, not Sandswap)
+   2  list_sandfs     33.0ms                               (no command)
+   3  execute         92.0ms     6.4ms     0.4ms     0.5ms       2.4ms    82.3ms
+   4  file_read      187.0ms                               (no command)
+   5  file_write      13.0ms                               (no command)
+   6  execute        130.0ms    18.2ms     0.4ms     0.5ms       2.4ms   108.4ms
+--------------------------------------------------------------------
+  Sandswap calls (5): 0.46 s (sum of client intervals)
+  Measured executes (2): estimated server overhead 0.01 s (3.4 ms per execute), commands 0.19 s
+  This estimate excludes file/list server overhead (not separately reported) and client residual.
+  non-Sandswap tools (1): 0.04 s
+  residual = client interval minus gateway time: client scheduling/serialization + transport;
+  it is not a direct HTTP/TLS measurement (an SSH tunnel also contributes when used).
+  client interval = recorded tool_use to its tool_result; this may overlap model emission.
+  exec floor = median exec of `sh -c :` on this sandbox (2.4 ms): guest mount bookkeeping + fork/execve + shell start,
+  charged to Sandswap; 'command' = exec − floor.
+```
+
+The description columns quote the model: its final text says three executes,
+but the recorded tool events contain **two**. The tables use the recorded
+calls and timings, not the model's own count.
+
+### Nested virtualization
+
+The upstream interactive Ubuntu-template run is retained below, including
+its local `Read` of `TASK.md` and six MCP calls.
+
+**Table 1 — the loop, in time order.** Each model response followed by its tools.
 
 ```text
 prompt : Complete the task in TASK.md using only the sandswap tools
@@ -344,7 +467,7 @@ call  LLM call / tool                                            time
    1  think The user wants me to complete the task in TASK     0.33 s
             Read         TASK.md                                    35.0 ms
             list_sandfs                                             15.0 ms
-   2  think The sandbox is claude-code with id sandfs-bc00     5.46 s
+   2  think The sandbox is claude-code with id sandfs-…     5.46 s
             execute                                                250.0 ms
                            cd /workspace
                            git log --oneline
@@ -372,17 +495,14 @@ call  LLM call / tool                                            time
       turn total                                              64.92 s
 ```
 
-**Table 2 — where the LLM's time goes.** The wait before the first token
-is 79.5% of the turn and emitting blocks 19.6%; the explicit thinking
-blocks alone are a third of the total. The model spends four times longer
-thinking than speaking.
+**Table 2 — where the LLM's time goes.** Waiting, emission and recorded thinking.
 
 ```text
 Table 2  where the LLM's time goes
 --------------------------------------------------------------------
 call   before first token  emitting blocks   of which thinking  what it decided
 --------------------------------------------------------------------
-   1            (first)           0.33 s              5.23 s  The user wants me to complete the 
+   1            (first)           0.33 s              5.23 s  The user wants me to complete the
    2               4.43 s           1.03 s              0.64 s  The sandbox is claude-code with id
    3               7.03 s           1.21 s              1.91 s  3 failures out of 5 tests. The tai
    4              23.93 s           3.43 s             19.72 s  Now let me find the bugs: Bug 1: a
@@ -397,22 +517,19 @@ call   before first token  emitting blocks   of which thinking  what it decided
   sum                                                                      64.92 s  100.0%
 ```
 
-**Table 3 — tool execution, by layer.** Every call split into the layers
-the gateway measured: HTTP/TLS on Claude Code's side, the gateway's
-processing, Sandswap's dispatch, the exec floor, and only then the command
-itself.
+**Table 3 — tool execution, by layer.** Client intervals and gateway-reported layers.
 
 ```text
 Table 3  tool execution, by layer
 --------------------------------------------------------------------
-call  tool            client  http/tls   gateway  dispatch  exec floor   command
+call  tool            client  residual   gateway  dispatch  exec floor   command
 --------------------------------------------------------------------
    1  Read            35.0ms  (local tool, not Sandswap)
-   1  list_sandfs     15.0ms                               (no command)          
+   1  list_sandfs     15.0ms                               (no command)
    2  execute        250.0ms     9.6ms     0.7ms     1.0ms       8.7ms   230.0ms
-   3  file_read       22.0ms                               (no command)          
-   3  file_read       20.0ms                               (no command)          
-   4  file_write      30.0ms                               (no command)          
+   3  file_read       22.0ms                               (no command)
+   3  file_read       20.0ms                               (no command)
+   4  file_write      30.0ms                               (no command)
    5  execute        321.0ms     9.4ms     0.6ms     1.1ms       8.7ms   301.2ms
 --------------------------------------------------------------------
   Sandswap calls (6): 0.66 s   of which Sandswap itself 0.11 s (18.0 ms per call), the commands 0.53 s
@@ -421,43 +538,13 @@ call  tool            client  http/tls   gateway  dispatch  exec floor   command
   charged to Sandswap; 'command' = exec − floor.
 ```
 
-What counts as Sandswap's own share needs care. The `exec` layer the warden
-reports is **not** "the command": it also carries the sandbox's fixed
-per-exec floor — guest mount bookkeeping, fork+execve, the shell start —
-paid whatever the command is. That floor is exactly what the benchmark
-reports' `exec (warden)` rows measure with a busybox `echo` (≈1.6 ms bare
-metal, ≈5 ms nested); here the analyzer measures it live on the demo
-sandbox as the median of `sh -c :` (**8.7 ms** on the Ubuntu template —
-its dynamic `dash` costs more than busybox's static shell) and charges it
-to Sandswap. Over the whole turn Sandswap's own share is **0.11 s across 6
-calls (≈18 ms per call, ≈10 ms of an `execute`)** against 0.53 s of actual
-command work — and the HTTP/TLS hop alone is 9.6 ms per call, about as
-much as all of Sandswap's share of that call: the integration overhead
-lives in the client's transport as much as in the sandbox. Everything else
-is the interpreter the command starts, which is the whole argument for
-batching: one merged `execute` is one fewer row in Table 1.
-
-The absolute numbers depend on your host (bare metal vs. nested
-virtualization differ by ~4×; see the
-[benchmark reports](../../docs/benchmark/index.md)), so read the ratios,
-which hold everywhere. To see the ratios yourself without a model in the
-loop, time the rows directly — every `execute` response carries
-`exec_duration_ns`:
-
-```bash
-sx() { output/sandctl --raw api execute --agent "$CLAUDE_CODE_AGENT_ID" --sandfs "$CLAUDE_CODE_SANDFS_ID" \
-    --language shell --code "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["exec_duration_ns"]/1e6, "ms")'; }
-sx 'cd /workspace && cat calc/core.py'                                      # shell: the baseline
-sx 'cd /workspace && python3 -c "print(open(\"calc/core.py\").read())"'   # interpreter for the same job
-sx 'cd /workspace && python3 -c "import calc.core as m; print(m.add(2,3))"'  # one probe
-sx 'cd /workspace && python3 -c "import calc.core as m; print(m.add(2,3)); print(m.fib(6)); print(m.add(-1,1))"'  # three probes, ONE start
-```
-
-Measured here: `cat` ≈ 1×, `python3` for the same read ≈ 3.5×, three
-separate `python3 -c` probes ≈ 10×, the same three probes in one `python3`
-≈ 3.5×. The batching win is the interpreter starts you did not pay — and,
-with a model in the loop, one fewer thinking→tool round-trip (see the
-analyzer above).
+These are the original nested-run values. Its older analyzer omitted the
+initial prompt wait, summed overlapping tools, and included file/list client
+time in its server-overhead estimate. The former `http/tls` column is labeled
+`residual` here; it was not a measured TLS handshake. The bare-metal tables
+use the corrected analyzer. Compare the per-execute layers with those
+accounting differences in mind; the task totals are not a controlled measure
+of virtualization overhead.
 
 ## Step 10 — Clean up
 
@@ -477,11 +564,19 @@ to rerun) and writes `examples/claude-code/.env.sh` with the exports:
 bash examples/claude-code/setup.sh
 source examples/claude-code/.env.sh
 export NODE_EXTRA_CA_CERTS=/etc/sandswap/certs/ca.crt   # TLS deploy
-cd examples/claude-code && claude "Complete the task in TASK.md using only the sandswap tools."
+cd examples/claude-code && claude "Read the local TASK.md, then complete the task using only the sandswap tools for sandbox work."
 ```
 
 ## Variants
 
+- **Mac / remote client**: copy the deployment CA to the client and export
+  the sandbox credentials from steps 3–4; set
+  `CLAUDE_CODE_SANDBOX_MCP_URL=https://localhost:34443/mcp` and
+  `NODE_EXTRA_CA_CERTS=/path/to/ca.crt`. Open
+  `ssh -N -L 127.0.0.1:34443:127.0.0.1:3000 -p <SSH_PORT> <USER>@<HOST>`,
+  then run `claude` from this example directory in another terminal with
+  those exports. All client/tool intervals include SSH/network costs and
+  are not comparable to the same-host tables.
 - **Stricter**: add `"Read"` to the deny list so even file *reading* happens
   through `file_read` in the sandbox (then paste TASK.md's text rather than
   naming the file).

@@ -94,25 +94,28 @@ tc_wait_pool_ready "$POOL_SIZE"
 # ══════════════════════════════════════════════════════════════
 tc_log_section "Role lock: one sandlot per host"
 
-# rl_wait_exit <pid> <timeout_s> — reap the child and ECHO its rc ("0"/"N"/
-# "-1" still alive at the deadline); always returns 0 so `rc="$(...)"` is
-# set -e safe (a plain `return $?` would kill the suite the moment a probe
-# is refused — the very outcome under test). Polls /proc state because
+# rl_wait_exit <pid> <timeout_s> — reap the child in its PARENT shell and
+# set RL_WAIT_RC (0/N, or -1 when still alive at the deadline). Command
+# substitution runs in a subshell that cannot reap this shell's child;
+# Bash can report -1 there even after the probe has exited. Always return
+# 0 so an expected nonzero probe exit is safe under set -e. Poll /proc because
 # kill -0 succeeds on unreaped zombies (an exited-but-unwaited child would
 # spin the poll forever).
 rl_wait_exit() {
-    local pid="$1" deadline="$2" n=0 rc
+    local pid="$1" deadline="$2" n=0
+    RL_WAIT_RC=-1
     while (( n < deadline * 5 )); do
         if [[ ! -d "/proc/$pid" ]] || [[ "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" == "Z" ]]; then
-            wait "$pid" 2>/dev/null
-            rc=$?
-            echo "$rc"
+            if wait "$pid" 2>/dev/null; then
+                RL_WAIT_RC=0
+            else
+                RL_WAIT_RC=$?
+            fi
             return 0
         fi
         sleep 0.2
         n=$((n + 1))
     done
-    echo -1
     return 0
 }
 
@@ -156,7 +159,8 @@ EOF
 # expect_role_refusal <label> <required-log-string>
 expect_role_refusal() {
     local label="$1" want="$2" rc
-    rc="$(rl_wait_exit "$RL_PID" 8)"
+    rl_wait_exit "$RL_PID" 8
+    rc="$RL_WAIT_RC"
     if [[ "$rc" == "-1" ]]; then
         tc_fail "role-lock: $label — probe still running, lock NOT enforced"
         kill "$RL_PID" 2>/dev/null || true
@@ -190,7 +194,8 @@ RL_LOG="$LOG_DIR/sandlot-rl3.log"
 write_rl_config rl-probe probe "$PROBE_CERT"
 "$TC_SANDLOT_BIN" -config "$RL_CONFIG" -allow-colocated-instances -allow-insecure-volumes -allow-missing-vsockguard >"$RL_LOG" 2>&1 &
 RL_PID=$!
-rc="$(rl_wait_exit "$RL_PID" 3)"
+rl_wait_exit "$RL_PID" 3
+rc="$RL_WAIT_RC"
 if [[ "$rc" == "-1" ]]; then
     tc_pass "role-lock: -allow-colocated-instances admits a DISTINCT node id (simulation hatch works)"
     kill "$RL_PID" 2>/dev/null || true
