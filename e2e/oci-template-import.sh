@@ -45,6 +45,13 @@
 #      unconsumed top-level dot dirs ignored), and the NON-OWNER audit: a
 #      non-member reports an unlistable subtree exactly once and exits 1,
 #      while the owner's audit of the same tree is clean.
+#   7. The attach-critical skeleton on a STOCK-image archive: the fixture
+#      deliberately drops home/agent (empty home/, nothing under it — the
+#      shape every distro image has). The import must create it (the
+#      overlay attach binds the volume's home/ onto <rootfs>/home/agent and
+#      cannot mkdir it on a read-only root), validate must reject a tree
+#      that lacks it (the directly-registered-local-directory path is never
+#      healed), and the overlay leg must mount and use it as HOME.
 #
 # The executable companion of Building Templates §2
 # (docs/building/templates.md#21-automated-template-tool-import).
@@ -107,6 +114,12 @@ pack_layer_plain() { # same, UNCOMPRESSED — the docker-save classic-store laye
 # and a volume control file.
 rm -rf "$WORK/lower" && mkdir -p "$WORK/lower"
 cp -a "$OUTPUT/rootfs-template/." "$WORK/lower/"
+# Stock-image shape (item 7): the busybox base carries home/agent, a real
+# OCI image does not — empty home/, nothing under it. Drop it so the archive
+# genuinely lacks the overlay attach's home bind target and the import has
+# to create it; every home/agent assert below is vacuous without this.
+rm -rf "$WORK/lower/home/agent"
+[[ -d "$WORK/lower/home" && ! -e "$WORK/lower/home/agent" ]] || { log_error "fixture: expected an empty home/ after dropping home/agent"; exit 1; }
 mkdir -p "$WORK/lower/opt/whdir" "$WORK/lower/opt/typeflip" "$WORK/lower/opt/pkg" "$WORK/lower/b"
 echo old > "$WORK/lower/opt/whdir/old"
 echo gone > "$WORK/lower/opt/wh-target"
@@ -288,6 +301,43 @@ done
 # would pass VACUOUSLY — fail loudly instead.
 T="$FLAT_DIR/convimg/v1"
 [[ -d "$T" ]] && pass "imported tree published at $T" || fail "imported tree missing at $T (spot checks below would be vacuous)"
+
+# Attach-critical skeleton on the stock-image archive (item 7): home/agent
+# must be CREATED by the import (reported as a created skeleton dir) and be a
+# real directory in every published tree — the warden's overlay attach binds
+# the volume's home/ onto <rootfs>/home/agent and cannot mkdir it on a
+# read-only root, so a missing one failed EVERY attach ("home mount target
+# could not be secured"), each failure destroying a pool VM.
+for logf in flat-import.log tpl-import.log; do
+    if grep -q "created missing skeleton directories:.*home/agent" "$WORK/$logf"; then
+        pass "import created home/agent ($logf)"
+    else
+        fail "import did not report creating home/agent: $(grep -i skeleton "$WORK/$logf" | head -c 200)"
+    fi
+done
+for t in "$FLAT_DIR/convimg/v1" "$TPL_DIR/convimg/v2"; do
+    if [[ -d "$t/home/agent" && ! -L "$t/home/agent" ]]; then
+        pass "published tree carries home/agent as a real directory: $t"
+    else
+        fail "home/agent missing or not a real directory in $t"
+    fi
+done
+# The negative: a tree that lacks it must NOT pass the gate. A directory
+# registered directly as a local template (the scan-root shape) is never
+# healed by any import path, so validate is the only thing standing between
+# such a tree and a pool-eating attach.
+rm -rf "$WORK/noagent" && cp -a "$T" "$WORK/noagent" && rmdir "$WORK/noagent/home/agent"
+if "$IMPORT" validate "$WORK/noagent" >"$WORK/noagent.log" 2>&1; then
+    fail "validate ACCEPTED a tree without home/agent (every attach would fail)"
+elif grep -q "home/agent" "$WORK/noagent.log" && grep -qi "error" "$WORK/noagent.log"; then
+    pass "validate rejects a tree without home/agent, naming it"
+else
+    fail "validate refusal for the no-home/agent tree did not name it: $(head -c 300 "$WORK/noagent.log")"
+fi
+# And the mkdir-on-ENOENT repair the warden attempts cannot be relied on
+# either: the same tree, registered as a flat template, is mountable (flat
+# binds the whole volume) but HOME would point at nothing. validate is what
+# catches it regardless of mode.
 [[ ! -e "$T/opt/wh-target" ]] && pass "whiteout removed opt/wh-target (host)" || fail "wh-target survived (host)"
 [[ ! -e "$T/opt/whdir/old" ]] && pass "opaque dir hid opt/whdir/old (host)" || fail "opaque failed (host)"
 [[ ! -e "$T/opt/pkg" ]] && pass "directory whiteout removed opt/pkg (host)" || fail "opt/pkg survived (host)"
@@ -662,6 +712,12 @@ guest_probe "6.2 overlay base is read-only"                     "$OV_KEY" "echo 
 guest_probe "6.3 overlay whiteout applied"                      "$OV_KEY" "test ! -e /opt/wh-target && echo wh-ok"     "wh-ok"
 guest_probe "6.4 workspace write persists"                      "$OV_KEY" "echo hi > /workspace/w.txt && cat /workspace/w.txt" "hi"
 guest_probe "6.5 setuid bit survives on the read-only base"     "$OV_KEY" "stat -c %a /bin/su"                          "4755"
+# 6.6–6.8 (item 7): the archive had no home/agent; the import created it and
+# the attach binds the volume's home/ onto it. It must be the writable HOME
+# and persist across execs like workspace/.
+guest_probe "6.6 home/agent exists and is writable"             "$OV_KEY" "test -d /home/agent && touch /home/agent/.h && echo home-ok" "home-ok"
+guest_probe "6.7 HOME is /home/agent"                           "$OV_KEY" "echo \$HOME"                                "/home/agent"
+guest_probe "6.8 home/agent write persists across execs"        "$OV_KEY" "test -e /home/agent/.h && echo home-persist"    "home-persist"
 
 # ══════════════════════════════════════════════════════════════════
 log_section "Phase 7: Plain rootfs tar (docker export shape)"

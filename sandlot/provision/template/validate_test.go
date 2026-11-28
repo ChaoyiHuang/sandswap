@@ -371,6 +371,35 @@ func TestValidateRootfsTree_ResolvesLikeTheGuest(t *testing.T) {
 // root cannot be mkdirat'ed), so those are errors — unlike bin/etc, which
 // degrade.
 func TestValidateRootfsTree_AttachCriticalDirs(t *testing.T) {
+	// errorFindingAt reports an error-severity skeleton-dir finding for p.
+	errorFindingAt := func(fs []Finding, p string) bool {
+		for _, f := range findingsByRule(fs, "skeleton-dir") {
+			if f.Path == p && f.Severity == SeverityError {
+				return true
+			}
+		}
+		return false
+	}
+	// allErrors: no skeleton-dir finding may degrade below error here.
+	allErrors := func(fs []Finding) bool {
+		for _, f := range findingsByRule(fs, "skeleton-dir") {
+			if f.Severity != SeverityError {
+				return false
+			}
+		}
+		return true
+	}
+	// nested reports the entries under a removed/symlinked parent that are
+	// reported alongside it (a missing home/ also leaves home/agent missing).
+	nested := func(name string) []string {
+		var out []string
+		for _, d := range attachCriticalDirs {
+			if strings.HasPrefix(d, name+"/") {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
 	for _, name := range attachCriticalDirs {
 		t.Run(name+" missing", func(t *testing.T) {
 			dir := t.TempDir()
@@ -383,8 +412,14 @@ func TestValidateRootfsTree_AttachCriticalDirs(t *testing.T) {
 				t.Fatalf("ValidateRootfsTree: %v", err)
 			}
 			got := findingsByRule(fs, "skeleton-dir")
-			if len(got) != 1 || got[0].Severity != SeverityError || got[0].Path != filepath.Join(dir, name) {
-				t.Fatalf("missing %s not an error-severity finding: %+v", name, fs)
+			want := 1 + len(nested(name))
+			if len(got) != want || !allErrors(fs) || !errorFindingAt(fs, filepath.Join(dir, name)) {
+				t.Fatalf("missing %s: want %d error findings (itself + nested), got %+v", name, want, got)
+			}
+			for _, d := range nested(name) {
+				if !errorFindingAt(fs, filepath.Join(dir, d)) {
+					t.Fatalf("missing %s: nested %s not reported: %+v", name, d, got)
+				}
 			}
 		})
 		t.Run(name+" symlinked", func(t *testing.T) {
@@ -399,12 +434,63 @@ func TestValidateRootfsTree_AttachCriticalDirs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ValidateRootfsTree: %v", err)
 			}
-			got := findingsByRule(fs, "skeleton-dir")
-			if len(got) != 1 || got[0].Severity != SeverityError {
+			if !errorFindingAt(fs, p) || !allErrors(fs) {
 				t.Fatalf("symlinked %s not an error-severity finding: %+v", name, fs)
 			}
 		})
 	}
+
+	// home/agent on its own: the overlay attach binds the volume's home/
+	// onto <rootfs>/home/agent, so the nested entry is attach-critical even
+	// when home/ itself is a healthy directory (a stock OCI image has an
+	// empty home/). Exactly one finding, nothing else flagged.
+	t.Run("home/agent missing under a present home", func(t *testing.T) {
+		dir := t.TempDir()
+		makeRootfs(t, dir)
+		if err := os.RemoveAll(filepath.Join(dir, "home", "agent")); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := ValidateRootfsTree(dir)
+		if err != nil {
+			t.Fatalf("ValidateRootfsTree: %v", err)
+		}
+		got := findingsByRule(fs, "skeleton-dir")
+		if len(got) != 1 || got[0].Severity != SeverityError || got[0].Path != filepath.Join(dir, "home", "agent") {
+			t.Fatalf("missing home/agent not the single error finding: %+v", got)
+		}
+	})
+	t.Run("home/agent is a regular file", func(t *testing.T) {
+		dir := t.TempDir()
+		makeRootfs(t, dir)
+		p := filepath.Join(dir, "home", "agent")
+		os.RemoveAll(p)
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := ValidateRootfsTree(dir)
+		if err != nil {
+			t.Fatalf("ValidateRootfsTree: %v", err)
+		}
+		if got := findingsByRule(fs, "skeleton-dir"); len(got) != 1 || got[0].Severity != SeverityError || got[0].Path != p {
+			t.Fatalf("file at home/agent not the single error finding: %+v", got)
+		}
+	})
+	t.Run("home/agent is a symlink", func(t *testing.T) {
+		dir := t.TempDir()
+		makeRootfs(t, dir)
+		p := filepath.Join(dir, "home", "agent")
+		os.RemoveAll(p)
+		if err := os.Symlink("/tmp", p); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := ValidateRootfsTree(dir)
+		if err != nil {
+			t.Fatalf("ValidateRootfsTree: %v", err)
+		}
+		if got := findingsByRule(fs, "skeleton-dir"); len(got) != 1 || got[0].Severity != SeverityError || got[0].Path != p {
+			t.Fatalf("symlink at home/agent not the single error finding: %+v", got)
+		}
+	})
 
 	// bin/ is the tolerant twin: a usr-merge symlink there is legitimate.
 	dir := t.TempDir()

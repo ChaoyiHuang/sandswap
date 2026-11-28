@@ -277,6 +277,38 @@ func TestImportLayoutDirInput(t *testing.T) {
 	}
 }
 
+// A stock image carries an empty home/ (or none at all); the overlay attach
+// binds the volume's home/ onto <rootfs>/home/agent and cannot create the
+// target on a read-only overlay root, so the published tree must carry it
+// as a REAL directory. The base layer here has no home/ at all, and the
+// second case has the empty-home shape every stock distro image has.
+func TestImportPublishesHomeAgent(t *testing.T) {
+	for _, tc := range []struct {
+		desc string
+		base []tarEntry
+	}{
+		{"no home at all", baseLayerEntries()},
+		{"empty home/", append(baseLayerEntries(), tarEntry{name: "home/", typeflag: tar.TypeDir, mode: 0o755})},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			l := newTestLayout(t)
+			l.simpleImage(l.addLayer(tc.base))
+			res, err := runImport(t, l.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := filepath.Join(res.Path, "home", "agent")
+			info, err := os.Lstat(p)
+			if err != nil {
+				t.Fatalf("home/agent not published: %v", err)
+			}
+			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				t.Fatalf("home/agent must be a real directory, got mode %v", info.Mode())
+			}
+		})
+	}
+}
+
 func TestImportLayoutArchiveGzipAndPlain(t *testing.T) {
 	l := newTestLayout(t)
 	base := l.addLayer(baseLayerEntries())

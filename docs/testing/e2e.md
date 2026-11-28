@@ -401,7 +401,12 @@ workspace writable). Also covers the plain-rootfs-tar path
 (`docker export` shape) and the negatives: arm64 archive refused
 (x86_64-only), corrupt blob refused with nothing published, legacy
 Docker <25 `manifest.json` archive refused, re-import over an existing
-version refused (refs are immutable). The executable companion of
+version refused (refs are immutable). The archive deliberately carries
+the stock-image shape of an EMPTY `home/` — the import must create
+`home/agent` (the overlay attach's home bind target, which the warden
+cannot mkdir on a read-only root), `validate` must reject a tree that
+lacks it, and the overlay leg must use it as a writable, persistent
+`HOME`. The executable companion of
 [Building Templates §2.1](../building/templates.md#21-automated-template-tool-import).
 
 ### 5.8 `volume-seed-rotation.sh` — the seed-rotation window

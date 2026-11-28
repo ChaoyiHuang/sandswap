@@ -1213,6 +1213,46 @@ func TestEnsureTemplateSkeleton(t *testing.T) {
 	}
 }
 
+// The stock-image shape: an OCI image carries an empty home/ and nothing
+// under it, while the overlay attach binds the volume's home/ onto
+// <rootfs>/home/agent (the warden sets HOME=/home/agent on every exec in
+// both modes). ensureTemplateSkeleton must add the nested entry, report it,
+// and refuse it when something else already sits there.
+func TestEnsureTemplateSkeletonCreatesHomeAgent(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"bin", "etc", "dev", "proc", "workspace", "home"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created, err := ensureTemplateSkeleton(dir)
+	if err != nil {
+		t.Fatalf("ensureTemplateSkeleton: %v", err)
+	}
+	if len(created) != 1 || created[0] != "home/agent" {
+		t.Fatalf("want exactly home/agent created, got %v", created)
+	}
+	info, err := os.Lstat(filepath.Join(dir, "home", "agent"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("home/agent missing after ensure (err=%v)", err)
+	}
+	if created2, err := ensureTemplateSkeleton(dir); err != nil || len(created2) != 0 {
+		t.Fatalf("second ensure must be a no-op, got created=%v err=%v", created2, err)
+	}
+
+	// A regular file at home/agent is a defect the import paths cannot heal
+	// (MkdirAll over an existing file fails) — reported, never replaced.
+	if err := os.RemoveAll(filepath.Join(dir, "home", "agent")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "home", "agent"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ensureTemplateSkeleton(dir); err == nil {
+		t.Fatalf("a non-directory at home/agent must be reported")
+	}
+}
+
 // This file adds coverage-focused unit tests for the gateway/template package.
 // It targets the 0% and <50% functions in manager.go: ref storage helpers,
 // the scan/register family and SaveAsTemplate error paths, plus

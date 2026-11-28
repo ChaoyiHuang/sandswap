@@ -374,7 +374,13 @@ func NewManager(cfg Config) (*Manager, error) {
 // (no /etc for resolv.conf). Flat volumes could be created at runtime, but
 // the fix belongs at TEMPLATE BUILD time so a defect is caught once at
 // import rather than surfacing per attach (owner decision).
-var templateSkeletonDirs = []string{"bin", "etc", "dev", "proc", "workspace", "home"}
+//
+// Entries may be nested ("home/agent"): the overlay attach binds the volume's
+// home/ onto <rootfs>/home/agent (the warden sets HOME=/home/agent on every
+// exec in both modes), so home/agent is a FATAL mount target exactly like
+// workspace — a stock OCI image carries an empty home/ and nothing under it.
+// The order matters only for readability; MkdirAll creates intermediates.
+var templateSkeletonDirs = []string{"bin", "etc", "dev", "proc", "workspace", "home", "home/agent"}
 
 // ensureTemplateSkeleton creates any missing skeleton directories under dir
 // and returns the names it created (empty when the template was already

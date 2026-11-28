@@ -51,8 +51,11 @@ production consumption step.
 ### 1.1 Create a flat template
 
 A flat template is nothing but a **chroot-able rootfs directory**: `/bin/sh`
-present, `dev/ proc/ sys/ tmp/ workspace/ home/` existing (the warden mounts
-the real proc/dev inside the guest). Any source works — the repo ships two builders:
+present, `dev/ proc/ sys/ tmp/ workspace/ home/agent/` existing (the warden
+mounts the real proc/dev inside the guest, and in overlay mode binds the
+volume's `home/` onto `home/agent/`, which is also `HOME` for every exec in
+both modes — a stock image has an empty `home/` and nothing under it, so the
+import paths create it). Any source works — the repo ships two builders:
 
 - `build.sh rootfs-template` — the minimal busybox base: one static binary,
   a symlink farm for the coreutils, minimal `/etc`, writable `/tmp`

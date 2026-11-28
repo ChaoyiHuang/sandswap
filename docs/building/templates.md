@@ -58,7 +58,8 @@ an OCI image archive, `docker export`, a distro minirootfs tarball,
 - **`/bin/sh` exists** — the warden execs through a shell.
 - **`dev/`, `proc/`, `sys/`, `tmp/` exist** (empty directories are fine —
   the warden mounts the real proc/dev inside the guest; the importer
-  creates missing skeleton dirs itself).
+  creates missing skeleton dirs itself, including `workspace/` and the
+  nested `home/agent/` the overlay attach binds the volume's home onto).
 - **No kernel, no init system required.** Sandswap boots its own kernel +
   initramfs, and the warden is PID 1 — the image needs neither. This is
   why images without systemd (busybox, ubuntu-base, alpine) work as-is.
