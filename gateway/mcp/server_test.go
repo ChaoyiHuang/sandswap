@@ -437,15 +437,27 @@ func TestHandleHTTPRequest_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// TestHandleHTTPRequest_MissingAPIKey verifies a missing API key yields -32001.
-func TestHandleHTTPRequest_MissingAPIKey(t *testing.T) {
+// Unauthenticated requests must fail at HTTP level before parsing the body.
+func TestHandleHTTPRequest_Unauthorized(t *testing.T) {
 	env := newTestEnv(t)
-	w := doMCPRequest(t, env, "", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
-
-	var resp jsonRPCResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error == nil || resp.Error.Code != -32001 {
-		t.Errorf("expected -32001 missing api key, got: %+v", resp.Error)
+	for _, key := range []string{"", "sk-invalid"} {
+		t.Run(key, func(t *testing.T) {
+			// Malformed JSON would produce -32700 if pre-auth were bypassed.
+			w := doMCPRequest(t, env, key, `{not valid json`)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", w.Code)
+			}
+			if !strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "Bearer ") {
+				t.Fatal("missing Bearer challenge")
+			}
+			var resp jsonRPCResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			if resp.Error == nil || resp.Error.Code != -32001 {
+				t.Errorf("expected -32001, got: %+v", resp.Error)
+			}
+		})
 	}
 }
 

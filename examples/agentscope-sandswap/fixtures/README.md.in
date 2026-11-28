@@ -1,0 +1,13 @@
+# AgentScope sandbox coding project
+
+This persistent workspace contains a small Python package:
+
+- `calc/core.py`: addition and Fibonacci functions with two intentional bugs.
+- `tests/test_calc.py`: five fixed acceptance tests; do not modify them.
+
+Run tests from `/workspace` with `python3 -B -m unittest discover -s tests`.
+Fix the implementation, require the suite to pass, then commit only
+`calc/core.py` with message `fix calc`. Leave the working tree clean.
+
+All commands and file changes must use the SandSwap MCP tools. File-tool paths
+are relative to `/workspace`. Use the sandbox ID supplied in the task prompt.

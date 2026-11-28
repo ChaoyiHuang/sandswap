@@ -1,0 +1,5 @@
+# Source reviewed for this example (AgentScope 2.0.13dev); Python >=3.11.
+agentscope @ https://github.com/agentscope-ai/agentscope/archive/b76f2726751e774541ece42256def65c247d4131.tar.gz
+mcp==2.3.0
+httpx2==2.16.2
+openai==3.60.0

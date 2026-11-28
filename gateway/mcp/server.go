@@ -222,6 +222,8 @@ func (s *MCPServer) HandleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	apiKey, err := identity.ExtractAPIKey(r)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("WWW-Authenticate", `Bearer realm="sandswap"`)
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(jsonRPCResponse{
 			JSONRPC: "2.0",
 			Error:   &jsonRPCError{Code: -32001, Message: "missing or invalid api key"},
@@ -244,6 +246,11 @@ func (s *MCPServer) HandleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.identityStore.ResolveAgent(apiKey); err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		// The body is unread, so id is null. HTTP 401 lets MCP transports
+		// correlate the rejection with the outstanding request instead of
+		// waiting forever for an id-matched HTTP 200 JSON-RPC response.
+		w.Header().Set("WWW-Authenticate", `Bearer realm="sandswap", error="invalid_token"`)
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(jsonRPCResponse{
 			JSONRPC: "2.0",
 			Error:   &jsonRPCError{Code: -32001, Message: "invalid api key"},

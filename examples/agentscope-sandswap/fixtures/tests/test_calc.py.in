@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+import unittest
+
+from calc.core import add, fib
+
+
+class TestAdd(unittest.TestCase):
+    def test_ints(self):
+        self.assertEqual(add(2, 3), 5)
+
+    def test_negatives(self):
+        self.assertEqual(add(-1, 1), 0)
+
+
+class TestFib(unittest.TestCase):
+    def test_base(self):
+        self.assertEqual(fib(0), 0)
+        self.assertEqual(fib(1), 1)
+
+    def test_sequence(self):
+        self.assertEqual([fib(i) for i in range(7)], [0, 1, 1, 2, 3, 5, 8])
+
+    def test_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            fib(-1)
+
+
+if __name__ == "__main__":
+    unittest.main()
