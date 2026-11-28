@@ -258,7 +258,9 @@ log_step "Setting up sandbox environment..."
 # Create /workspace and $HOME (/home/agent) — both agent-writable, matching
 # the busybox template's convention (build-rootfs-template.sh). The ubuntu
 # script originally created only /workspace; a template rebuilt from it lacked
-# $HOME, and the flat-mode rootfs needs both.
+# $HOME, and the flat-mode rootfs needs both. home/agent is also the overlay
+# attach's home bind target (templateSkeletonDirs in
+# sandlot/provision/template/manager.go is the authority for the set).
 mkdir -p "$OUTPUT/workspace" "$OUTPUT/home/agent"
 # The template is shared storage read through the virtio-fs daemon; a
 # world-writable tree would let any local identity rewrite content every

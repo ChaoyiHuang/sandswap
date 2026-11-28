@@ -39,7 +39,10 @@ echo "=== Building rootfs template directory ==="
 echo "Output:   $OUTPUT"
 echo "Busybox:  $BUSYBOX ($(file -b "$BUSYBOX" 2>/dev/null | cut -d, -f1 || echo static))"
 
-# Clean and recreate
+# Clean and recreate. The skeleton set (workspace, home/agent, ...) mirrors
+# templateSkeletonDirs in sandlot/provision/template/manager.go — the Go list
+# is the authority; keep this mkdir in step with it so a hand-built tree is
+# already conformant before any import path touches it.
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"/{bin,sbin,usr/bin,usr/sbin,lib,lib64,dev,proc,sys,tmp,run,etc,root,workspace,home/agent}
 

@@ -154,17 +154,20 @@ func ValidateRootfsTree(root string) ([]Finding, error) {
 	}
 
 	// Attach-critical skeleton dirs: the warden secures each of these with
-	// open_dir(O_PATH|O_DIRECTORY|O_NOFOLLOW), which mkdirat's a missing one
-	// and refuses a symlink — and the failure is FATAL (the mount is
-	// refused, not degraded). On an overlay template's read-only merged
-	// root the mkdirat cannot repair anything, so a missing or symlinked
-	// entry fails every attach; dev/proc run the same fatal step in flat
-	// mode too. The OCI-pull and save-as-template import paths create a
-	// missing one (ensureTemplateSkeleton), but a directory registered
-	// DIRECTLY as a local template is never healed — and ensureTemplateSkeleton
-	// cannot heal a SYMLINK either (MkdirAll over an existing entry is
-	// EEXIST). A real directory is therefore required, not merely something
-	// that resolves to one.
+	// open_dir(O_PATH|O_DIRECTORY|O_NOFOLLOW), which refuses a symlink and,
+	// on a missing entry, attempts mkdirat — but on an overlay template's
+	// READ-ONLY merged root that mkdirat fails (EROFS), so the failure is
+	// FATAL there (the mount is refused, not degraded); dev/proc run the
+	// same fatal step in flat mode too. home/agent is one of them: the
+	// overlay attach binds the volume's home/ onto <rootfs>/home/agent, and
+	// a stock OCI image carries nothing under home/. The OCI-pull and
+	// save-as-template import paths create a missing one
+	// (ensureTemplateSkeleton), but a directory registered DIRECTLY as a
+	// local template is never healed — and ensureTemplateSkeleton cannot
+	// heal a SYMLINK either (MkdirAll over an existing entry is EEXIST). A
+	// real directory is therefore required, not merely something that
+	// resolves to one. A missing parent is reported for the parent and for
+	// the nested entry alike (two findings), which is the clearer picture.
 	for _, name := range attachCriticalDirs {
 		p := filepath.Join(root, name)
 		fi, err := os.Lstat(p)
@@ -172,7 +175,7 @@ func ValidateRootfsTree(root string) ([]Finding, error) {
 		case errors.Is(err, fs.ErrNotExist):
 			out = append(out, Finding{
 				Path: p, Severity: SeverityError, Rule: "skeleton-dir",
-				Detail: "missing attach-critical directory — the warden secures dev/proc/workspace/home with a FATAL mount step and refuses the attach when it cannot (an overlay root is read-only; a directly registered local template is never healed): mkdir it at the source",
+				Detail: "missing attach-critical directory — the warden secures dev, proc, workspace, home and home/agent with a FATAL mount step and refuses the attach when it cannot (an overlay root is read-only, so it cannot mkdir it; a directly registered local template is never healed): mkdir it at the source",
 			})
 		case err != nil:
 			return nil, err
@@ -243,10 +246,14 @@ func ValidateRootfsTree(root string) ([]Finding, error) {
 }
 
 // attachCriticalDirs are the skeleton entries the warden secures with a
-// FATAL mount step (open_dir: mkdirat on ENOENT, refuse a symlink). MIRRORS
-// warden/src/mount/workspace.rs (the `?`-propagated mount targets) and
-// hardening.rs setup_masked_proc / setup_minimal_dev.
-var attachCriticalDirs = []string{"dev", "proc", "workspace", "home"}
+// FATAL mount step (open_dir: refuse a symlink; mkdirat on ENOENT, which a
+// read-only overlay root turns into a refusal). MIRRORS
+// warden/src/mount/workspace.rs (the `?`-propagated mount targets —
+// workspace, home, and the nested home/agent the overlay attach binds the
+// volume's home/ onto) and hardening.rs setup_masked_proc / setup_minimal_dev.
+// Keep nested entries AFTER their parent so a missing parent is reported
+// first. Mirrors templateSkeletonDirs; the two lists must agree on these.
+var attachCriticalDirs = []string{"dev", "proc", "workspace", "home", "home/agent"}
 
 // softSkeletonDirs returns the skeleton entries NOT in attachCriticalDirs:
 // their failures degrade (busybox hot-bind skip, best-effort resolv.conf).
