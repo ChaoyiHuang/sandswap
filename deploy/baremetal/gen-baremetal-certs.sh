@@ -147,6 +147,8 @@ openssl req -new -x509 -days "$DAYS" -nodes \
     -keyout "$CERT_DIR/ca.key" \
     -out "$CERT_DIR/ca.crt" \
     -subj "/O=Sandswap/CN=Sandswap Internal CA" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign" \
     2>/dev/null
 
 # ── etcd server cert ───────────────────────────────────────────────
